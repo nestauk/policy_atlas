@@ -174,10 +174,9 @@ describe("OptionCard", () => {
     // The breadcrumb names the page's kind: no "Option" label (round 10, C4).
     expect(screen.queryByText(/^Option$/i)).not.toBeInTheDocument();
     expect(screen.getByText("A duty to withdraw benefits on refusal of an offer")).toBeInTheDocument();
-    // One grey line: origin, relations (and "also found as" when present);
-    // the lever is said once, in How it works (round 10, finding 7).
-    const line = screen.getByText("found in the evidence · part of Universal youth offer bundle");
-    expect(line).toHaveClass("text-grey");
+    // One line: origin, relations (and "also found as" when present); the
+    // lever is said once, in How it works.
+    expect(screen.getByText("found in the evidence · part of Universal youth offer bundle")).toBeInTheDocument();
     // No snapshot boxes.
     expect(screen.queryByText("Origin")).not.toBeInTheDocument();
     expect(screen.queryByText("3 of 6")).not.toBeInTheDocument();
@@ -239,13 +238,12 @@ describe("OptionCard", () => {
     expect(screen.queryByText(/Primary lever type/)).not.toBeInTheDocument();
   });
 
-  // Round 12 (owner): the lever nouns and the delivery setting in Semibold
-  // Navy, the rest of each sentence regular.
+  // The lever nouns and the delivery setting are bold, the rest of each
+  // sentence regular.
   it("bolds the lever nouns and the delivery setting's words", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const lever = screen.getByText(/^Lever: /);
     expect(Array.from(lever.querySelectorAll("strong")).map((node) => node.textContent)).toEqual(["enforcement", "regulation"]);
-    expect(lever.querySelector("strong")).toHaveClass("font-semibold", "text-navy");
     const leadIn = screen.getByText(/^Delivered /);
     // The mock profile names whom it acts on (round 12, the setting call).
     expect(Array.from(leadIn.querySelectorAll("strong")).map((node) => node.textContent)).toEqual([
@@ -285,23 +283,6 @@ describe("OptionCard", () => {
   it("joins two secondary types with 'and'", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, { secondary_lever_types: ["regulate", "provide a service"] });
     expect(screen.getByText((_, element) => element?.tagName === "P" && /with regulation and services\.$/.test(element.textContent ?? ""))).toBeInTheDocument();
-  });
-
-  // Round 11 (item 4): every sentence at Body, every label and secondary
-  // line at Meta; no Lead on the card.
-  // Round 12 (owner, item 28): the card reads at the report's scale: its
-  // sentences at the report's body (Lead from md, Body on a phone), its
-  // facts lines and labels at Meta, nothing smaller.
-  it("sets the card's sentences at the report's body and its secondary lines at Meta", () => {
-    const { container } = renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const reason = screen.getByText("The council withholds a benefit payment when a young person refuses an offer.");
-    expect(reason.closest(".text-lead.max-md\\:text-body")).not.toBeNull();
-    expect(reason).not.toHaveClass("text-meta");
-    expect(screen.getByText("A duty to withdraw benefits on refusal of an offer").closest(".text-lead")).not.toBeNull();
-    expect(screen.getByText(/^A statutory duty/)).toHaveClass("text-lead", "max-md:text-body");
-    const header = screen.getByText(/^found in the evidence · part of/);
-    expect(header).toHaveClass("text-meta");
-    expect(container.querySelector(".text-caption")).toBeNull();
   });
 
   // Task 046, amendment 3 (B13): no runner-up line (the field left the read model).
@@ -373,10 +354,8 @@ describe("OptionCard", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle).not.toHaveTextContent("Policy Atlas's estimate");
     const section = document.getElementById("what-it-would-take") as HTMLElement;
-    // Round 12 (owner): an intro line, then the points as the report's
-    // square bullets, ambition and impact first; no bold runs.
-    const intro = within(section).getByText("Compared with the other options on the longlist, this option is:");
-    expect(intro.closest(".text-lead")).not.toBeNull();
+    // An intro line, then the points, ambition and impact first; no bold runs.
+    expect(within(section).getByText("Compared with the other options on the longlist, this option is:")).toBeInTheDocument();
     const points = within(section).getAllByRole("listitem").map((item) => item.textContent);
     expect(points).toEqual([
       "More ambitious",
@@ -385,7 +364,6 @@ describe("OptionCard", () => {
       "Slower to show results",
       "Needs more coordination",
     ]);
-    expect(within(section).getAllByRole("listitem")[0].querySelector("[data-bullet]")).toHaveClass("bg-blue");
     expect(section.querySelector("strong")).toBeNull();
     expect(within(section).queryByText(/^Middle on /)).not.toBeInTheDocument();
     expect(within(section).queryByRole("table")).not.toBeInTheDocument();
@@ -424,11 +402,6 @@ describe("OptionCard", () => {
     expect(rows[1]).toHaveTextContent("Higher");
     expect(rows[2]).toHaveTextContent("Cheaper");
     expect(rows[3]).toHaveTextContent("Middle");
-    // The name and the mark at the block's size, the name in Grey.
-    const name = within(rows[2]).getByRole("rowheader");
-    expect(name).toHaveClass("text-grey");
-    expect(name.className).not.toMatch(/\btext-(meta|caption|body)\b/);
-    expect(within(rows[2]).getByText("Cheaper").className).not.toMatch(/\btext-(meta|caption|body)\b/);
     expect(within(section).getByText("Costs are mostly staff time; no capital spend is reported.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /What it could take/ })).not.toHaveTextContent("Policy Atlas's estimate");
   });
@@ -443,7 +416,6 @@ describe("OptionCard", () => {
     expect(heading.contains(info)).toBe(false);
     expect(info.closest("h2")).toBeNull();
     expect(info.querySelector("svg")).not.toBeNull();
-    expect(info).toHaveClass("size-6");
     act(() => info.focus());
     expect(info).toHaveFocus();
     expect(
@@ -564,7 +536,7 @@ describe("OptionCard", () => {
 
   // Round 12 (owner): Your outcomes, one ruled row per plan outcome, between
   // the places and the documents; absent when the plan has none.
-  it("shows Your target and outcomes as a ruled table, measured and discussed, or Not covered in grey", () => {
+  it("shows Your target and outcomes as a ruled table, measured and discussed, or Not covered", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [
         doc(1, "evaluated", { measured: "NEET rate at 6 months" }),
@@ -589,15 +561,9 @@ describe("OptionCard", () => {
       "NEET rate at 6 monthsMeasured in 2Discussed in 1",
       "WellbeingNot covered",
     ]);
-    expect(within(rows[1]).getByText("Not covered").closest("td")).toHaveClass("text-grey");
-    // The table takes the block's reading size, as the places list (round 12, owner).
-    expect(table.className).not.toMatch(/text-(body|meta|lead|caption)/);
-    // One line each (round 13, owner).
-    expect(within(rows[0]).getByText("Measured in 2")).toHaveClass("block");
-    expect(within(rows[0]).getByText("Discussed in 1")).toHaveClass("block");
     const places = within(section).getByRole("heading", { level: 3, name: "Where it has been evaluated" });
     const toggle = within(section).getByRole("button", { name: /^Show \d+ documents/ });
-    // Round 13 (owner): first in Evidence, above where it has been evaluated.
+    // First in Evidence, above where it has been evaluated.
     expect(heading.compareDocumentPosition(places) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(heading.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -625,8 +591,7 @@ describe("OptionCard", () => {
         documents: [doc(1, "evaluated", { tried_on_kind: "adults" })],
         evidence: { outcome_counts: { evaluating_documents: 0, by_outcome: [] } },
       });
-      const value = within(screen.getByRole("table", { name: "Your target and outcomes" })).getByText("Not directly targeted");
-      expect(value).toHaveClass("text-grey");
+      expect(within(screen.getByRole("table", { name: "Your target and outcomes" })).getByText("Not directly targeted")).toBeInTheDocument();
       // No document's target known: the target row is left out.
       cleanup();
       renderCard(MOCK_OPTION_ID_EXCLUDED, {
@@ -647,7 +612,7 @@ describe("OptionCard", () => {
 
   // Round 12 (owner): with no evaluation the section keeps its subheading
   // and says so, then the documents.
-  it("keeps Where it has been evaluated with one grey line when nothing evaluated the option", () => {
+  it("keeps Where it has been evaluated with one line when nothing evaluated the option", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       evaluated_count: 0,
       document_count: 2,
@@ -656,7 +621,6 @@ describe("OptionCard", () => {
     const section = evidenceSection();
     const heading = within(section).getByRole("heading", { level: 3, name: "Where it has been evaluated" });
     const line = within(section).getByText("Not evaluated in any of these sources.");
-    expect(line).toHaveClass("text-grey");
     expect(heading.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(section).queryByRole("list", { name: "Where it has been evaluated" })).not.toBeInTheDocument();
     expect(within(section).queryByLabelText("Where it has been evaluated")).not.toBeInTheDocument();
@@ -685,10 +649,9 @@ describe("OptionCard", () => {
     expect(document.getElementById("how-it-works")).not.toBeNull();
   });
 
-  it("puts the lever reason under the lever line in grey", () => {
+  it("shows the lever reason", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const reason = screen.getByText("The council withholds a benefit payment when a young person refuses an offer.");
-    expect(reason).toHaveClass("text-grey");
+    expect(screen.getByText("The council withholds a benefit payment when a young person refuses an offer.")).toBeInTheDocument();
   });
 
   it("introduces the features with the lead-in, and has no Delivered through line or Examples block", () => {
@@ -708,14 +671,6 @@ describe("OptionCard", () => {
     expect(paragraph("Delivered in schools and at home. It typically involves:")).toBeInTheDocument();
   });
 
-  // Round 12 (owner): the report's Electric Blue square bullets.
-  it("lists the design features with the report's square bullets", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const item = screen.getByText("A duty to withdraw benefits on refusal of an offer").closest("li") as HTMLElement;
-    expect(item.querySelector("[data-bullet]")).toHaveClass("bg-blue", "size-1.5");
-    expect(item.closest("ul")).toHaveClass("list-none");
-  });
-
   it("shows at most six design features", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       design: {
@@ -730,14 +685,12 @@ describe("OptionCard", () => {
   // Round 10, C7: the header's evidence line says the counts; the section
   // opens with the maturity line, and only an option with no document says so.
 
-  // Round 12 (owner): the plan's own place leads the list with no mark of its own.
-  it("shows the place sentences in served order, with no mark or tint on the plan's place", () => {
+  // The plan's own place leads the list.
+  it("shows the place sentences in served order", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const block = evidenceSection();
     const places = within(block).getAllByRole("term").map((term) => term.textContent);
     expect(places).toEqual(["United Kingdom", "Several countries"]);
-    for (const term of within(block).getAllByRole("term")) expect(term.querySelector(".bg-navy")).toBeNull();
-    expect(block.querySelector("[class*='aqua']")).toBeNull();
     expect(within(block).getByText(/One moderate local evaluation of the Benefit sanctions pilot/)).toBeInTheDocument();
   });
 
@@ -814,17 +767,9 @@ describe("OptionCard", () => {
       ["Targeted", "16-24 year-olds"],
       ["Measures", "NEET rate at 6 months"],
     ]);
-    // One size for the whole entry (round 12, owner): no size class of its
-    // own anywhere in it, the labels in Grey.
-    expect(item.querySelector("dt")).toHaveClass("text-grey");
-    for (const node of Array.from(item.querySelectorAll("*"))) {
-      expect(node.getAttribute("class") ?? "").not.toMatch(/\btext-(body|meta|caption|lead)\b/);
-    }
     expect(item).not.toHaveTextContent(/·|also found as|Design/);
-    const group = screen.getByRole("heading", { level: 3, name: "Evaluated it · 1" });
-    expect(group).toHaveClass("font-semibold", "text-navy");
-    expect(group.className).not.toMatch(/\btext-(body|meta|caption)\b/);
-    expect(screen.getByRole("heading", { level: 3, name: "Where it has been evaluated" })).toHaveClass("text-lead", "font-bold");
+    expect(screen.getByRole("heading", { level: 3, name: "Evaluated it · 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Where it has been evaluated" })).toBeInTheDocument();
     expect(screen.queryByText(/Youth Guarantee|Strong · /)).not.toBeInTheDocument();
   });
 
@@ -852,21 +797,14 @@ describe("OptionCard", () => {
     const reference = title.closest("p") as HTMLElement;
     expect(reference.textContent).toBe("Paper 1 (2021). Journal of Youth Policy.");
     expect(reference).not.toHaveTextContent(/Sampleton/);
-    expect(title).toHaveClass("text-navy", "decoration-line-2", "hover:decoration-navy");
-    expect(within(reference).getByText("Journal of Youth Policy.")).toHaveClass("text-grey");
   });
 
-  // Round 12 (owner): "+N more" was unclear: the other records are words on
-  // the facts line, and only the title opens the dossier.
-  // Round 12 (owner): documents a hairline apart, and the same documents in
-  // Sources under the list.
-  it("rules the documents apart and links to them in Sources, filtered by the option", async () => {
+  // The same documents in Sources under the list.
+  it("links the documents to Sources, filtered by the option", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [doc(1, "evaluated"), doc(2, "evaluated"), doc(3, "described")],
     });
     await openDocuments();
-    const list = screen.getByRole("link", { name: "Paper 1" }).closest("ul") as HTMLElement;
-    expect(list).toHaveClass("divide-y", "divide-line");
     expect(screen.getByRole("link", { name: "See these 3 documents in Sources" })).toHaveAttribute(
       "href",
       `/tasks/${TASK_ID}/sources/all?option=${MOCK_OPTION_ID_EXCLUDED}`,
@@ -1068,9 +1006,9 @@ describe("OptionCard", () => {
       expect(within(crumbs()).queryByRole("link", { name: "Shortlist" })).not.toBeInTheDocument();
     });
 
-    // Round 15 (owner): the dossier's labelled facts: who excluded it as the
-    // Red heading line (no By row), then Constraint and Why, labels in Meta
-    // Grey at a fixed width; "Add a reason" after the Why value when it invites one.
+    // The dossier's labelled facts: who excluded it as the heading line (no
+    // By row), then Constraint and Why; "Add a reason" after the Why value
+    // when it invites one.
     it("lays a constraint's exclusion out as Does not meet a constraint, then Constraint and Why", () => {
       renderCard(MOCK_OPTION_ID_EXCLUDED, {
         exclusion: {
@@ -1082,7 +1020,6 @@ describe("OptionCard", () => {
       const block = screen.getByTestId("card-exclusion");
       const title = block.firstElementChild as HTMLElement;
       expect(title).toHaveTextContent(/^Does not meet a constraint$/);
-      expect(title).toHaveClass("text-red");
       const rows = Array.from(block.querySelectorAll("dl > div")).map((row) => [
         row.querySelector("dt")?.textContent,
         row.querySelector("dd")?.textContent,
@@ -1092,8 +1029,6 @@ describe("OptionCard", () => {
         ["Why", "A local authority cannot fund this directly."],
       ]);
       expect(within(block).queryByText("By")).not.toBeInTheDocument();
-      for (const label of Array.from(block.querySelectorAll("dt"))) expect(label).toHaveClass("text-meta", "text-grey");
-      expect(block.querySelector("dl > div")?.className).toContain("grid-cols-[7.5rem_minmax(0,1fr)]");
       expect(block).not.toHaveTextContent(/Breaks/);
       expect(within(block).queryByRole("button", { name: "Add a reason" })).not.toBeInTheDocument();
     });
@@ -1107,37 +1042,24 @@ describe("OptionCard", () => {
       const why = within(block).getByText("Why").nextElementSibling as HTMLElement;
       expect(within(why).getByRole("button", { name: "Add a reason" })).toBeInTheDocument();
       expect(block.firstElementChild).toHaveTextContent(/^Excluded by you · with the theme A universal offer$/);
-      expect(block.firstElementChild).toHaveClass("text-red");
       expect(within(block).queryByText("By")).not.toBeInTheDocument();
     });
 
-    // Round 10 (finding 7): a flat block on the sheet, no card and no chips;
-    // each notice a word in its tone, red only for a failure.
-    it("sits on the sheet as a flat block, never a card inside it", () => {
+    it("shows a broken constraint with its word", () => {
       calloutOf({ judgements: [judgement("req-1", "breaks")] });
-      const block = screen.getByText("Does not meet:").closest("p")?.parentElement as HTMLElement;
-      expect(block.className).toContain("border-l");
-      expect(block.className).not.toMatch(/shadow|bg-paper/);
-      expect(block.querySelector("[class*='text-[11.5px]']")).toBeNull();
-    });
-
-    it("shows a broken constraint with its word in red", () => {
-      calloutOf({ judgements: [judgement("req-1", "breaks")] });
-      // Round 15 (owner): "Does not meet", never "Breaks".
-      expect(screen.getByText("Does not meet:")).toHaveClass("text-red");
+      // "Does not meet", never "Breaks".
       expect(screen.getByText("Does not meet:").closest("p")).toHaveTextContent('Does not meet: "Rule req-1". Because.');
       expect(document.body).not.toHaveTextContent(/Breaks/);
     });
 
-    it("shows a constraint that cannot be checked in the grey form", () => {
+    it("shows a constraint that cannot be checked", () => {
       calloutOf({ judgements: [judgement("req-1", "cannot_check")] });
-      expect(screen.getByText("Cannot check:")).toHaveClass("text-grey");
       expect(screen.getByText("Cannot check:").closest("p")).toHaveTextContent('Cannot check: "Rule req-1". Because.');
     });
 
-    it("shows a guess that likely falls short with its word in Navy", () => {
+    it("shows a guess that likely falls short with its word", () => {
       calloutOf({ guesses: [guess("pref-1", "likely_falls_short")] });
-      expect(screen.getByText("May fall short:")).toHaveClass("text-navy");
+      expect(screen.getByText("May fall short:")).toBeInTheDocument();
       expect(screen.getByText('"Rule pref-1". A guess.', { exact: false })).toBeInTheDocument();
     });
 

@@ -3,7 +3,9 @@ type: Testing rule
 title: A readback script prints the task id it read, and a slug-to-task mapping is re-derived for every live check
 description: The task 046 amendment 4 live table reported 25 options, no exclusion and "56 of 160" not-stated documents for the caregiving run; the stored row had 24 options, two exclusions and 130 documents. The slug-based readback resolved `live-caregiving` through a replay-folder `clone.json` that still pointed at the 2026-09-29 task; the readbacks keyed by task id were right. The review re-read every slug-based figure from the stored rows.
 tags: [verification, live-check, evidence, readback, replay, task-046]
-timestamp: 2026-10-12
+generated:
+  by: process:okf-migrate
+  at: 2026-10-12
 ---
 
 # Rule

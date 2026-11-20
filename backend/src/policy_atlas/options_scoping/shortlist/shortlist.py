@@ -1,4 +1,4 @@
-"""The ``shortlist`` component: Policy Atlas proposes the places (task 055, items 3-5).
+"""The ``shortlist`` component: Policy Atlas proposes the places.
 
 ADR 0041 (architecture decision record); plan P4-P8. The step reads every
 included option's card (the same text the user sees), the plan, the
@@ -15,7 +15,7 @@ shortlist walk (an appetite change or Suggest more). It is not a spine step:
 a :class:`ShortlistFailure` ends the walk ``degraded``, and the previous places
 stay, because every write of the proposal happens after the model call. The
 one earlier write is the clearing of picks whose option was since excluded or
-merged (O1), which stands whatever the call does.
+merged, which stands whatever the call does.
 
 Code checks only the hard things (plan P5): every pick is a candidate, none
 twice, exactly as many as asked, each reason and the note present, short
@@ -64,18 +64,18 @@ from policy_atlas.runtime.scoping_plan import RISK_APPETITE_LABELS, ScopingPlan
 
 log = structlog.get_logger()
 
-#: The places a proposal fills to (S6).
+#: The places a proposal fills to.
 PLACES_TARGET = 5
 
 #: The ceiling on the whole request, system prompt included, in characters
-#: (about 100k tokens on the judgment model; A13, PG2). Over it, document
+#: (about 100k tokens on the judgment model). Over it, document
 #: lines are cut; still over with none left, the proposal fails.
 SHORTLIST_INPUT_CHARS_MAX = 400_000
 
-#: The baseline text the proposal reads, at most (PG2).
+#: The baseline text the proposal reads, at most.
 SHORTLIST_BASELINE_MAX_CHARS = 20_000
 
-#: The proposal's event: the record of each proposal (A7). Read back as the
+#: The proposal's event: the record of each proposal. Read back as the
 #: previous proposal by the next one (a Rebuild inserts a fresh longlist row).
 SHORTLIST_PROPOSED = "shortlist.proposed"
 
@@ -100,7 +100,7 @@ class ShortlistFailure(Exception):
 
 
 def shuffled[T](items: Sequence[T], *, run_id: uuid.UUID, attempt: int) -> list[T]:
-    """The candidates in the order the model reads them (S16).
+    """The candidates in the order the model reads them.
 
     Seeded with ``"{run_id}:{attempt}"``, so a run's order can be reproduced.
 
@@ -118,7 +118,7 @@ def shuffled[T](items: Sequence[T], *, run_id: uuid.UUID, attempt: int) -> list[
 
 
 def _clear_lost_picks(conn: Connection, task_id: uuid.UUID) -> int:
-    """Clear Policy Atlas's picks whose option is now excluded or merged (O1).
+    """Clear Policy Atlas's picks whose option is now excluded or merged.
 
     A reader's own place and a set-aside are never touched here.
     """
@@ -164,7 +164,7 @@ def _one_line(value: object) -> str:
 
 
 def _excluded_line(row: Any) -> str:
-    """One excluded option: name · lever type · ambition · why excluded (A11)."""
+    """One excluded option: name · lever type · ambition · why excluded."""
     exclusion = row.exclusion if isinstance(row.exclusion, Mapping) else {}
     constraint = _one_line(exclusion.get("constraint"))
     reason = _one_line(exclusion.get("reason"))
@@ -262,12 +262,12 @@ def shortlist_scope(
     """Propose the shortlist's places over every included option's card, and write them.
 
     The newest ``longlist_result`` of the task is read, whatever walk wrote
-    it (a shortlist walk's own intent record has none; A5). At the end of a
+    it (a shortlist walk's own intent record has none). At the end of a
     longlist walk and in an appetite walk (no ``suggest`` in the intent
     record's context) Policy Atlas's picks are released and refilled up to
     :data:`PLACES_TARGET` beside the reader's own places; with
     ``{"suggest": true}`` (Suggest more) the picks stay and the call fills up
-    to five, or one more at five or above (S8).
+    to five, or one more at five or above.
 
     Args:
         conn: Open connection inside the component transaction.
@@ -379,7 +379,7 @@ def shortlist_scope(
             cards_cut_note=cards_cut_note,
         )
 
-    # The fixed parts first (PR20): everything but the cards, with the longest
+    # The fixed parts first: everything but the cards, with the longest
     # cut note the cards could need; what is left is the cards' budget.
     fixed_chars = _input_chars(messages_for("", "", ""))
     longest_note = len(_cards_cut_note(lines_total - 1, lines_total)) if lines_total else 0
@@ -435,7 +435,7 @@ def shortlist_scope(
 
     picks = [(candidate_ids[pick.option_id], pick.reason.strip()) for pick in wire.picks]
 
-    # Lock late (PR25): the newest row, re-checked, then the one write.
+    # Lock late: the newest row, re-checked, then the one write.
     newest = conn.execute(
         select(longlist_result.c.longlist_result_id)
         .where(longlist_result.c.task_id == task_id)
@@ -473,7 +473,7 @@ def shortlist_scope(
         raise ShortlistFailure("shortlist: places changed")
 
     now = datetime.now(UTC)
-    # The places a re-proposal clears, for the note's changes (round 14).
+    # The places a re-proposal clears, for the note's changes.
     cleared_places = (
         []
         if suggest
@@ -522,7 +522,7 @@ def shortlist_scope(
         )
         .values(shortlist={"provenance": provenance})
     )
-    # The note, from its one writer (owner, 2026-11-08): the places as they
+    # The note, from its one writer: the places as they
     # now stand and this proposal's changes. A failed note leaves the picks.
     picked = {row.option_id for row, _ in picks}
     changes: list[dict[str, object]] = [

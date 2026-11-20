@@ -3,7 +3,12 @@ type: Testing rule
 title: Observe insertion order at the write seam, not by reading storage back
 description: A table with no order column cannot be read back to prove write order — plain ctid scrambles under page reuse, and (created_at, ctid) still ties on equal timestamps and scrambles within the tie. Capture order at the write seam with a before_cursor_execute listener instead.
 tags: [testing, ordering, postgres, write-order, review-lesson]
-timestamp: 2026-07-21
+generated:
+  by: process:okf-migrate
+  at: 2026-07-21
+sources:
+  - resource: "backend/tests/evidence_search/extract/test_extract_contract.py"
+    title: "`backend/tests/evidence_search/extract/test_extract_contract.py` (`test_parallel_vs_serial_same_write_order`)"
 ---
 
 # Rule
@@ -36,8 +41,3 @@ point" failure family as
 [assert-on-row-not-summary](assert-on-row-not-summary.md) — evidence anchored on
 something other than what the property is actually about — just for physical
 order instead of summary-vs-row drift.
-
-# Citations
-
-- `backend/tests/evidence_search/extract/test_extract_contract.py`
-  (`test_parallel_vs_serial_same_write_order`)

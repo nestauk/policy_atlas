@@ -1,4 +1,4 @@
-"""Pick the ground-truth sample from the fetched collections (owner decisions, 2026-10-05).
+"""Pick the ground-truth sample from the fetched collections.
 
 The ``getters/`` scripts write one pair of CSV files per public collection under
 ``results/ground_truth/`` (Campbell, 3ie, YEF, SR4ALL): hundreds of candidate reviews.
@@ -34,8 +34,8 @@ and so on). Inside a group the best rows come first: highest DOI share, then mos
 references. Everything is sorted, so the same inputs give the same sample.
 
 **Labels.** Every reference row in the sample is written ``label = content``, including
-the Campbell and SR4ALL reference lists that nobody has labelled. The owner chose this on
-2026-10-05 instead of a labelling pass: a reference list mixes the studies a review is about
+the Campbell and SR4ALL reference lists that nobody has labelled. This is chosen
+instead of a labelling pass: a reference list mixes the studies a review is about
 with background and methods citations, so about half of its rows may be off topic, and a
 search that finds every on-topic study would still score near 50% on those rows. Read
 Campbell and SR4ALL recall against that ceiling, not against 100%. The reviews file says
@@ -73,7 +73,7 @@ from typing import Any
 from fetch_helpers import GROUND_TRUTH_DIR, REFERENCE_COLUMNS, REVIEW_COLUMNS
 
 QUOTAS = {"campbell": 30, "3ie": 30, "sr4all": 30, "yef": 10}
-# The cheap sample, chosen by hand from the hundred (owner, 2026-10-05): health and social
+# The cheap sample, chosen by hand from the hundred: health and social
 # care, schools, home energy, jobs, nutrition, civic education, violence, learning loss,
 # adolescent drug use, child sleep and obesity. With the four hand-made reviews copied in at
 # upload, the mini dataset holds fifteen items.

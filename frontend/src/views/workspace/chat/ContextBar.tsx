@@ -10,8 +10,8 @@ import { useConversationMutations } from "./conversationState";
  *
  * Returns:
  *   A removable artefact chip, or nothing when the chat has no entry
- *   context (owner live check, 2026-08-11: the "Whole task" zero-state
- *   label read as noise, not signal).
+ *   context (a "Whole task" zero-state
+ *   label reads as noise, not signal).
  */
 export function ContextBar({ taskId, conversationId, entryArtefactId }: { taskId: string; conversationId: string; entryArtefactId: string | null }) {
   const { update } = useConversationMutations(taskId);

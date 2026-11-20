@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check deploy.sh's migration waiter (task 057, G10) against a stubbed `aws`.
+# Check deploy.sh's migration waiter against a stubbed `aws`.
 #
 # deploy.sh polls the migration task with `aws ecs describe-tasks` every 15 s until
 # ECS reports it STOPPED, up to MIGRATION_WAIT_MAX_S seconds, then fails unless the
@@ -38,6 +38,7 @@ aws() {
             fi
             echo "${statuses[$index]}"
             ;;
+        "tasks[0].taskArn") echo "stub-task" ;;
         "tasks[0].containers[0].exitCode") echo "$STUB_EXIT_CODE" ;;
         "tasks[0].stoppedReason") echo "$STUB_REASON" ;;
         *) echo "unexpected aws call: $*" >&2; return 1 ;;
@@ -98,6 +99,43 @@ check "a failed describe-tasks call is retried, not fatal" '[[ $case_status -eq 
 run_case bad_limit "STOPPED" 0 "" "ninety"
 check "a limit that is not a number is refused" \
     '[[ $case_status -ne 0 && "$case_err" == *"MIGRATION_WAIT_MAX_S must be a whole number"* ]]'
+
+# The ops login check: the same task definition, its command
+# swapped for `db_role check`, waited on by the same waiter.
+run_login_case() {
+    export STUB_LOG="$work_dir/$1.log"
+    export STUB_STATUSES="STOPPED" STUB_EXIT_CODE="$2" STUB_REASON="Essential container in task exited"
+    : >"$STUB_LOG"
+    set +e
+    env -u AWS_REGION -u AWS_DEFAULT_REGION \
+        PA_DEPLOY_OPS_LOGIN_CHECK_ONLY=1 MIGRATION_WAIT_MAX_S=5400 \
+        CLUSTER_ARN=stub-cluster PRIVATE_SUBNET_IDS=subnet-a MIGRATION_SG_ID=sg-a \
+        MIGRATION_TASK_DEF_ARN=stub-taskdef \
+        bash "$deploy_script" update >"$work_dir/$1.out" 2>"$work_dir/$1.err"
+    case_status=$?
+    set -e
+    case_out="$(cat "$work_dir/$1.out")"
+    case_err="$(cat "$work_dir/$1.err")"
+}
+
+run_login_case login_ok 0
+check "the ops login check passes on exit 0" \
+    '[[ $case_status -eq 0 && "$case_out" == *"PASS: ops login check task completed"* ]]'
+check "it runs db_role check in the migration task definition" \
+    'grep -q "run-task .*stub-taskdef.*policy_atlas.ops.db_role\",\"check" "$STUB_LOG"'
+
+run_login_case login_fails 1
+check "a failed ops login check fails the ops phase, naming it" \
+    '[[ $case_status -ne 0 && "$case_err" == *"ops login check task failed with exit code 1"* ]]'
+
+# Order in the deploy: the login check sits after the public service and
+# before the ops service starts.
+order="$(sed -n '/^common_tail() {$/,/^}$/p' "$deploy_script" \
+    | grep -E '^    (scale_up_service|publish_frontend|check_ops_db_login|scale_up_ops_service)$' \
+    | tr -d ' ' | tr '\n' ' ')"
+case_out="$order" case_err=""
+check "the login check runs after the public deploy and before ops starts" \
+    '[[ "$order" == "scale_up_service publish_frontend check_ops_db_login scale_up_ops_service " ]]'
 
 if (( failures > 0 )); then
     echo "deploy-migration-wait-test: ${failures} check(s) failed" >&2

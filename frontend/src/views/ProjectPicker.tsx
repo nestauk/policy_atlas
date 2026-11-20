@@ -13,8 +13,8 @@ const NONE = "none";
 type Project = { project_id: string; name: string };
 
 /**
- * A new project's name with "Create" and "Cancel" beside it (round 13;
- * defined once: the picker's "New project…" and the Projects page's form).
+ * A new project's name with "Create" and "Cancel" beside it (defined
+ * once: the picker's "New project…" and the Projects page's form).
  * A Body field, 40 px, focused with its text selected as it opens; Create,
  * or Enter, makes the project (`useMakeProject`); Cancel, or Escape, leaves.
  * A failure keeps the name and says "The project couldn't be created. Try
@@ -117,8 +117,8 @@ export function ProjectNameField({
 }
 
 /**
- * The project dropdown with "New project…" at its end (owner, round 13;
- * defined once for the New page and the task menu's "Add to project").
+ * The project dropdown with "New project…" at its end (defined
+ * once for the New page and the task menu's "Add to project").
  *
  * "New project…" swaps the dropdown for `ProjectNameField` on the same row
  * and width. Create makes the project at once and brings the dropdown back

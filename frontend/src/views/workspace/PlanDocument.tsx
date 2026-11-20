@@ -317,7 +317,7 @@ function PlanChrome({
   );
 }
 
-// --- Scoping plan sections (task 044, contract deliverable 5, C18) --------
+// --- Scoping plan sections --------
 //
 // The scoping plan has no inline field editor of its own: its fields are
 // Task Agent-negotiated (provenance-tagged), not raw strings a form can
@@ -399,8 +399,8 @@ function TaggedListField({ label, items }: { label: string; items?: TaggedOut[] 
   );
 }
 
-/** "Starts from": one line per Link (C18), hidden entirely with none. Not
- *  editable — a Link is fixed at task creation (contract deliverable 4). */
+/** "Starts from": one line per Link, hidden entirely with none. Not
+ *  editable — a Link is fixed at task creation. */
 function StartsFromSection({ links }: { links: TaskLinkOut[] }) {
   if (links.length === 0) return null;
   return (
@@ -460,7 +460,7 @@ function ScopingSettingsSection({
   readOnly: boolean;
   /** True while a patch is in flight, so two quick changes cannot race. */
   appetitePending?: boolean;
-  /** A direct plan patch (task 055, A25); omitted while the plan cannot be
+  /** A direct plan patch; omitted while the plan cannot be
    *  edited directly, which leaves the label read-only. */
   onChangeAppetite?: (value: RiskAppetite) => void;
 }) {
@@ -525,8 +525,8 @@ function ConstraintsSection({
   constraints: ScopingConstraintOut[];
   onEdit: () => void;
   readOnly: boolean;
-  /** Removes a code-minted default row by a direct plan edit (task 045,
-   *  D22) — the Task Agent never authors the default, so it cannot remove
+  /** Removes a code-minted default row by a direct plan edit
+   *  — the Task Agent never authors the default, so it cannot remove
    *  it either. Omitted while the plan cannot be edited directly. */
   onRemoveDefault?: (constraint: ScopingConstraintOut) => void;
 }) {
@@ -592,7 +592,7 @@ function ConstraintsSection({
   );
 }
 
-/** "Options you already have in mind" (task 045, D19): the user's words,
+/** "Options you already have in mind": the user's words,
  *  then the design Policy Atlas proposed back, features it supplied marked
  *  assumed. Hidden until the plan has asked (the slot is null); an empty
  *  list — the user said they have none — shows "None". */
@@ -698,8 +698,8 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
   );
 }
 
-/** The scoping plan's start area, in its states (contract deliverable 5;
- *  task 045 adds the longlist's); `useScopingPlanStart` carries the state
+/** The scoping plan's start area, in its states (the longlist's
+ *  included); `useScopingPlanStart` carries the state
  *  logic and `scopingStatusLine` the one sentence each state says. */
 function ScopingStartActions({
   taskId,
@@ -843,7 +843,7 @@ function ScopingPlanSections({
 
       {/* A live walk makes the plan read-only, but the start area still says
           where things stand ("Building the longlist") — it offers nothing to
-          click while a walk runs (task 045). */}
+          click while a walk runs. */}
       {(!readOnly || runActive) && (
         <div className="pt-8">
           <ScopingStartActions taskId={taskId} runActive={runActive} onStarted={onStarted} />
@@ -853,7 +853,7 @@ function ScopingPlanSections({
   );
 }
 
-// --- Theory-of-change plan sections (task 054, step 1.3) ------------------
+// --- Theory-of-change plan sections ------------------
 
 const TOC_ENTRY_POINT_LABEL: Record<NonNullable<TocPlanDraft["entry_point"]>, string> = {
   outcome_first: "From the change you want",
@@ -894,7 +894,7 @@ interface TocFieldInput {
 
 /**
  * One theory-of-change plan section edited in place, as an Evidence search
- * plan's sections are (task 054). Save writes the edits straight away: the
+ * plan's sections are. Save writes the edits straight away: the
  * plan has two Start buttons (here and in the chat), so nothing waits for one.
  * By default each field shows and edits the plan's text as it is; `view`,
  * `initial`, `toValue` and `input` change that (the years section).
@@ -988,7 +988,7 @@ function TocEditSection({
 }
 
 /** "From 2000", "2000–2010", "Until 2010" or "No preference", from the plan's
- *  ISO dates: Evidence search's words for its publication years (task 054, § 8). */
+ *  ISO dates: Evidence search's words for its publication years. */
 function tocYearsLabel(after: string, before: string): string {
   if (after !== "" && before !== "") return `${after}–${before}`;
   if (after !== "") return `From ${after}`;
@@ -1000,7 +1000,7 @@ function tocYearsLabel(after: string, before: string): string {
 const yearOf = (date: string | null | undefined) => (date ?? "").slice(0, 4);
 
 /**
- * The years of evidence the theory's checks search (task 054): the same
+ * The years of evidence the theory's checks search: the same
  * from/until year boxes as Evidence search's filters, saved straight away
  * like the other theory-of-change sections.
  */
@@ -1032,7 +1032,7 @@ function TocYearsSection({ taskId, toc, readOnly }: { taskId: string; toc: TocPl
   );
 }
 
-/** The user's uploaded diagram, shown as they gave it (task 054, increment 5). */
+/** The user's uploaded diagram, shown as they gave it. */
 function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }) {
   const file = useTocUploadFile(taskId, uploadId);
   return (
@@ -1159,7 +1159,7 @@ function TocPlanSections({
 }
 
 /** The plan's steps as the run card shows them: one per card row, with the
- *  server's label and its first step's blurb (task 058, N17). */
+ *  server's label and its first step's blurb. */
 function planStepRows(steps: PlanDraft["steps"]): { row: string; label: string; blurb: string }[] {
   const rows: { row: string; label: string; blurb: string }[] = [];
   for (const step of steps ?? []) {
@@ -1195,8 +1195,8 @@ function pressedOutside(target: EventTarget | null, plan: HTMLElement | null): b
 /**
  * The search plan, edited in place. Saves stay local until Start search —
  * a task_agent round-trip on every field would rewrite the whole plan.
- * Escape closes it (task 058, N15), and so does a press anywhere outside it
- * (owner, round 13; the shared Sheet's outside press). Closed, focus goes
+ * Escape closes it, and so does a press anywhere outside it
+ * (the shared Sheet's outside press). Closed, focus goes
  * back to what opened it ("See plan") unless the reader moved it elsewhere.
  */
 export function PlanDocument({
@@ -1227,7 +1227,7 @@ export function PlanDocument({
   onOverlayChange: (overlay: PlanOverlay) => void;
 }) {
   const planQuery = usePlan(taskId);
-  // A scoping task's `PlanOut.plan` is null (task 044) — its fields live on
+  // A scoping task's `PlanOut.plan` is null — its fields live on
   // `scoping` instead, rendered by a wholly separate section set below. This
   // normalizes `draft` to `undefined` for a scoping task so every existing
   // `draft !== undefined` check below stays an honest "no ES plan to show",
@@ -1259,9 +1259,9 @@ export function PlanDocument({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  // A press anywhere outside the plan closes it (owner, round 13).
+  // A press anywhere outside the plan closes it.
   const planRef = useRef<HTMLElement>(null);
-  // Every open starts at the plan's top, its title in view (owner, round 14),
+  // Every open starts at the plan's top, its title in view,
   // and again when its content first arrives, so a late load never leaves
   // the pane part-way down.
   const paneRef = useRef<HTMLDivElement>(null);
@@ -1363,7 +1363,7 @@ export function PlanDocument({
     draft !== undefined ? displayedEnum(overlay.analysis_depth, draft.analysis_depth) : "";
   const sources = draft !== undefined ? displayedEnum(overlay.backend_scope, draft.backend_scope) : "";
   const checkIns = draft !== undefined ? displayedEnum(overlay.steering_mode, draft.steering_mode) : "";
-  // The plan draft's own band (task 058, N20): one table, on the server.
+  // The plan draft's own band: one table, on the server.
   const expectedRunTime = draft?.time_band ?? null;
   const agreedSteps = planStepRows(draft?.steps);
   const closeLabel = scopingPlan ? "Close the scoping plan" : "Close the search plan";
@@ -1377,10 +1377,9 @@ export function PlanDocument({
       data-state={closing ? "closed" : "open"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
-        // It arrives (task 058, round 9; the lead's ruling on the animation
-        // sweep's proposal 3): docked, from the edge it docks to; centred,
+        // It arrives: docked, from the edge it docks to; centred,
         // rising in place. It leaves the way it came, faster, as a sheet
-        // does (owner, 2026-11-09). A cut under reduced motion.
+        // does. A cut under reduced motion.
         placement === "side"
           ? cn(
               "anim-dock-in min-w-0 flex-1 border-l border-navy-line",

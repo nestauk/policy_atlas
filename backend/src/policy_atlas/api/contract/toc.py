@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.theory_of_change.graph import Layer
 
-#: One evidence verdict per link (C36, simplified BEAM).
+#: One evidence verdict per link (simplified BEAM).
 Verdict = Literal[
     "supported",
     "leaning_supports",
@@ -58,7 +58,7 @@ class TocBoxOut(BaseModel):
 
     box_id: uuid.UUID
     layer: Layer
-    #: Short stable label, e.g. ``S3`` (C35); null only on rows written before codes.
+    #: Short stable label, e.g. ``S3``; null only on rows written before codes.
     code: str | None
     text: str
     dosage: str | None
@@ -69,9 +69,9 @@ class TocBoxOut(BaseModel):
     seen_in_cites: list[uuid.UUID]
     origin: Origin
     revision: int
-    #: Where the user moved the box; null keeps the computed layout (C47).
+    #: Where the user moved the box; null keeps the computed layout.
     position: TocPositionOut | None = None
-    #: Who last edited it (a display name) and when; null when nobody has (C41).
+    #: Who last edited it (a display name) and when; null when nobody has.
     edited_by: str | None = None
     edited_at: datetime | None = None
 
@@ -97,7 +97,7 @@ class TocLinkOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     link_id: uuid.UUID
-    #: Short stable label, e.g. ``#5`` (C35); null only on rows written before codes.
+    #: Short stable label, e.g. ``#5``; null only on rows written before codes.
     code: str | None
     source_box_id: uuid.UUID
     target_box_id: uuid.UUID
@@ -118,14 +118,14 @@ class TocLinkOut(BaseModel):
     #: One more document could change the verdict.
     near_threshold: bool
     weights: TocWeightsOut
-    #: What the documents found and whether it holds here (C36).
+    #: What the documents found and whether it holds here.
     evidence_sentence: str | None
     #: The documents (task source snapshot ids) the evidence sentence cites.
     evidence_cites: list[uuid.UUID]
-    #: Who last edited it (a display name) and when; null when nobody has (C41).
+    #: Who last edited it (a display name) and when; null when nobody has.
     edited_by: str | None = None
     edited_at: datetime | None = None
-    #: New evidence waiting for the user's Accept (C44), and the verdict if they accept it all.
+    #: New evidence waiting for the user's Accept, and the verdict if they accept it all.
     pending_count: int = 0
     verdict_if_accepted: Verdict | None = None
 
@@ -291,14 +291,14 @@ class TocReportOut(BaseModel):
     #: One bullet per supporting activity, citing sources (``toc_report_v7``).
     supporting_activities: list[str] = []
     #: Routes found in the evidence that an as-drawn diagram does not show; each
-    #: waits under Suggestions (owner, 2026-11-04).
+    #: waits under Suggestions.
     expansions: list[TocReportExpansionOut] = []
     sources: list[TocReportSourceOut]
     #: How it was made: written by code, with the date and the judge's model.
     method: str
     #: Written before the reader's latest changes: a content edit, an evidence
     #: decision or an Undo after the report's walk started; moving a box does
-    #: not count (task 054, S9). Set on the read, never stored.
+    #: not count. Set on the read, never stored.
     stale: bool = False
 
 
@@ -328,13 +328,13 @@ class TocGraphOut(BaseModel):
     report: TocReportOut | None
     #: Links the 80-link cap left unchecked in the last check walk.
     links_left_out: int
-    #: Whether the caller may edit (the task's owner, C50); false for public readers.
+    #: Whether the caller may edit (the task's owner); false for public readers.
     can_edit: bool = False
-    #: The editor's changes since the last review (C45); 0 for readers.
+    #: The editor's changes since the last review; 0 for readers.
     edits_since_review: int = 0
     #: Links a queued check names: it starts when the running walk ends.
     queued_link_ids: list[uuid.UUID] = Field(default_factory=list)
-    #: Whether a review of the theory is running (C45).
+    #: Whether a review of the theory is running.
     reviewing: bool = False
 
 
@@ -367,16 +367,16 @@ class TocDocumentOut(BaseModel):
     #: True when the judgement was made for an earlier wording of the link.
     previous_wording: bool
     #: ``support`` and ``relevance`` above are what counts: the user's scores when
-    #: they changed them (C42), else the judge's. The judge's own stay here.
+    #: they changed them, else the judge's. The judge's own stay here.
     judge_support: Support | None = None
     judge_relevance: int | None = None
     #: Who changed the scores, removed the document from the link, or added it (display names).
     scored_by: str | None = None
     removed_by: str | None = None
     added_by: str | None = None
-    #: ``pending`` evidence waits for the user's Accept and does not count yet (C44).
+    #: ``pending`` evidence waits for the user's Accept and does not count yet.
     status: Literal["counted", "pending", "rejected"] = "counted"
-    #: The judgement row's revision, for an edit to it (C10).
+    #: The judgement row's revision, for an edit to it.
     revision: int = 1
 
 
@@ -431,7 +431,7 @@ class TocLinkEvidenceOut(BaseModel):
 
     link_id: uuid.UUID
     documents: list[TocDocumentOut]
-    #: The size of change (C37), for the link's current wording.
+    #: The size of change, for the link's current wording.
     figures: list[TocFigureOut]
 
 
@@ -463,7 +463,7 @@ class TocBoxEvidenceOut(BaseModel):
     box_id: uuid.UUID
     case_studies: list[TocCaseStudyOut]
     indicators: list[str]
-    #: Levels of this box (a baseline, a prevalence) its links' documents report (C37).
+    #: Levels of this box (a baseline, a prevalence) its links' documents report.
     figures: list[TocFigureOut]
 
 
@@ -476,7 +476,7 @@ class TocEvidenceOut(BaseModel):
     boxes: list[TocBoxEvidenceOut]
 
 
-# --- Writes (C41, C47, C10) -----------------------------------------------------------------
+# --- Writes -----------------------------------------------------------------
 
 
 class TocBoxCreate(BaseModel):

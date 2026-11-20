@@ -42,21 +42,20 @@ const UNTAGGED_KEY = "__untagged__";
 const MIDDLE_KEY = "__middle__";
 
 /** A column head's cell; the words take the list's group heading
- *  (`GroupHeading`, round 13, owner). */
+ *  (`GroupHeading`). */
 const HEADER_CELL_CLASS = "border-b border-navy px-3 py-2 align-bottom font-normal";
 
 /** A cell shows this many options before folding the rest behind "+N more". */
 const CELL_LIMIT = 4;
 
 /**
- * The reduced grid (D12, contract deliverable 9): rows the lever types in
+ * The reduced grid: rows the lever types in
  * taxonomy order plus "Other", columns the chosen line's `less` word,
- * "Middle", `more` word and "Untagged" (R41) — tiles that open the option and carry its excluded/
+ * "Middle", `more` word and "Untagged" — tiles that open the option and carry its excluded/
  * no-in-scope-evidence states in words. The lever types with no option are
  * one Grey line under the table, "No options: Subsidise, Tax or charge and
- * Inform" (round 10, finding 13: the owner's 2026-09-23 "the absence is the
- * message" in one line, not ten empty bands). The shortlist toggle rides
- * each tile on the name's line (task 055; round 10, finding 6). Offered from
+ * Inform" (the absence is the message, in one line, not ten empty bands). The shortlist toggle rides
+ * each tile on the name's line. Offered from
  * `md` up only: the list view hides the switch on a phone.
  */
 export type { GridLine };
@@ -71,7 +70,7 @@ export function LonglistGrid({
   /** Excluded options stay out of the grid unless the reader asks. */
   showExcluded: boolean;
   /** The chosen line, when the page's controls row holds the Columns
-   *  choice (round 13, owner); the grid then draws neither that choice nor
+   *  choice; the grid then draws neither that choice nor
    *  the line of levers with no option, which the page shows instead. */
   line?: GridLine;
 }) {
@@ -84,7 +83,7 @@ export function LonglistGrid({
   );
   const [ownLine, setLine] = useState<GridLine>("ambition");
   const wantedLine = controlledLine ?? ownLine;
-  // Only a new Columns line moves the tiles (round 13, owner): a shortlist
+  // Only a new Columns line moves the tiles: a shortlist
   // toggle, Show excluded or Include again updates in place.
   const regrouped = useMemo(() => ({ listed, line: wantedLine }), [listed, wantedLine]);
   const { listed: options, line } = useRegroupTransition(regrouped, wantedLine);
@@ -109,8 +108,8 @@ export function LonglistGrid({
       leverKey === NONE_FITS_KEY ? option.primary_lever_type == null : option.primary_lever_type === leverKey,
     );
   const rows = [...leverTypes, ...(hasNoneFits ? [NONE_FITS_KEY] : [])].filter(leverHas);
-  // The lever types no option in the grid uses, listed under it (round
-  // 13, owner); never "Other".
+  // The lever types no option in the grid uses, listed under it;
+  // never "Other".
   const emptyLevers = uncoveredLevers(leverTypes, longlist.options ?? []).map(capitalise);
   const columns: { key: string; label: string }[] = [
     { key: "less", label: LEVEL_WORDS[line].less ?? "" },
@@ -134,7 +133,7 @@ export function LonglistGrid({
     leverKey: string,
     columnKey: string,
   ): OptionSummaryOut[] =>
-    // The shortlisted lead each cell (round 12, owner), as on the list.
+    // The shortlisted lead each cell, as on the list.
     shortlistedFirst(
       options.filter((option) => {
         const matchesLever =
@@ -221,10 +220,10 @@ export function LonglistGrid({
                                 <span className="mt-0.5 block text-meta text-grey">{NO_IN_SCOPE_WORDS}</span>
                               )}
                               {/* The check in the tile's top-right corner, its
-                                  target over the padding (round 13, owner); an
+                                  target over the padding; an
                                   excluded tile shows the exclude glyph there in
                                   Grey, its exclusion line as the tooltip, no
-                                  words on the tile (round 13, owner). */}
+                                  words on the tile. */}
                               {option.state === "excluded" ? (
                                 <ExcludedMark line={option.exclusion == null ? "" : exclusionPhrase(option.exclusion, who)} />
                               ) : (
@@ -266,8 +265,8 @@ export function LonglistGrid({
         </table>
       </div>
       {/* The lever types no option uses, directly under the grid in the row
-          heads' column only, each a head with nothing under it (round 13,
-          owner); never "Other". */}
+          heads' column only, each a head with nothing under it;
+          never "Other". */}
       {emptyLevers.length > 0 && (
         <NoOptionsFoot names={emptyLevers} />
       )}
@@ -276,7 +275,7 @@ export function LonglistGrid({
 }
 
 /** An excluded tile's mark in the toggle's corner: the exclude glyph in
- *  Grey, not a control, its exclusion line as the tooltip (round 13, owner). */
+ *  Grey, not a control, its exclusion line as the tooltip. */
 function ExcludedMark({ line }: { line: string }) {
   return (
     <WithTooltip note={line || undefined}>
@@ -296,12 +295,12 @@ function ExcludedMark({ line }: { line: string }) {
 /**
  * "No options found for" and the lever types no option carries, one per
  * line in the row heads' style, 8 px apart, under a full-width hairline:
- * the grid's foot and the list's lever view alike (round 13/14, owner). The words a Body Grey sentence-case
+ * the grid's foot and the list's lever view alike. The words a Body Grey sentence-case
  * line, so they never read as one more lever.
  */
 export function NoOptionsFoot({ names, className }: { names: readonly string[]; className?: string }) {
   // A Line hairline across the full width above it, the rows' own rule,
-  // then the foot 24 px below it, in both views (round 13/14, owner).
+  // then the foot 24 px below it, in both views.
   return (
     <div data-testid="no-options-foot" className={cn("border-t border-line pt-6", className)}>
       <div aria-label={NO_OPTIONS_FOR} role="group" className="w-44 space-y-2">

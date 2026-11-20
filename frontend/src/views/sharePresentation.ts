@@ -2,19 +2,18 @@ import { conflictSentences, isConflictCode } from "../lib/errors";
 import { PROJECT, TASK } from "../lib/vocabulary";
 
 /**
- * The Share tab's words (task 058 round 10; lead rulings S1 to S8 and the
- * review's proposals P2 to P5, `research/share-history-polish.md`). Kept with
+ * The Share tab's words. Kept with
  * the view that says them; entity names still come from `vocabulary.ts`.
  */
 export const SHARE_COPY = {
   publicHeading: "Public link",
   /** What the section is for, one plain line under its heading, said as
-   *  the effect of the choice, not as if it were made (owner, round 13). */
+   *  the effect of the choice, not as if it were made. */
   publicExplain: `Making this ${TASK.lower} public creates a link that anyone can open to read the report, without a Policy Atlas account.`,
   publicOn: "Public. Anyone with the link can read it.",
   publicOff: "Not public.",
   makePublic: "Make public",
-  /** The second step before the task goes public (lead ruling S3). */
+  /** The second step before the task goes public. */
   confirmPublic: "Anyone with the link can read the report, the source list and the quoted excerpts, without signing in.",
   keepPrivate: "Keep private",
   stopPublic: "Stop sharing publicly",
@@ -24,7 +23,7 @@ export const SHARE_COPY = {
   copyFailed: "Couldn't copy. The link is selected.",
   publicFailed: "Public sharing couldn't be changed. Try again.",
   orgHeading: "Organisation",
-  /** What the section is for (owner, round 13). */
+  /** What the section is for. */
   orgExplain: `Sharing with your organisation lets everyone in it open this ${TASK.lower} from their ${TASK.many} list.`,
   orgShared: "Shared with your organisation",
   orgPrivate: "Private",
@@ -45,7 +44,7 @@ export const SHARE_COPY = {
 const GENERIC_FORBIDDEN = "action is not permitted";
 
 /**
- * What a refused change says (lead ruling S8): the server's own message for a
+ * What a refused change says: the server's own message for a
  * refusal when it sends one, the conflict's sentence for a known conflict,
  * else the action's fallback.
  *

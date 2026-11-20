@@ -21,7 +21,7 @@ export interface RunThreadDecision {
   capabilityRunId: string;
 }
 
-/** The gate check-in as the thread sees it (task 044, Phase 5.5). */
+/** The gate check-in as the thread sees it. */
 export type TaskAgentThreadCheckIn = components["schemas"]["CheckInOut"];
 
 /** The gate's recorded decision when the **card endpoint** answered it, so no

@@ -23,7 +23,7 @@ import { formatCount } from "../lib/format";
 type ThemeItem = { name: string; size: number | null; description: string; themeId?: string | null };
 
 /**
- * The themes to list (owner, round 9): from the moment the themes are
+ * The themes to list: from the moment the themes are
  * discovered, in the order they were discovered, each with its name and
  * description and its count once the committed landscape has it; the
  * committed themes the discovery did not name follow. Without discovered
@@ -133,7 +133,7 @@ const PENDING_ROWS = [
 ] as const;
 
 /**
- * The themes on their way (owner, round 8): while Mapping runs and no theme
+ * The themes on their way: while Mapping runs and no theme
  * has landed, three placeholder rows in the themes' own shape (a name, a
  * count at the right, a line of description) breathe on the status mark's
  * 1.6 s rhythm. A screen reader hears when themes appear. Still under
@@ -164,21 +164,21 @@ function ThemesPending() {
 
 /**
  * Themes: the reader-facing landscape themes, built only from the existing
- * `landscape.themes` read model — no new text is generated here (rubric 25).
+ * `landscape.themes` read model — no new text is generated here.
  * Finding-facet groups (intervention, barrier, …) live on the Findings tab.
  */
 export function ThemesView() {
   const { taskId = "" } = useParams();
   const task = useTask(taskId);
   useDocumentTitle(task.data?.name, "Themes");
-  // An options-scoping task's themes are the longlist's option clusters
-  // (owner, round 13); an Evidence search's are the landscape's. The
+  // An options-scoping task's themes are the longlist's option clusters;
+  // an Evidence search's are the landscape's. The
   // longlist is read only on a scoping task.
   const scoping = isScoping(task.data);
   const longlist = useLonglist(scoping ? taskId : "");
   const landscape = useLandscape(taskId);
   // While Mapping runs the themes refetch every 5 s, and until the first
-  // lands their rows pulse in place (owner, round 8).
+  // lands their rows pulse in place.
   const stream = useRunStream(taskId);
   const live = liveStages(stream);
   const mapping = live.has("characterise");
@@ -195,7 +195,7 @@ export function ThemesView() {
   const themes = orderThemes(landscape.data?.themes ?? []);
   // From the moment Mapping has discovered the themes, they show with their
   // names and descriptions while documents are assigned to them, and their
-  // counts fill in place (owner, round 9).
+  // counts fill in place.
   const items = themeItems(stream.liveThemes, themes);
   const isEmpty = !isPending && !isError && items.length === 0;
   const firstPaintDone = useFirstPaintDone(!isPending, taskId);
@@ -269,7 +269,7 @@ export type ScopingTheme = {
 };
 
 /**
- * The longlist's themes with their options (owner, round 13): each theme in
+ * The longlist's themes with their options: each theme in
  * the longlist's order, its options in the order the theme lists them. An
  * option id the longlist does not carry is left out.
  *
@@ -302,8 +302,7 @@ function documentWords(count: number): string {
 }
 
 /**
- * An options-scoping task's Themes subtab (owner, round 13: it was empty
- * after a completed run): the longlist's option clusters from the longlist
+ * An options-scoping task's Themes subtab: the longlist's option clusters from the longlist
  * read, no new endpoint. Each theme is a section: its name at Lead Bold
  * Navy with its option count at the right, its description at Body Grey,
  * then its options as a ruled list, each name a link to its card (an
@@ -349,7 +348,7 @@ function ScopingThemeSection({ taskId, theme }: { taskId: string; theme: Scoping
     <section aria-labelledby={headingId}>
       <div className="flex items-baseline justify-between gap-3">
         <h2 id={headingId} className="min-w-0 text-lead font-bold text-navy">
-          {/* The theme opens All sources filtered to it (owner, round 14), in
+          {/* The theme opens All sources filtered to it, in
               the Landscape rows' quiet link form: its own colour, underlined
               on hover. */}
           <Link
@@ -360,7 +359,7 @@ function ScopingThemeSection({ taskId, theme }: { taskId: string; theme: Scoping
           </Link>
         </h2>
         {/* Its documents at Meta Grey, as the longlist's group headings carry
-            their counts (owner, round 14). */}
+            their counts. */}
         <GroupCount count={documentWords(theme.documents)} className="shrink-0" />
       </div>
       {theme.description !== "" && <p className="mt-1 max-w-[44em] text-body text-grey">{scrub(theme.description)}</p>}

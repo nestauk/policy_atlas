@@ -3,7 +3,9 @@ type: Integration quirk
 title: uv run re-syncs to default-groups on every invocation — a CI dependency group lives in [tool.uv] default-groups, not an install step
 description: Any Makefile or workflow `uv sync --group X` is silently undone by the next `uv run`, which re-syncs the environment to the configured default groups. 033's ops group (boto3 for CI-side tests) had to land in default-groups; the image excludes it with --no-group on both Dockerfile sync lines.
 tags: [uv, ci, dependencies, docker, "033"]
-timestamp: 2026-08-25
+generated:
+  by: process:okf-migrate
+  at: 2026-08-25
 ---
 
 # Rule

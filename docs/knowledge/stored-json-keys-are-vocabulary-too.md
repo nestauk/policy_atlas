@@ -3,7 +3,18 @@ type: Invariant
 title: An identifier sweep renames stored JSON keys in code but not in data — audit every JSON column on real rows
 description: A vocabulary rename that rewrites identifiers also rewrites the string literals that name JSONB keys and stored values; the rows keep the old ones. Before the migration lands, scan every JSON column on a real database for retired keys and values, then either rewrite reversibly (derived rows) or read both names (append-only logs). Compatibility readers are legitimate residue of a "no retired word" invariant.
 tags: [migration, vocabulary, jsonb, compatibility, review, task-038]
-timestamp: 2026-09-05
+generated:
+  by: process:okf-migrate
+  at: 2026-09-05
+sources:
+  - resource: "../tasks/038-vocabulary-alignment/verification.md"
+    title: "[038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (\u00a7 Review findings R5, R6, R28; the JSON-column audit)"
+  - resource: "../tasks/038-vocabulary-alignment/schema-manifest.md"
+    title: "[038-vocabulary-alignment/schema-manifest.md](../tasks/038-vocabulary-alignment/schema-manifest.md) (\u00a7 Stored values 6\u20137)"
+  - resource: "../adr/0036-one-vocabulary-across-code-schema-api-and-screen.md"
+    title: "[ADR 0036](../adr/0036-one-vocabulary-across-code-schema-api-and-screen.md) (\u00a7 Rollback)"
+  - resource: "backend/alembic/versions/c1a7f4e9b0d2_vocabulary_alignment.py"
+    title: "`backend/alembic/versions/c1a7f4e9b0d2_vocabulary_alignment.py` (`_JSONB_KEY_RENAMES`), `backend/src/policy_atlas/api/readmodels/repository.py` (`_source_reason_maps`)"
 ---
 
 # Rule
@@ -50,10 +61,3 @@ what the contract enumerated.
   than rewriting them.
 - Same family: [rename-sweep-inverts-screen-sense-words](rename-sweep-inverts-screen-sense-words.md)
   (the sweep's other blind spot), [schema-manifest-from-catalog-not-metadata](schema-manifest-from-catalog-not-metadata.md).
-
-# Citations
-
-- [038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (§ Review findings R5, R6, R28; the JSON-column audit)
-- [038-vocabulary-alignment/schema-manifest.md](../tasks/038-vocabulary-alignment/schema-manifest.md) (§ Stored values 6–7)
-- [ADR 0036](../adr/0036-one-vocabulary-across-code-schema-api-and-screen.md) (§ Rollback)
-- `backend/alembic/versions/c1a7f4e9b0d2_vocabulary_alignment.py` (`_JSONB_KEY_RENAMES`), `backend/src/policy_atlas/api/readmodels/repository.py` (`_source_reason_maps`)

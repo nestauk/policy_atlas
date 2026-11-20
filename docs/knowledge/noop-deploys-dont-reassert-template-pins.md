@@ -3,7 +3,9 @@ type: Integration quirk
 title: CloudFormation re-asserts a template value only on a changed deploy — pins need script-side alignment
 description: A template-pinned value (DesiredCount=0) does not reset live drift on a no-op deploy — CloudFormation skips unchanged stacks entirely. Any invariant a script deliberately drifts from (scale-to-1) must also be re-asserted by the script, not just the template.
 tags: [deployment, aws, cloudformation, cdk, invariant]
-timestamp: 2026-07-28
+generated:
+  by: process:okf-migrate
+  at: 2026-11-19
 ---
 
 # Rule
@@ -29,3 +31,9 @@ replaced (new physical ID, same name), the app template is byte-identical and it
 deploy is skipped — stale IDs persist. Force-redeploy the consumer after any such
 replacement; also reset `cdk.context.json` if the VPC itself was replaced
 (`infra/DEPLOYMENT.md` § 4 caveats, 026 review Codex lane).
+
+Same mechanism, console direction (064c review stack): a hand edit in the AWS console
+(for example to the CloudFront security headers policy) survives every deploy that leaves
+that resource's template unchanged, unseen, and then disappears at an unrelated change to
+the resource. An emergency console edit must be followed at once by the matching code or
+config change and a deploy (`infra/DEPLOYMENT.md` § Security headers, Rollback).

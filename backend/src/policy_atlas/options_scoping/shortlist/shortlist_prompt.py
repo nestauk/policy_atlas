@@ -26,7 +26,7 @@ SHORTLIST_PROMPT_VERSION = "shortlist_v2"
 #: reasons.
 SHORTLIST_MAX_OUTPUT_TOKENS = 4_096
 
-#: One reason, after strip (contract § The component, code checks).
+#: One reason, after strip (checked in code).
 SHORTLIST_REASON_MAX_CHARS = 400
 
 

@@ -3,7 +3,9 @@ type: Convention
 title: Reusing an agent loop = generalize it in place, not move it
 description: run_section_loop was already the tool-loop kernel — 029 extracted it by parameterising the emission key, injecting the turn function, and labelling the emit tool, leaving a byte-identical section adapter. No module move, synthesis suite untouched.
 tags: [tool-loop, kernel, synthesis, chat, refactoring, reuse]
-timestamp: 2026-08-11
+generated:
+  by: process:okf-migrate
+  at: 2026-08-11
 ---
 
 # Rule

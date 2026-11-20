@@ -1,9 +1,11 @@
 ---
 type: Convention
 title: A new plan field must be carried from the previous version in the version builder, or the next approved version silently resets it
-description: Task 055 added `risk_appetite` to the scoping plan and applied it from the Task Agent's wire draft only; `build_scoping_plan` carries `your_options` and `removed_defaults` from `previous` but knew nothing of the new field, so any later version the conversation produced (a depth change, a new Where) would have reset the appetite to its default without notice. Every optional wire field that lands on the plan needs the "else: previous" branch and a direct test of the builder with the field absent.
+description: 'Task 055 added `risk_appetite` to the scoping plan and applied it from the Task Agent''s wire draft only; `build_scoping_plan` carries `your_options` and `removed_defaults` from `previous` but knew nothing of the new field, so any later version the conversation produced (a depth change, a new Where) would have reset the appetite to its default without notice. Every optional wire field that lands on the plan needs the "else: previous" branch and a direct test of the builder with the field absent.'
 tags: [scoping-plan, task-agent, plan-versions, wire-models, task-055, review-findings]
-timestamp: 2026-10-27
+generated:
+  by: process:okf-migrate
+  at: 2026-10-27
 ---
 
 # Rule

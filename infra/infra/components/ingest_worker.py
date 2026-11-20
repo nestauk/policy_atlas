@@ -1,4 +1,4 @@
-"""The queued document-ingest worker (task 057): a queue, its dead-letter queue and a function.
+"""The queued document-ingest worker: a queue, its dead-letter queue and a function.
 
 In plain words: when a run needs the full text of documents, the API puts one
 message per document on a queue, and AWS starts a copy of the ingest function
@@ -23,8 +23,7 @@ The pieces, one line each:
 
 The function reads its database password at start-up from Secrets Manager
 (through its own permission, never through an environment variable) and holds
-no AI model key and no Bedrock permission: embedding stays in the API's run
-(contract D6).
+no AI model key and no Bedrock permission: embedding stays in the API's run.
 """
 
 from aws_cdk import (
@@ -41,17 +40,17 @@ from aws_cdk import (
 )
 from constructs import Construct
 
-# Contract N4 / D4 / D5 / N5. The infra tests pin each of these.
+# The infra tests pin each of these.
 FUNCTION_TIMEOUT = Duration.seconds(180)
-FUNCTION_MEMORY_MB = 1769  # one full CPU core in Lambda (D5)
+FUNCTION_MEMORY_MB = 1769  # one full CPU core in Lambda
 FUNCTION_EPHEMERAL_STORAGE_MB = 512
 # Function timeout + 30 s: a redelivered message lands inside the 600 s stage
-# deadline, and never while the first try is still running (finding 7).
+# deadline, and never while the first try is still running.
 QUEUE_VISIBILITY_TIMEOUT = Duration.seconds(180 + 30)
 QUEUE_RETENTION = Duration.days(4)
 DEAD_LETTER_RETENTION = Duration.days(14)
 MAX_RECEIVE_COUNT = 2  # the second failed try moves the message to the dead-letter queue
-MAX_CONCURRENCY = 20  # raised only on a staging measurement (N5)
+MAX_CONCURRENCY = 20  # raised only on a staging measurement
 HANDLER_COMMAND = ["python", "-m", "awslambdaric", "policy_atlas.ops.ingest_worker.handler"]
 
 QUEUE_NAME = "policy-atlas-v3-ingest"
@@ -108,8 +107,8 @@ class IngestWorker(Construct):
             ),
         )
 
-        # Outbound only, and only three rules (owner ruling 2026-11-04, task 057
-        # review): 80 and 443 to the internet (publishers through the NAT; SQS and
+        # Outbound only, and only three rules:
+        # 80 and 443 to the internet (publishers through the NAT; SQS and
         # Secrets Manager likewise, on 443) and 5432 to the database group. A
         # publisher on another port is refused. DNS to the VPC resolver is not
         # filtered by security groups. Nothing connects in.

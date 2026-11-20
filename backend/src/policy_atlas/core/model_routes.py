@@ -12,9 +12,8 @@ variable, ``POLICY_ATLAS_MODEL_ROUTE``, picks the route; unset means
 ``POLICY_ATLAS_MODEL_ROUTE_FILE`` can replace or add routes by name without
 touching the committed file (for evaluations).
 
-Design: task 053 contract D3 and ADR 0041; task 056 contract D4 and D9 and
-ADR 0042 (one step per call site, reasoning effort per step); task 057
-contract D12 and ADR 0043 (a timeout per step). Every lookup fails loud: an
+Design: ADR 0041; ADR 0042 (one step per call site, reasoning effort per
+step); ADR 0043 (a timeout per step). Every lookup fails loud: an
 unknown route, step, tier, effort or backend name, a stray key, a missing or
 non-positive timeout, or a file of the wrong shape, raises at import rather
 than falling back to anything. One value is taken as written: a step
@@ -46,7 +45,7 @@ REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh")
 ROUTE_ENV = "POLICY_ATLAS_MODEL_ROUTE"
 OVERLAY_ENV = "POLICY_ATLAS_MODEL_ROUTE_FILE"
 
-#: Per-step model variables retired by task 053. They used to override one
+#: Retired per-step model variables. They used to override one
 #: step's model each; the route file is now the only mechanism. Setting one is
 #: logged once and ignored, never silently honoured.
 RETIRED_ENV = (
@@ -58,7 +57,7 @@ RETIRED_ENV = (
     "POLICY_ATLAS_MRS_NOTE_MODEL",
     "POLICY_ATLAS_FULL_REPORT_INTRO_MODEL",
     "POLICY_ATLAS_RELEVANCE_MODEL",
-    # Options scoping (tasks 044 to 046), retired when that branch merged into 053.
+    # Options scoping.
     "POLICY_ATLAS_TASK_AGENT_MODEL",
     "POLICY_ATLAS_TASK_AGENT_SCOPING_MODEL",
     "POLICY_ATLAS_LONGLIST_JUDGMENT_MODEL",
@@ -76,11 +75,10 @@ class Step:
             route says otherwise.
         timeout_s: How many seconds one request of this step may take before
             the client gives up on it, unless a route says otherwise. Applied
-            per request (task 057, D12).
+            per request.
         first_content_s: For a streamed step only: how many seconds the app
             waits for the first words of the answer before it gives up on the
-            stream and falls back to the ordinary call (task 054's 058
-            alignment, A11). ``None`` when the step sets no such limit.
+            stream and falls back to the ordinary call. ``None`` when the step sets no such limit.
     """
 
     tier: str
@@ -107,7 +105,7 @@ class StepException:
     first_content_s: float | None = None
 
 
-#: Embedding requests the stage may keep in flight at most (task 057, D6), when a
+#: Embedding requests the stage may keep in flight at most, when a
 #: route's ``[routes.<name>.embeddings]`` table does not set ``pool_cap``.
 DEFAULT_EMBEDDING_POOL_CAP = 8
 
@@ -120,8 +118,8 @@ class Embeddings:
         backend: ``openai`` or ``cohere``.
         model: The embedding model id.
         profile: The profile name stamped on each stored vector.
-        pool_cap: The most embedding requests kept in flight at once (task 057,
-            D6); the adaptive pool climbs towards it while the provider does not
+        pool_cap: The most embedding requests kept in flight at once;
+            the adaptive pool climbs towards it while the provider does not
             throttle. ``pool_cap`` in the route file, default 8.
     """
 
@@ -198,7 +196,7 @@ class Route:
 
         Returns:
             One of :data:`REASONING_EFFORTS`; never ``None`` (every step says
-            what it sends, task 056 D4).
+            what it sends).
 
         Raises:
             RuntimeError: If the step is not in the ``[steps]`` table.
@@ -398,8 +396,8 @@ def load_route(
             tier, effort or timeout, a timeout that is not a number above zero,
             an effort value the providers do not accept, a step
             default naming an undefined tier, a step exception naming an unknown
-            step or carrying a stray key, a leftover ``knobs`` table (retired by
-            task 056), a backend name the code does not implement, or an overlay
+            step or carrying a stray key, a leftover ``knobs`` table (the old
+            effort format), a backend name the code does not implement, or an overlay
             that tries to change ``[steps]``.
     """
     data = _read_toml(path)

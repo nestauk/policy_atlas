@@ -23,7 +23,7 @@ const twMerge = extendTailwindMerge({
             "heading",
             "title",
             "display",
-            // The splash page's two responsive headline sizes (lead ruling P5).
+            // The splash page's two responsive headline sizes.
             "hero",
             "hero-2",
           ],

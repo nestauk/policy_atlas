@@ -1,11 +1,11 @@
-"""The theory-of-change graph: shapes, structure checks, item text and hash (task 054, S8).
+"""The theory-of-change graph: shapes, structure checks, item text and hash.
 
 Pure code, no database. The draft, discover and merge steps build a
 :class:`Graph` from rows or from a model's answer and run :func:`check_graph`
-(the E1 structure checks) before writing. :func:`item_text` is the text the
+(the structure checks) before writing. :func:`item_text` is the text the
 evidence check searches and judges for a link; :func:`item_hash` is what a
 judgement is bound to, so an edit to the link or to a box at either end makes
-the link *Edited · check pending* (C19), while a plan change does not.
+the link *Edited · check pending*, while a plan change does not.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Literal
 Layer = Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 
-#: The layers a step may lead to from each layer (C34). Any of these may also
+#: The layers a step may lead to from each layer. Any of these may also
 #: lead to a failure outcome; nothing leads on from an impact or a failure outcome.
 NEXT_LAYERS: dict[str, frozenset[str]] = {
     "input": frozenset({"output"}),
@@ -29,7 +29,7 @@ NEXT_LAYERS: dict[str, frozenset[str]] = {
     "outcome_long": frozenset({"outcome_long", "impact"}),
 }
 
-#: The limits on kept pathways (C6).
+#: The limits on kept pathways.
 MAX_SUCCESS_PATHWAYS = 6
 MAX_FAILURE_PATHWAYS = 3
 
@@ -83,7 +83,7 @@ class Graph:
 def link_problem(source_layer: str, target_layer: str) -> str | None:
     """Return why a step between two layers is not allowed, or ``None``.
 
-    Allowed (C34): input to output; output to short-term outcome; short-term
+    Allowed: input to output; output to short-term outcome; short-term
     to short-term or long-term outcome; long-term to long-term outcome or
     impact; and any of these to a failure outcome. So an input never leads
     straight to an impact, and nothing leads on from an impact or a failure
@@ -130,7 +130,7 @@ def pathway_problem(graph: Graph, pathway: Pathway, *, as_drawn: bool = False) -
 
 
 def check_graph(graph: Graph, *, as_drawn: bool = False) -> list[str]:
-    """Run the E1 structure checks.
+    """Run the structure checks.
 
     Checks: every link joins known boxes with layers in order; no link has
     more than two conditions and no condition sits on two links (case and
@@ -138,7 +138,7 @@ def check_graph(graph: Graph, *, as_drawn: bool = False) -> list[str]:
     connected route from an input to an impact (success) or a failure outcome
     (failure); at least one kept failure pathway.
 
-    A diagram the user uploaded and kept as drawn (owner, 2026-11-04) is the
+    A diagram the user uploaded and kept as drawn is the
     user's theory as given: its steps may skip layers, a box may stand alone,
     its routes may stop short of the impact, and it needs no failure pathway.
     Every step must still join two known, different boxes, and every route
@@ -241,7 +241,7 @@ def trim_conditions(
 
 
 def item_hash(link: Link, source_text: str, target_text: str) -> str:
-    """The hash a judgement is bound to (C19).
+    """The hash a judgement is bound to.
 
     Covers the link's own fields, both box texts and the conditions, each
     normalised (case and spacing ignored). Plan-scope fields are not in it, so
@@ -314,7 +314,7 @@ def link_state(
     kept_by: str | None,
     checking: bool,
 ) -> LinkState:
-    """A link's state by the C19 transition table; computed, never stored.
+    """A link's state by the link-state transition table; computed, never stored.
 
     Args:
         current_hash: :func:`item_hash` of the link as it is now.

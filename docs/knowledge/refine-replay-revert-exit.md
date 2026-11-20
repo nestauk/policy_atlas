@@ -3,7 +3,9 @@ type: Prompting
 title: The refine-replay loop's revert-not-iterate exit is load-bearing
 description: 021's extract_icf_v1 round 3 REGRESSED against round 2 (protocol-shaped records returned, 42 vs 30) after adding a more specific rule to a surface that round 2 had fixed; single-sample mini-model variance plus an over-specific present-tense rule means more words is not more control — the loop's bounded-rounds/revert exit is what ships the better prompt.
 tags: [prompting, refine-replay, extraction, regression, prompt-economy]
-timestamp: 2026-07-13
+generated:
+  by: process:okf-migrate
+  at: 2026-07-13
 ---
 
 # Rule

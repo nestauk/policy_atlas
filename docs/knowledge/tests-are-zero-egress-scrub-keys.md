@@ -3,7 +3,16 @@ type: Testing rule
 title: The suite is zero-egress by policy — scrub product-egress keys after loading .env
 description: Every live/stub backend switch keys off environment variables, so a developer's keyed backend/.env must never reach the pytest process unscrubbed. conftest scrubs after load_dotenv(); alembic/env.py reads DATABASE_URL side-effect-free via dotenv_values() so its own load_dotenv() doesn't re-poison every migration fixture; API settings stay pure os.environ.
 tags: [testing, zero-egress, dotenv, socket-deny, review-lesson]
-timestamp: 2026-10-22
+generated:
+  by: process:okf-migrate
+  at: 2026-10-22
+sources:
+  - resource: "backend/tests/conftest.py"
+    title: "`backend/tests/conftest.py`"
+  - resource: "backend/alembic/env.py"
+    title: "`backend/alembic/env.py` (`_get_url`)"
+  - resource: "backend/src/policy_atlas/api/deps.py"
+    title: "`backend/src/policy_atlas/api/deps.py` (`_live`)"
 ---
 
 # Rule
@@ -54,9 +63,3 @@ Any new module that reads config from the environment **and also** calls
 sequencing that matters is: load-and-scrub happens exactly once, in conftest;
 every other module either reads pure `os.environ` or uses the side-effect-free
 `dotenv_values()` accessor.
-
-# Citations
-
-- `backend/tests/conftest.py`
-- `backend/alembic/env.py` (`_get_url`)
-- `backend/src/policy_atlas/api/deps.py` (`_live`)

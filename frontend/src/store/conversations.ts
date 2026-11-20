@@ -169,8 +169,8 @@ type ChatStreamEvent =
   | { type: "conversation.titled"; conversation_id: string; title: string };
 
 /**
- * The chat's title written from its first message (`conversation.titled`,
- * task 058, round 14), put into every cached read that shows it: each chats
+ * The chat's title written from its first message (`conversation.titled`),
+ * put into every cached read that shows it: each chats
  * list of a task and the chat's own detail. The list re-renders without a
  * refetch.
  */

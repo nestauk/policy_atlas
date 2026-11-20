@@ -9,7 +9,7 @@ rolls back, so nothing is ever committed). It returns a ``QueryResult`` with
 recall attributed to each stage, plus everything needed to unpick the run
 offline (see ``checks/inspect_run.py``).
 
-Search is one pass at every depth (task 051, ADR 0038): keyword and semantic
+Search is one pass at every depth (ADR 0038): keyword and semantic
 seeds, backward and forward citation chasing, Overton relevance results and
 landmarks, two ranked pools cut at the depth's two caps. The depths differ only
 in those caps, so a search-only measurement is valid at any depth.
@@ -280,7 +280,7 @@ class _RecordingBackend:
         self._inner = inner
         self._calls = calls
         self._langfuse_client = langfuse_client
-        # The search's legs and seed calls run concurrently (task 051); the
+        # The search's legs and seed calls run concurrently; the
         # list is a diagnostic log in completion order. One lock is shared by
         # every wrapper that appends to the same list (``run_one_query``).
         self._lock = lock if lock is not None else threading.Lock()

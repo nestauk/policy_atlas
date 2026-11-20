@@ -1,4 +1,4 @@
-"""Frequency snowball on top of the raw OpenAlex baseline (R&D, task 047).
+"""Frequency snowball on top of the raw OpenAlex baseline (R&D).
 
 The idea, in one paragraph. Keyword search returns papers whose words match the
 question. The papers that a topic's literature keeps citing often use older or
@@ -400,7 +400,7 @@ def generated_queries(
                 },
             ],
             model=model,
-            reasoning_effort="medium",  # task 056: every call states its effort
+            reasoning_effort="medium",  # Every call states its effort
             response_format=ConceptBlocksWire,
             prompt_version="openalex_concepts_exp",
             usage_event="search_generation.queries.usage",

@@ -3,7 +3,18 @@ type: Testing rule
 title: Historical migration tests cannot share one `Table` object across a rename revision — reflect old names below it, use current metadata at head
 description: Once a revision renames tables and columns, a test that downgrades below it and inserts through `policy_atlas.core.schema` metadata addresses names that do not exist there. Below the rename, address the old catalog by reflection (`tests/core/legacy_catalog.py` `legacy_table(conn, name)`) or textual SQL; at head use current metadata. Eleven pre-038 migration tests and three `test_schema.py` round-trips were reshaped this way (038 D9).
 tags: [testing, migration, alembic, schema, task-038]
-timestamp: 2026-09-05
+generated:
+  by: process:okf-migrate
+  at: 2026-09-05
+sources:
+  - resource: "backend/tests/core/legacy_catalog.py"
+    title: "`backend/tests/core/legacy_catalog.py`, `backend/tests/core/test_migration_038.py`"
+  - resource: "../tasks/038-vocabulary-alignment/verification.md"
+    title: "[038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (\u00a7 Phase 3.2 \"D9\")"
+  - resource: "../tasks/038-vocabulary-alignment/plan.md"
+    title: "[038-vocabulary-alignment/plan.md](../tasks/038-vocabulary-alignment/plan.md) (D9)"
+  - resource: "alembic-roundtrip-explicit-revisions.md"
+    title: "Same family: [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md)"
 ---
 
 # Rule
@@ -31,10 +42,3 @@ downgrade" a real assertion.
 after downgrading below the new revision; each would have failed on the
 renamed columns, and the fix could not be a rename in the tests (they
 address the old catalog on purpose).
-
-# Citations
-
-- `backend/tests/core/legacy_catalog.py`, `backend/tests/core/test_migration_038.py`
-- [038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (§ Phase 3.2 "D9")
-- [038-vocabulary-alignment/plan.md](../tasks/038-vocabulary-alignment/plan.md) (D9)
-- Same family: [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md)

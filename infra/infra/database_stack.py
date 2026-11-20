@@ -20,8 +20,8 @@ from .components.nesta_ssm_endpoints import SsmConnectivity
 
 WRITER_INSTANCE_IDENTIFIER = "policy-atlas-v3-db-writer"
 # A burstable (t3) writer earns CPU credits while idle and spends them when
-# busy; at zero it is throttled to its baseline. Task 057 adds up to 20 ingest
-# functions writing at once, so warn while credits remain (credits, not %).
+# busy; at zero it is throttled to its baseline. Up to 20 ingest
+# functions write at once, so warn while credits remain (credits, not %).
 WRITER_CPU_CREDIT_ALARM_THRESHOLD = 50
 
 
@@ -72,7 +72,7 @@ class DatabaseStack(Stack):
             credentials=rds.Credentials.from_generated_secret("dbadmin"),
             removal_policy=RemovalPolicy.SNAPSHOT,
             # Review-stack hardening (026 step 7): encryption at rest, delete
-            # guard, 7-day backups. NB StorageEncrypted cannot be toggled in
+            # guard, backups (retention days from db_config.json). NB StorageEncrypted cannot be toggled in
             # place, and the pinned cluster/instance identifiers mean
             # CloudFormation cannot swap in a replacement either (the
             # create-before-delete collides on the name — the update FAILS).
@@ -80,7 +80,7 @@ class DatabaseStack(Stack):
             # scheduled while the DB holds smoke data only.
             storage_encrypted=True,
             deletion_protection=True,
-            backup=rds.BackupProps(retention=Duration.days(7)),
+            backup=rds.BackupProps(retention=Duration.days(db_config["backup_retention_days"])),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
             cluster_identifier="policy-atlas-v3-db-cluster",

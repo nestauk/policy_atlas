@@ -2,29 +2,33 @@ import type { components } from "./gen/types";
 
 export type SseFrame = components["schemas"]["SseFrame"];
 
-const SSE_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
-  "run.status",
-  "stage.started",
-  "stage.completed",
-  "stage.failed",
-  "artefact.skeleton",
-  "artefact.section_started",
-  "artefact.section_completed",
-  "checkin.pending",
-  "checkin.resolved",
-  "plan.updated",
-  "task.updated",
-  "tick",
-  "artefact.section_delta",
-  "artefact.section_revising",
-  "artefact.section_sources",
-  "artefact.section_claim",
-  "artefact.section_card",
-  "artefact.source_note",
-  "search.query",
-  "characterise.themes",
-  "toc.sketch",
-] satisfies SseFrame["type"][]);
+// Every frame type must have an entry: the type check fails when the generated
+// contract gains a type that is missing here, because a frame that is not in this
+// list is dropped before the reducer sees it.
+const SSE_FRAME_TYPE_RECORD: Record<SseFrame["type"], true> = {
+  "run.status": true,
+  "stage.started": true,
+  "stage.completed": true,
+  "stage.failed": true,
+  "artefact.skeleton": true,
+  "artefact.section_started": true,
+  "artefact.section_completed": true,
+  "checkin.pending": true,
+  "checkin.resolved": true,
+  "plan.updated": true,
+  "task.updated": true,
+  "tick": true,
+  "artefact.section_delta": true,
+  "artefact.section_revising": true,
+  "artefact.section_sources": true,
+  "artefact.section_claim": true,
+  "artefact.section_card": true,
+  "artefact.source_note": true,
+  "search.query": true,
+  "characterise.themes": true,
+  "toc.sketch": true,
+};
+const SSE_FRAME_TYPES: ReadonlySet<string> = new Set(Object.keys(SSE_FRAME_TYPE_RECORD));
 
 /**
  * The one narrow seam in the SSE pipeline: parse a `data:` payload as JSON,
@@ -37,7 +41,7 @@ const SSE_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
 export function narrowSseFrame(payload: unknown): SseFrame | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { type } = payload as { type?: unknown };
-  if (typeof type !== "string" || !SSE_FRAME_TYPES.has(type as SseFrame["type"])) {
+  if (typeof type !== "string" || !SSE_FRAME_TYPES.has(type)) {
     return null;
   }
   // Narrow seam: the discriminator is verified; the remaining shape is

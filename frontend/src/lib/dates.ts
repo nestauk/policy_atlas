@@ -1,5 +1,5 @@
 /*
- * The one date formatter (task 058, consolidation batch B). Every place that
+ * The one date formatter (consolidation batch B). Every place that
  * shows a date names one of three forms:
  *
  *   short  "5 Nov" within the current year, "12 Oct 2025" otherwise (the lists)
@@ -9,7 +9,7 @@
  * One fixed form for every reader rather than the browser's locale
  * ("11/5/2026" and "05/11/2026" are different days to two colleagues), and
  * never relative ("2 days ago" goes stale under an open tab and in a pasted
- * screenshot; lead ruling P7, round 10). The month and day names are fixed
+ * screenshot). The month and day names are fixed
  * here, so no locale can turn "Sep" into "Sept". Times are the reader's
  * local time, on the 24-hour clock.
  */

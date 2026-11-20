@@ -3,7 +3,14 @@ type: Convention
 title: Resolving a merge conflict with "take theirs" drops every hunk of ours that did not conflict
 description: git checkout --theirs on a conflicted file replaces the whole file, not just the conflicted region, so each of our non-conflicting hunks in that file is lost silently and the suite is the only thing that notices; before accepting a file wholesale, diff it against our pre-merge commit and re-apply each hunk of ours on top, and run the full gate after the merge even when the merge commit itself looks clean.
 tags: [git, merge, review, process]
-timestamp: 2026-10-21
+generated:
+  by: process:okf-migrate
+  at: 2026-10-21
+sources:
+  - resource: "../tasks/053-bedrock-local-route/verification.md"
+    title: "[053 verification \u00a7 Post-merge integration](../tasks/053-bedrock-local-route/verification.md)"
+  - resource: "interface-change-sweeps-fakes-and-premise-pins.md"
+    title: "Related: [interface-change-sweeps-fakes-and-premise-pins](interface-change-sweeps-fakes-and-premise-pins.md)"
 ---
 
 # Rules
@@ -23,8 +30,3 @@ timestamp: 2026-10-21
 - **A dependency audit red on dev is still ours to clear.** `make audit` runs in our gate,
   so an advisory inherited through the merge (certifi here) blocks our PR; a one-package
   lock bump is the fix, recorded as such.
-
-# Citations
-
-- [053 verification § Post-merge integration](../tasks/053-bedrock-local-route/verification.md)
-- Related: [interface-change-sweeps-fakes-and-premise-pins](interface-change-sweeps-fakes-and-premise-pins.md)

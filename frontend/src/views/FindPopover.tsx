@@ -64,9 +64,9 @@ const FIND_TRIGGER_CLASS =
   "transition-colors duration-150 ease-[ease] hover:text-navy";
 
 /**
- * "Find a task" and "Find a project" (task 058 consistency pass, owner and
- * lead rulings): a magnifier at the right of the list's filters row (owner,
- * round 11, out of the page header, which keeps only the primary), named
+ * "Find a task" and "Find a project":
+ * a magnifier at the right of the list's filters row (out of the page
+ * header, which keeps only the primary), named
  * and tooltipped by its label, that opens a popover under itself.
  *
  * - The field is focused on open; Escape and an outside press close it, and

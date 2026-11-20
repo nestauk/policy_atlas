@@ -1,4 +1,4 @@
-"""Operator command line for organisation tenancy (task 033, contract § 9).
+"""Operator command line for organisation tenancy.
 
 The single procedure for creating an organisation, provisioning and enrolling a
 person, moving rows between organisations, and granting or revoking the support
@@ -22,13 +22,14 @@ belongs to the human operator, not to a task role.
    uv run python -m policy_atlas.ops --env staging user create \\
        --email person@example.org --display-name "A Person"
 
-**No password ever passes through this CLI** (contract § 9). ``user create``
+**No password ever passes through this CLI**. ``user create``
 calls ``AdminCreateUser`` with ``DesiredDeliveryMediums=["EMAIL"]`` — AWS
 defaults that to SMS — and lets Cognito send its own invitation. There is no
 ``--temporary-password`` flag (``--invite manual`` and ``user reissue`` mint
 their own and print it once) and no code path calls ``AdminDeleteUser``:
-deleting a user is Out (owner call (h)), because it is coupled to ownership
-transfer.
+deleting a user is out of scope, because it is coupled to ownership
+transfer. ``user reset-app`` calls ``AdminDeleteSoftwareToken``, which unlinks
+a person's authenticator app and leaves the account itself in place.
 
 Two safety properties are the reason this is a program and not a shell script:
 
@@ -44,7 +45,7 @@ Two safety properties are the reason this is a program and not a shell script:
   resurrected administrator.
 
 The package also holds the queued ingest function's handler
-(:mod:`policy_atlas.ops.ingest_worker`, task 057), which runs in the backend
+(:mod:`policy_atlas.ops.ingest_worker`), which runs in the backend
 image. That image leaves out the operator CLI's type-stub dependency (the
 ``ops`` dependency group), so this file imports nothing: importing the handler
 must not pull in the CLI. Run the CLI with ``python -m policy_atlas.ops``.

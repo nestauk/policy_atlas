@@ -1,12 +1,12 @@
 /*
- * A task's status words (task 058, consolidation batch B): the one place a
+ * A task's status words (consolidation batch B): the one place a
  * task row or a run says what state it is in. The task list's row, the run
  * trace, the run status bar and the browser title all come here, and the
  * caller adds only what is live (the step in progress, its timer).
  *
- * One separator, " · ", across the words (round 10). A paused run names who
+ * One separator, " · ", across the words. A paused run names who
  * it waits on: the reader ("waiting on you"), or the owner by first name, or
- * no one when it has no owner (lead ruling P2, round 10). An archived task
+ * no one when it has no owner. An archived task
  * reads "Archived", whatever its last run.
  */
 
@@ -133,9 +133,9 @@ export function isStale(latestRun: LatestRun, now: Date = new Date()): boolean {
   return new Date(endedAt) < cutoff;
 }
 
-/** What kind of walk a run is (task 045): an Evidence search, a scoping
+/** What kind of walk a run is: an Evidence search, a scoping
  *  task's baseline walk, its longlist walk, an added option's own search, or
- *  the shortlist walk; and a theory of change's walks (task 054): the draft,
+ *  the shortlist walk; and a theory of change's walks: the draft,
  *  an uploaded theory's read, the evidence check and "Update the report".
  *  A finished run's words follow it ("the evidence base is ready" is wrong
  *  for a longlist). */
@@ -153,7 +153,7 @@ export type WalkKind =
 /** The words a run that finished well ends with, per walk: the trace's top
  *  line and the browser title's unseen finish ("● Report ready"). A theory
  *  of change's draft and an uploaded theory's read both end "Theory
- *  drafted"; its check ends "Evidence checked" (owner decision 6, task 054). */
+ *  drafted"; its check ends "Evidence checked". */
 export const READY_WORDS: Record<WalkKind, string> = {
   evidence_search: "Report ready",
   baseline: "The baseline is ready",

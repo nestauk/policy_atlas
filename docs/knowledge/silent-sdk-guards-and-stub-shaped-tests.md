@@ -3,7 +3,9 @@ type: Testing rule
 title: A getattr-guarded SDK call silently no-ops across upgrades — and a stub shaped to it proves nothing
 description: langfuse 4.x removed update_current_trace; core.tracing's getattr guard silently skipped session attachment for every conversation (chat AND planning), while the tests stubbed the missing method and passed. Import optional SDK APIs loud, test the real mechanism, and verify observable behaviour live once.
 tags: [langfuse, tracing, sessions, sdk-upgrade, stubs, testing, mock-shaped-to-code]
-timestamp: 2026-08-11
+generated:
+  by: process:okf-migrate
+  at: 2026-08-11
 ---
 
 # Rule

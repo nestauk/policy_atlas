@@ -22,10 +22,9 @@ const TAB_PATHS: Record<LifecycleTab, string> = {
 /**
  * The set of tabs a task at this run state can open.
  *
- * Task 032 locked Results until the run succeeded. Owner steer 2026-08-25
- * reopens it while a run is executing or paused so the in-progress write-up
- * is reachable (LiveArtefactBody already streams sections as they fill).
- * Availability is still computed from run state, never from whether a page
+ * Results opens while a run is executing or paused so the in-progress write-up
+ * is reachable (LiveArtefactBody streams sections as they fill).
+ * Availability is computed from run state, never from whether a page
  * would happen to render empty.
  *
  * Sources stays open after a failed run on purpose: the corpus that was
@@ -38,11 +37,11 @@ function openTabs(
   options?: TabOptions,
 ): readonly LifecycleTab[] {
   const open = baseTabs(status);
-  // Task 044 (A17): an options-scoping task's Result is its baseline, and the
+  // An options-scoping task's Result is its baseline, and the
   // baseline outlives the walk that wrote it — a walk aborted at the gate
   // ("Change the plan") still leaves a readable profile behind. So Result
-  // opens as soon as a baseline exists, whatever the walk's ending. Task 045
-  // (A7): a longlist opens it the same way — the Result then opens on the
+  // opens as soon as a baseline exists, whatever the walk's ending.
+  // A longlist opens it the same way — the Result then opens on the
   // longlist.
   const hasScopingResult = options?.hasBaseline === true || options?.hasLonglist === true || options?.hasToc === true;
   if (hasScopingResult && !open.includes("result")) {
@@ -53,11 +52,11 @@ function openTabs(
 
 /** Availability that run state alone cannot decide. */
 export interface TabOptions {
-  /** An options-scoping task with a baseline artefact written (task 044). */
+  /** An options-scoping task with a baseline artefact written. */
   hasBaseline?: boolean;
-  /** An options-scoping task with a longlist (task 045, `TaskOut.has_longlist`). */
+  /** An options-scoping task with a longlist (`TaskOut.has_longlist`). */
   hasLonglist?: boolean;
-  /** A theory-of-change task whose read returned at least one box (task 054). */
+  /** A theory-of-change task whose read returned at least one box. */
   hasToc?: boolean;
 }
 
@@ -77,7 +76,7 @@ function baseTabs(status: RunStatus | null | undefined): readonly LifecycleTab[]
 }
 
 /** Whether the task has a result to ask about: the run finished with a
- *  report (038 V8 — chats are offered only then; a run still writing is not
+ *  report (chats are offered only then; a run still writing is not
  *  a result yet, even though the Result tab already opens for it). */
 export function hasResult(status: RunStatus | null | undefined): boolean {
   return status === "succeeded" || status === "degraded";
@@ -104,7 +103,7 @@ export function lifecycleTabs(
     label: LIFECYCLE_LABELS[tab],
     to: `${base}${TAB_PATHS[tab]}`,
     locked: !open.includes(tab),
-    // The option cards are the Result's (owner, round 14): the Result tab
+    // The option cards are the Result's: the Result tab
     // stays current on them, its rule full.
     ...(tab === "result" ? { activePrefix: RESULT_PREFIXES.map((path) => `${base}${path}`) } : {}),
   }));
@@ -114,8 +113,7 @@ export function lifecycleTabs(
 const RESULT_PREFIXES = ["/result", "/options"] as const;
 
 /**
- * Which Sources view the Sources tab opens on (annex § Owner round after the
- * trace, item 8): the view whose step has landed. While an Evidence search
+ * Which Sources view the Sources tab opens on: the view whose step has landed. While an Evidence search
  * runs, All sources until classification completes, then Landscape, then
  * Themes once mapping completes; with no run live, Themes (the Sources
  * index) as before. A scoping walk keeps the index.
@@ -149,7 +147,7 @@ export type SourcesSubtab = "" | "/landscape" | "/all" | "/findings";
 const SOURCES_SUBTABS: readonly SourcesSubtab[] = ["", "/landscape", "/all", "/findings"];
 
 /**
- * The Sources subtab a reader last chose on a task (owner, round 10), kept
+ * The Sources subtab a reader last chose on a task, kept
  * under `policy-atlas:sources-subtab:<taskId>` (Themes stored as "themes").
  * Before the reader has chosen one, the Sources tab lands by stage
  * (`sourcesLanding`); once they pick a subtab on this task, the Sources tab
@@ -164,7 +162,7 @@ export const sourcesSubtabChoice = rememberedChoice<SourcesSubtab>("sources-subt
 });
 
 /** Point the Sources tab's link at the subtab the reader last chose on this
- *  task (owner, round 10: kept per task in `localStorage`), or, before they
+ *  task (kept per task in `localStorage`), or, before they
  *  have chosen one or when the storage cannot be read, at `sourcesLanding`'s
  *  view; any `?chat=` is kept, and the tab stays marked on every Sources
  *  view. */
@@ -187,7 +185,7 @@ export function withSourcesLanding<T extends { tab: string; to: string }>(
 
 /**
  * Carry the Agent overlay's open chat (`?chat=`) onto the tab links, so a
- * move between tabs keeps the panel as it was (owner, 2026-09-05). The
+ * move between tabs keeps the panel as it was. The
  * Agent tab keeps its own default — the Task Agent — and never inherits it.
  */
 export function withChat<T extends { tab: LifecycleTab; to: string }>(
@@ -201,7 +199,7 @@ export function withChat<T extends { tab: LifecycleTab; to: string }>(
 }
 
 /**
- * The two tabs the public (link-shared) task view exposes — task 037.
+ * The two tabs the public (link-shared) task view exposes.
  * One list, shared with `LifecycleRoute`'s public gate so the nav and the
  * gate cannot drift apart.
  */
@@ -234,9 +232,9 @@ export function taskDestination(
   options?: { hasLonglist?: boolean },
 ): string {
   const base = `/tasks/${taskId}`;
-  // Task 045: a scoping task with a longlist opens on it, whatever its
+  // A scoping task with a longlist opens on it, whatever its
   // latest walk is doing. A degraded finish opens the report like a
-  // succeeded one (task 058, N14).
+  // succeeded one.
   return hasResult(status) || options?.hasLonglist === true ? `${base}/result` : base;
 }
 
@@ -254,13 +252,12 @@ export function tabOfPath(pathname: string, base: string): LifecycleTab | null {
   if (pathname === base || pathname === `${base}/`) return "agent";
   if (!pathname.startsWith(`${base}/`)) return null;
   const segment = pathname.slice(base.length + 1).split("/")[0];
-  // An option card is the Result's (round 14).
+  // An option card is the Result's.
   if (segment === "options") return "result";
   return LIFECYCLE_TABS.find((tab) => tab !== "agent" && TAB_PATHS[tab] === `/${segment}`) ?? null;
 }
 
-/** The Result's view switch once a scoping task has a longlist (task 045,
- *  deliverable 9; task 055 adds Shortlist): **Baseline · Longlist · Shortlist · Report**,
+/** The Result's view switch once a scoping task has a longlist: **Baseline · Longlist · Shortlist · Report**,
  *  Report shown but not openable until assessment. */
 export const RESULT_VIEWS: readonly { key: string; label: string; note?: string }[] = [
   { key: "baseline", label: "Baseline" },
@@ -270,7 +267,7 @@ export const RESULT_VIEWS: readonly { key: string; label: string; note?: string 
 ];
 
 /** Which view the Result opens on: the longlist unless the baseline is asked
- *  for (ruling 50; task 045, A7). */
+ *  for. */
 export function resultView(requested: string | null): "baseline" | "longlist" | "shortlist" {
   if (requested === "baseline" || requested === "shortlist") return requested;
   return "longlist";

@@ -6,7 +6,7 @@ import { AUTH_RETURN_TO_KEY } from "../auth/OidcAuthProvider";
  * Catch-all for logged-out deep links: stash the attempted URL, then send
  * the visitor to the splash home so Sign in can restore it after Cognito.
  *
- * `location.state.from` (task 037 review fix) wins when present: the
+ * `location.state.from` wins when present: the
  * public router's wildcard redirect can rewrite the URL to `/result`
  * before this component ever sees it — on stale-but-still-public cached
  * task data that a background refetch then reveals isn't public after

@@ -3,7 +3,9 @@ type: Convention
 title: Per-item exception-isolation belts must re-raise configuration errors first
 description: A blanket except Exception belt that turns failures into reason-coded rows must re-raise configuration-class errors before catching, or a systemic misconfiguration masquerades as N ordinary per-item failures with the component reporting green.
 tags: [convention, error-handling, ingest, "016"]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule
@@ -28,6 +30,5 @@ failures, when the actual cause was a missing corpus one directory up. The
 existing unit test that asserted the raise happened at the unit level and
 never proved anything about what the belt above it did with that exception.
 
-See also [[per-doc-fanout-isolates-decision-call]] (the isolation-boundary
-placement this belt sits inside) and [[fail-loud-before-first-write]] (the
+See also [fail-loud-before-first-write](fail-loud-before-first-write.md) (the
 sibling fail-loud convention for the write path).

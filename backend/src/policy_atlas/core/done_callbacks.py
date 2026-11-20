@@ -19,7 +19,7 @@ def add_done_callback_in_context(
 ) -> None:
     """Register ``callback`` on ``future`` so it runs in a copy of this context.
 
-    Call this from the thread that submitted the work (task 058, N2). Each call
+    Call this from the thread that submitted the work. Each call
     takes its own copy, so callbacks finishing at the same moment on different
     threads never enter one context twice.
 

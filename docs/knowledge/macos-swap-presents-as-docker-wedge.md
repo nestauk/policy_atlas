@@ -3,7 +3,9 @@ type: Runbook
 title: macOS swap exhaustion presents as a Docker daemon wedge
 description: Docker Desktop's VM wedges (API 500s, vCPU spin) long before anything names memory; check sysctl vm.swapusage first when Docker "breaks" mid-suite.
 tags: [macos, docker, ops, diagnostics]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

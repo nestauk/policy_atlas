@@ -3,7 +3,9 @@ type: Invariant
 title: Byte/resource budgets must reserve-then-shrink, never grow-on-release
 description: Any shared budget where in-flight holders can block mid-stream on releases only other holders can produce is a deadlock; reserve the full per-item cap up front, then shrink to actual size on completion.
 tags: [concurrency, deadlock, budgets, fetch_live, "016", invariant]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 
-/** How long a live dot keeps breathing after the last update (task 058, N5). */
+/** How long a live dot keeps breathing after the last update. */
 export const FRESH_WINDOW_MS = 1_500;
 
 /** After this long with no update a running step reads "Still working on
- *  this step" (task 058, N5). */
+ *  this step". */
 export const STALL_AFTER_MS = 120_000;
 
 /** A stamp already present when the view mounts is fresh only if its own
@@ -44,7 +44,7 @@ export function useNow(ticking: boolean, intervalMs = 1_000): number {
  * `occurredAt`, or a polled row's label. Each new stamp starts the window
  * again on the client's own clock, so a skewed server clock cannot keep a
  * mark breathing or stop it early. One rule for every live mark: the run
- * trace, the Result tab and the task row (task 058, N5).
+ * trace, the Result tab and the task row.
  *
  * Args:
  *   stamp: The latest update's marker; `null` or `undefined` is never fresh.

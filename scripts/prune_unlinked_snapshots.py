@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Delete old full-text snapshots that no task links to any more (task 057, D3 retention rule).
+"""Delete old full-text snapshots that no task links to any more.
 
 What this is for, in plain terms: when the app fetches a document's full text it
 parses it once and keeps the result in a shared *document store* (a
@@ -8,7 +8,7 @@ parses it once and keeps the result in a shared *document store* (a
 (``task_source_snapshot``: either column ``source_snapshot_id`` or
 ``full_text_snapshot_id``). Because the store is shared between tasks, removing a
 task never removes the text. A stored full text that no link row points at, and
-has not for a while, is dead weight. The contract's retention rule (D3) says such
+has not for a while, is dead weight. The contract's retention rule says such
 a snapshot is deleted after 90 days by this script.
 
 What it deletes: ``source_snapshot`` rows with ``text_basis = 'full_text'``,

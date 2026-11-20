@@ -35,7 +35,7 @@ const DASH: Record<Verdict, string | undefined> = {
   leaning_against: "12 5",
 };
 
-/** A short line sample for each verdict, drawn as on the canvas (C36). */
+/** A short line sample for each verdict, drawn as on the canvas. */
 function LineSample({ verdict }: { verdict: Verdict }) {
   return (
     <svg width="34" height="8" aria-hidden="true">
@@ -48,7 +48,7 @@ function LineSample({ verdict }: { verdict: Verdict }) {
  * The key under the canvas: one line style per verdict, and the critical
  * connection's mark. While a check runs (a connection on the canvas is
  * being checked) it also keys the travelling dot on its grey line, moving
- * as on the canvas (owner, 2026-11-10).
+ * as on the canvas.
  *
  * Args:
  *   checking: A connection on the canvas is being checked.

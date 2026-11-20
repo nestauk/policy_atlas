@@ -40,6 +40,7 @@ from policy_atlas.api.deps import (
     get_executor,
     get_optional_user,
     get_runner_backends,
+    get_settings,
 )
 from policy_atlas.api.longlist_actions import (
     OptionNotFound,
@@ -60,7 +61,9 @@ from policy_atlas.api.longlist_start import (
 )
 from policy_atlas.api.read_models import repository
 from policy_atlas.api.routers.access import NOT_FOUND_DETAIL, accessible_task
+from policy_atlas.api.routers.common import effective_limits
 from policy_atlas.api.routers.read_models import _readable
+from policy_atlas.api.settings import Settings
 from policy_atlas.core import events, tracing
 from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
 from policy_atlas.options_scoping.shortlist.shortlist_note import (
@@ -186,7 +189,7 @@ def post_option(
     capture_event(request, "option_added", properties={"opened_search": added.run_open})
     return OptionAddedOut(
         option=_card(engine, task_id, added.option_id),
-        # ``None`` while the search is still queued (A4): the card reads it
+        # ``None`` while the search is still queued: the card reads it
         # as search pending, and the run stream announces the walk.
         opened_run=(
             opened_run(engine, task_id=task_id, capability_run_id=added.capability_run_id)
@@ -311,16 +314,18 @@ def post_suggest_more(
     engine: Annotated[Engine, Depends(get_engine)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> LatestRun:
     """Open a shortlist walk that fills the open places (Suggest more; task 055).
 
     The access check runs in its own short transaction, then the opener takes
     the dispatch lock and the task row itself (the order ``create_run``
-    uses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or
+    uses). Refused with 409 ``run_active``, ``capacity``, ``user_capacity``, ``plan_stale`` or
     ``nothing_to_propose``, and 404 when the task has no longlist.
     """
     with engine.begin() as conn:
-        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+        access = accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+        cap = effective_limits(conn, access.row["owner_user_id"], settings=settings).runs
     try:
         run_id = open_shortlist_walk(
             engine,
@@ -328,6 +333,7 @@ def post_suggest_more(
             backends=backends,
             executor=executor,
             user_id=user.user_id,
+            user_cap=cap,
             suggest=True,
         )
     except LonglistRefused as exc:

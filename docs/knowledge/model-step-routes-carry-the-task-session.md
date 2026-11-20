@@ -3,7 +3,9 @@ type: Convention
 title: A route that runs a model step wraps the call in trace_scope with the task's session id; the scope reaches only observations opened inside it
 description: Langfuse groups a task's traces by `session_id == str(task_id)` (task 038 V9); `tracing.trace_scope(user_id=..., session_id=task_id)` must wrap the whole model call at every route that runs one, because `propagate_attributes` reaches only observations opened while the scope is active; a side generation fired outside the turn's span is its own root trace in the session, not a child.
 tags: [langfuse, tracing, sessions, api, "058"]
-timestamp: 2026-11-09
+generated:
+  by: process:okf-migrate
+  at: 2026-11-09
 ---
 
 # Rule

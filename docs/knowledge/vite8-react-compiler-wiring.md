@@ -1,9 +1,14 @@
 ---
 type: Integration quirk
 title: Vite 8 / plugin-react 6 wire the React Compiler through a separate babel plugin
-description: The classic react({ babel: {...} }) option is gone in the Rolldown era; wiring goes through @rolldown/plugin-babel + reactCompilerPreset. Verify it ran by grepping the bundle for useMemoCache.
+description: 'The classic react({ babel: {...} }) option is gone in the Rolldown era; wiring goes through @rolldown/plugin-babel + reactCompilerPreset. Verify it ran by grepping the bundle for useMemoCache.'
 tags: [vite, react-compiler, frontend, tooling]
-timestamp: 2026-07-21
+generated:
+  by: process:okf-migrate
+  at: 2026-07-21
+sources:
+  - resource: "frontend/vite.config.ts"
+    title: "`frontend/vite.config.ts`"
 ---
 
 # Rule
@@ -17,7 +22,3 @@ itself. React Compiler wiring instead goes through a separate
 plugins array. Verify the compiler actually ran (as opposed to silently
 no-op-ing) by grepping the built bundle for `useMemoCache` — its presence is
 the compiler's fingerprint.
-
-# Citations
-
-- `frontend/vite.config.ts`

@@ -5,22 +5,32 @@ The command tree, with every global option before the subcommand::
     python -m policy_atlas.ops --env {staging,prod} [options] <group> <command>
 
       org   create    --name NAME
+      org   delete    --org ORG
+      org   quota     --org ORG --tasks-per-year N|inherit --runs N|inherit
+      org   domain add --domain D --org ORG
+      org   domain remove --domain D
       user  create    --email E --display-name D [--org ORG]
       user  enrol     --email E --display-name D --org ORG
       user  resync    --email E
       user  reissue   --email E
       user  de-enrol  (--email E | --sub SUB)
+      user  deactivate (--email E | --sub SUB)
+      user  reactivate (--email E | --sub SUB)
+      user  reset-app (--email E | --sub SUB)
+      user  quota     (--email E | --sub SUB) --tasks-per-year N|inherit --runs N|inherit
       rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
       admin revoke    (--email E | --sub SUB)
+      ops   grant     (--email E | --sub SUB)
+      ops   revoke    (--email E | --sub SUB)
 
 Global options: ``--env`` (required), ``--database-url``, ``--expected-account``,
 ``--user-pool-id``, ``--operator``. **There is no ``--yes``**: the only
 confirmation this CLI asks is the environment check's database leg, and that one
 is not skippable (:func:`_prompt`).
 
-**There is no ``--password`` and no ``--temporary-password``**, on any command
-(contract § 9). The absence is asserted structurally by
+**There is no ``--password`` and no ``--temporary-password``**, on any command.
+The absence is asserted structurally by
 ``tests/ops/test_ops_structure.py``, over the built parser rather than over the
 source, so a flag added through any route fails the test. ``--database-url``
 refuses a URL carrying a password for the same reason the make targets went:
@@ -37,11 +47,11 @@ did not land.
 
 **The admin trace is emitted here, after that commit**, from whatever
 :class:`~policy_atlas.ops.commands.AdminTrace` values the record carries
-(:func:`_trace`). Contract § 3a wants the line to be evidence, and a line
+(:func:`_trace`). The line must be evidence, and a line
 written inside the transaction is a durable claim about a write a failed commit
 then threw away. One mechanism serves every command that moves ``is_admin`` —
-``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol``
-clears.
+``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol`` or
+``user deactivate`` clears.
 
 The one place that ordering cannot save anything is ``user create``: the Cognito
 account is made before the database is touched, because its ``sub`` is the key.
@@ -55,10 +65,9 @@ import os
 import sys
 import uuid
 from collections.abc import Callable, Sequence
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import structlog
-from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection, Engine, make_url
 
@@ -75,6 +84,9 @@ from policy_atlas.ops.environment import (
     verify_environment,
 )
 from policy_atlas.ops.errors import OpsError
+
+if TYPE_CHECKING:
+    from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 
 log = structlog.get_logger()
 
@@ -133,7 +145,7 @@ def main(
     try:
         return _run(args, engine=engine, cognito=cognito, sts=sts, emit=emit, confirm=confirm)
     except OpsError as error:
-        print(f"refused: {error}", file=sys.stderr)
+        print(f"refused: {error}", file=sys.stderr)  # noqa: T201 - command-line output
         return EXIT_REFUSED
 
 
@@ -217,6 +229,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     org_create = org.add_parser("create", help="create an organisation")
     org_create.add_argument("--name", required=True)
+    org_delete = org.add_parser(
+        "delete", help="delete an organisation no person, task, project or domain points at"
+    )
+    org_delete.add_argument("--org", required=True)
+    org_quota = org.add_parser("quota", help="set organisation quota overrides")
+    org_quota.add_argument("--org", required=True)
+    _quota_args(org_quota)
+    domain = org.add_parser("domain", help="manage self-signup domains").add_subparsers(
+        dest="domain_command", required=True
+    )
+    domain_add = domain.add_parser("add", help="map a domain to an organisation")
+    domain_add.add_argument("--domain", required=True)
+    domain_add.add_argument("--org", required=True)
+    domain_remove = domain.add_parser("remove", help="remove a domain mapping")
+    domain_remove.add_argument("--domain", required=True)
 
     user = groups.add_parser("user", help="people").add_subparsers(dest="command", required=True)
     user_create = user.add_parser(
@@ -266,6 +293,39 @@ def build_parser() -> argparse.ArgumentParser:
     de_enrol_subject.add_argument("--email", type=_email)
     de_enrol_subject.add_argument("--sub")
 
+    user_deactivate = user.add_parser(
+        "deactivate",
+        help=(
+            "lock a person out: disable their Cognito account, sign them out everywhere, "
+            "clear their admin and ops roles and make their public task links private; "
+            "they keep their organisation and work"
+        ),
+    )
+    deactivate_subject = user_deactivate.add_mutually_exclusive_group(required=True)
+    deactivate_subject.add_argument("--email", type=_email)
+    deactivate_subject.add_argument("--sub")
+    user_reactivate = user.add_parser(
+        "reactivate", help="turn a deactivated person's login back on (roles are not restored)"
+    )
+    reactivate_subject = user_reactivate.add_mutually_exclusive_group(required=True)
+    reactivate_subject.add_argument("--email", type=_email)
+    reactivate_subject.add_argument("--sub")
+    user_reset_app = user.add_parser(
+        "reset-app",
+        help=(
+            "for a lost or replaced phone: sign a person out everywhere and unlink their "
+            "authenticator app, so their next sign-in shows the QR code again"
+        ),
+    )
+    reset_app_subject = user_reset_app.add_mutually_exclusive_group(required=True)
+    reset_app_subject.add_argument("--email", type=_email)
+    reset_app_subject.add_argument("--sub")
+    user_quota = user.add_parser("quota", help="set a person's quota overrides")
+    user_quota_subject = user_quota.add_mutually_exclusive_group(required=True)
+    user_quota_subject.add_argument("--email", type=_email)
+    user_quota_subject.add_argument("--sub")
+    _quota_args(user_quota)
+
     rows = groups.add_parser("rows", help="row assignment").add_subparsers(
         dest="command", required=True
     )
@@ -289,7 +349,37 @@ def build_parser() -> argparse.ArgumentParser:
         subject.add_argument("--email", type=_email)
         subject.add_argument("--sub")
 
+    ops = groups.add_parser("ops", help="the operations role").add_subparsers(
+        dest="command", required=True
+    )
+    for direction in ("grant", "revoke"):
+        subject = (
+            ops.add_parser(direction, help=f"{direction} the operations role")
+            .add_mutually_exclusive_group(required=True)
+        )
+        subject.add_argument("--email", type=_email)
+        subject.add_argument("--sub")
+
     return parser
+
+
+def _quota_value(value: str) -> int | None:
+    """Parse a non-negative override or the explicit inherit sentinel."""
+    if value == "inherit":
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected a non-negative integer or inherit") from error
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("expected a non-negative integer or inherit")
+    return parsed
+
+
+def _quota_args(parser: argparse.ArgumentParser) -> None:
+    """Add the two required quota override flags to one subcommand."""
+    parser.add_argument("--tasks-per-year", required=True, type=_quota_value)
+    parser.add_argument("--runs", required=True, type=_quota_value)
 
 
 def _run(
@@ -312,13 +402,31 @@ def _run(
     identity = cognito if cognito is not None else cognito_client()
     tokens = sts if sts is not None else sts_client()
     ask = confirm if confirm is not None else _prompt(emit)
-    db = engine if engine is not None else create_engine(database_url)
+    db = engine if engine is not None else create_engine(database_url, hide_parameters=True)
 
     with db.begin() as conn:
         verification = verify_environment(
             target, conn=conn, cognito=identity, sts=tokens, confirm=ask
         )
         outcome = _dispatch(args, conn=conn, cognito=identity, target=target)
+        if isinstance(outcome, commands.QuotaChange):
+            # A quota change is recorded wherever it is made:
+            # the operator's verified AWS principal is the actor.
+            commands.record_action(
+                conn,
+                actor=verification.caller_arn,
+                action="org.quota" if args.group == "org" else "person.quota",
+                target=outcome.who,
+                outcome="ok",
+            )
+        if isinstance(outcome, commands.AppReset):
+            commands.record_action(
+                conn,
+                actor=verification.caller_arn,
+                action="person.reset_app",
+                target=outcome.user_id,
+                outcome="ok",
+            )
     # Both of these are after the commit, and for the same reason: neither a
     # printed line nor a logged one may claim a write the transaction discarded.
     _trace(outcome, verification=verification, target=target, note=args.operator)
@@ -332,7 +440,7 @@ def _database_url(args: argparse.Namespace) -> str:
     ``--database-url`` is a convenience for the tunnel's host and port. A
     password in it lands in the shell history and in the process table, which is
     exactly what the deleted ``cognito-user`` make target did with the Cognito
-    password and exactly why it went (contract § 9). ``DATABASE_URL`` is the
+    password and exactly why it went. ``DATABASE_URL`` is the
     credential path, and it is unchanged: an environment variable is not on argv.
 
     Raises:
@@ -384,6 +492,7 @@ def _trace(
             operator_note=note,
             subject=change.subject,
             direction=change.direction,
+            flag=change.flag,
             env=target.env,
         )
 
@@ -397,7 +506,23 @@ def _dispatch(
 ) -> Outcome:
     """Route one verified invocation to its command function."""
     if args.group == "org":
-        return commands.create_organisation(conn, name=args.name)
+        if args.command == "create":
+            return commands.create_organisation(conn, name=args.name)
+        if args.command == "delete":
+            org = commands.resolve_organisation(conn, args.org)
+            return commands.delete_organisation(conn, org_id=org.org_id)
+        if args.command == "quota":
+            org = commands.resolve_organisation(conn, args.org)
+            return commands.set_quota(
+                conn,
+                org_id=org.org_id,
+                task_quota_per_year=args.tasks_per_year,
+                runs_per_user=args.runs,
+            )
+        if args.domain_command == "add":
+            org = commands.resolve_organisation(conn, args.org)
+            return commands.add_domain(conn, domain=args.domain, org=org)
+        return commands.remove_domain(conn, domain=args.domain)
 
     if args.group == "user":
         if args.command == "resync":
@@ -410,6 +535,27 @@ def _dispatch(
             )
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
+        if args.command == "deactivate":
+            return commands.deactivate_user(
+                conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
+        if args.command == "reset-app":
+            return commands.reset_authenticator_app(
+                conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
+        if args.command == "reactivate":
+            row = commands._resolve_and_lock(conn, email=args.email, sub=args.sub)
+            return commands.reactivate_user(
+                conn, cognito, pool_id=target.user_pool_id, sub=str(row["user_id"])
+            )
+        if args.command == "quota":
+            row = commands._resolve_and_lock(conn, email=args.email, sub=args.sub)
+            return commands.set_quota(
+                conn,
+                user_id=str(row["user_id"]),
+                task_quota_per_year=args.tasks_per_year,
+                runs_per_user=args.runs,
+            )
         if args.command == "create" and args.org is None:
             return commands.create_user(
                 conn,
@@ -443,6 +589,8 @@ def _dispatch(
         org = commands.resolve_organisation(conn, args.org)
         return commands.assign_rows(conn, org=org, task_id=args.task, project_id=args.project)
 
+    if args.group == "ops":
+        return commands.set_ops(conn, email=args.email, sub=args.sub, grant=args.command == "grant")
     return commands.set_admin(conn, email=args.email, sub=args.sub, grant=args.command == "grant")
 
 
@@ -483,4 +631,4 @@ def _prompt(emit: Callable[[str], None]) -> Callable[[Target], bool]:
 
 
 def _stdout(line: str) -> None:
-    print(line)
+    print(line)  # noqa: T201 - command-line output

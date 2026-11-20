@@ -1,5 +1,5 @@
 /*
- * The one count formatter (task 058, consolidation batch B): every count a
+ * The one count formatter (consolidation batch B): every count a
  * reader sees, "1,234 sources", goes through `formatCount`, so the tables,
  * the counts lines and the run trace group their thousands the same way.
  */

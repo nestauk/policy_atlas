@@ -1,4 +1,7 @@
 {
+  "env": {
+    "PONYTAIL_SUBAGENT_MATCHER": "^(deep-reasoner|fast-worker|builder|frontend-designer)$"
+  },
   "permissions": {
     "allow": [
       "Skill(langfuse)",
@@ -16,13 +19,34 @@
       "Edit(uv.lock)",
       "Write(uv.lock)",
       "Edit(dist/**)",
-      "Write(dist/**)"
+      "Write(dist/**)",
+      "Edit(frontend/openapi.json)",
+      "Edit(frontend/src/api/gen/types.ts)",
+      "Edit(docs/specs/sources/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -Eq '(^|[;&|[:space:]])git( -C [^ ]+)? commit' && [ \"$(git branch --show-current 2>/dev/null)\" = \"dev\" ] && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Commits on dev are blocked. Create a branch first (git switch -c ...).\"}}' || true"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
     "agent-skills@addy-agent-skills": true,
     "codex@openai-codex": true,
-    "ponytail@ponytail": true
+    "ponytail@ponytail": true,
+    "frontend-design@claude-plugins-official": true,
+    "langfuse@claude-plugins-official": true,
+    "impeccable@impeccable": true,
+    "taste-skill@taste-skill": true,
+    "okf@scaccogatto": true
   },
   "extraKnownMarketplaces": {
     "addy-agent-skills": {
@@ -41,6 +65,24 @@
       "source": {
         "source": "github",
         "repo": "DietrichGebert/ponytail"
+      }
+    },
+    "impeccable": {
+      "source": {
+        "source": "github",
+        "repo": "pbakaus/impeccable"
+      }
+    },
+    "taste-skill": {
+      "source": {
+        "source": "github",
+        "repo": "Leonxlnx/taste-skill"
+      }
+    },
+    "scaccogatto": {
+      "source": {
+        "source": "github",
+        "repo": "scaccogatto/okf-skills"
       }
     }
   },

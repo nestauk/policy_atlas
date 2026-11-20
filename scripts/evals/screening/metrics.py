@@ -13,12 +13,33 @@ import pandas as pd
 # USD per 1,000,000 tokens. Standard short-context rates published by OpenAI
 # on 2026-10-08 (https://developers.openai.com/api/docs/pricing). Cached input
 # is the cheaper rate for prompt tokens the provider marked as cached.
-# Tuple is (input, cached input, output).
+# The gpt-6-luna rates are the project's Langfuse model definition, the same
+# prices the traces use. Tuple is (input, cached input, output).
 PRICE_PER_MILLION: dict[str, tuple[float, float, float]] = {
     "gpt-5.4-mini": (0.75, 0.075, 4.50),
     "gpt-5.6-luna": (0.20, 0.02, 1.20),
+    "gpt-6-luna": (0.10, 0.01, 0.50),
 }
-PRICE_AS_OF = "2026-10-08"
+PRICE_AS_OF = "2026-11-19"
+
+
+def rates_for(model: str) -> tuple[float, float, float] | None:
+    """Return the price rates for a model name, with or without a route prefix.
+
+    The Bedrock route names a model ``global.openai.<name>`` and some clients
+    name it ``openai/<name>``. The price is the same, so the prefix is removed
+    before the lookup.
+
+    Args:
+        model: The model name as the run used it.
+
+    Returns:
+        The (input, cached input, output) rates per million tokens, or ``None``
+        when the model has no rate here.
+    """
+    return PRICE_PER_MILLION.get(
+        model.removeprefix("global.openai.").removeprefix("openai/")
+    )
 
 
 def cost_usd(
@@ -40,7 +61,7 @@ def cost_usd(
     Returns:
         The dollar cost, or ``None`` when ``model`` has no published rate here.
     """
-    rates = PRICE_PER_MILLION.get(model)
+    rates = rates_for(model)
     if rates is None:
         return None
     input_rate, cached_rate, output_rate = rates

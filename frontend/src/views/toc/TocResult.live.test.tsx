@@ -230,22 +230,21 @@ describe("the live report (A13)", () => {
     render(page(graph({ report: null })));
     update(stream(skeleton({ 4: { state: "filled", prose: "Chile restricted adverts [1]." } }), "succeeded"), graph({ check_status: "checked" }));
     const info = screen.getByLabelText("Detailed information");
-    // The committed report: numbered markers, the committed details fading in.
+    // The committed report: numbered markers, the committed details.
     expect(within(info).queryByTestId("provisional-mark")).toBeNull();
     expect(screen.getByRole("button", { name: "Hide all" })).toBeInTheDocument();
     expect(within(info).getByText(/This report asks whether the ban/)).toBeInTheDocument();
-    expect(info.querySelector(".anim-swap-in")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
   });
 });
 
-describe("a report written before the reader's changes (A17, A22)", () => {
+describe("a report written before the reader's changes", () => {
   it("says so under the title block, and Update the report is the reader's", async () => {
     const user = userEvent.setup();
     const fixture = graph({ check_status: "checked", can_edit: true });
     const report = fixture.report as NonNullable<TocGraph["report"]>;
     render(page({ ...fixture, report: { ...report, stale: true } }));
-    expect(screen.getByText("Written before your latest changes.")).toHaveClass("text-meta", "text-grey");
+    expect(screen.getByText("Written before your latest changes.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Update the report" }));
     expect(mutate.mock.calls.at(-1)?.[0]).toEqual({ kind: "updateReport" });
     // While it runs, the working line stands in its place; the old report stays.

@@ -1,6 +1,6 @@
-// The theory's downloads (contract item 6), built in the browser from the graph
+// The theory's downloads, built in the browser from the graph
 // the page already holds: the references as CSV, the graph as JSON, a draw.io
-// file and the canvas as PNG or SVG. PowerPoint is parked (owner, 2026-11-04):
+// file and the canvas as PNG or SVG. PowerPoint is parked:
 // the draw.io file covers editing elsewhere.
 import { toPng, toSvg } from "html-to-image";
 

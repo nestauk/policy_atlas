@@ -3,7 +3,9 @@ type: Convention
 title: A displayed count comes from the producing component's own summary, not a parallel recount
 description: Acquire defines its headline `acquired` as the sum of its per-backend counts, so a card that reads that payload agrees with the headline by construction. A read model that recounts the same population from rows is a second source of truth for one number — the exact shape of the bug being fixed.
 tags: [read-models, counts, provenance, steering, convention]
-timestamp: 2026-08-13
+generated:
+  by: process:okf-migrate
+  at: 2026-08-13
 ---
 
 # Rule
@@ -58,5 +60,4 @@ rule: no recomputation of anything a component already computed.
 - Same family:
   [success-map-is-stale-on-the-failure-path](success-map-is-stale-on-the-failure-path.md)
   (which run's summary),
-  [assert-on-row-not-summary](assert-on-row-not-summary.md),
-  [coverage-base-project-pool-wide](coverage-base-project-pool-wide.md).
+  [assert-on-row-not-summary](assert-on-row-not-summary.md).

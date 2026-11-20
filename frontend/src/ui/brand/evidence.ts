@@ -1,6 +1,6 @@
 /**
- * The shared evidence vocabulary (task 058, round 12 consolidation; owner
- * 2026-11-06: one central place for strength tones and the like, so no
+ * The shared evidence vocabulary (one central place for strength tones and
+ * the like, so no
  * view re-implements them and drifts). Every surface that names an
  * evidence strength, a read depth, an evidence type or a judge's verdict
  * imports it from here: the Sources table and dossier, the report's chips
@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 
 /** The appraised strengths, strongest first: the backend's
- *  `appraise.SCORE_LABELS` plus "Unrated" (task 056: no score), in the
+ *  `appraise.SCORE_LABELS` plus "Unrated" (no score), in the
  *  sort's order. The Sources filter offers them in this order. */
 export const STRENGTH_TIERS = ["Very strong", "Strong", "Moderate", "Limited", "Weak", "Unrated"] as const;
 
@@ -39,7 +39,7 @@ export function strengthRank(tier: string | null | undefined): number {
 }
 
 /**
- * The tone of an appraised strength (round 11; round 12 gives every level a
+ * The tone of an appraised strength (every level has a
  * colour): Very strong and Strong are strong, Moderate and Limited moderate,
  * Weak and Unrated weak, in the sort's order. A tier outside the vocabulary
  * has no tone, so no square.
@@ -69,14 +69,14 @@ export function strengthTierName(tier: string): string {
 export function strengthTone(tier: string | null | undefined): StrengthTone | null {
   if (!tier) return null;
   // Matched whatever its case or surrounding space ("moderate", " Strong "),
-  // so every surface's word gets its square (round 14: chat's citations).
+  // so every surface's word gets its square (chat's citations).
   const wanted = tier.trim().toLowerCase();
   const known = STRENGTH_TIERS.find((name) => name.toLowerCase() === wanted);
   return known === undefined ? null : STRENGTH_TONES[known];
 }
 
 /** The palette colour a tone square takes: the palette's own green, yellow
- *  and red (round 12; no new colours), and Line 2 grey for a value with too
+ *  and red (no new colours), and Line 2 grey for a value with too
  *  little behind it (the theory of change's "Not enough evidence"). */
 export type ToneColour = "green" | "yellow" | "red" | "grey";
 
@@ -127,7 +127,7 @@ export function toneSquareClass(colour: ToneColour): string {
   return `inline-block size-1.5 shrink-0 ${fill}`;
 }
 
-/** The strength legend (round 12): each square colour beside the tiers it
+/** The strength legend: each square colour beside the tiers it
  *  marks, in the sort's order, read from the tones above so it cannot
  *  drift from them ("Very strong, Strong"; "Moderate, Limited"; "Weak,
  *  Unrated"). */
@@ -189,7 +189,7 @@ export type DepthSource = {
 };
 
 /**
- * Read depth (owner, 2026-08-05; round 12 gives each a tone): "Full text"
+ * Read depth (each has a tone): "Full text"
  * when the text was collected; "Abstract only" when the source carries an
  * abstract and no text; "Title only" when it carries neither. Not read past
  * screening gives `null` (the cell stays empty).
@@ -202,7 +202,7 @@ export type DepthSource = {
  */
 export function readDepthLabel(item: Pick<DepthSource, "read_in_full" | "screen_status" | "status" | "abstract">): ReadDepth | null {
   // "Full text", not "Read in full": the text is fetched and made
-  // searchable, not read by a model at that step (owner, round 9).
+  // searchable, not read by a model at that step.
   if (item.read_in_full) return FULL_TEXT;
   if (item.status === "unavailable" || item.screen_status === "relevant") {
     return item.abstract?.trim() ? ABSTRACT_ONLY : TITLE_ONLY;
@@ -210,7 +210,7 @@ export function readDepthLabel(item: Pick<DepthSource, "read_in_full" | "screen_
   return null;
 }
 
-/** The read depth's tone square (round 12): green full text, yellow
+/** The read depth's tone square: green full text, yellow
  *  abstract, red neither. */
 export function readDepthColour(depth: ReadDepth): ToneColour {
   return DEPTH_COLOURS[depth];
@@ -287,7 +287,7 @@ export function readDepthHint(item: Pick<DepthSource, "read_in_full" | "status" 
 // ---------------------------------------------------------------------------
 
 /**
- * An evidence type in sentence case (round 10, C6): the classifier's labels
+ * An evidence type in sentence case: the classifier's labels
  * are Title Case ("Systematic Review and Meta-Analysis"), the page writes
  * them as a sentence would ("Systematic review and meta-analysis").
  * Acronyms keep their capitals ("RCTs and quasi-experimental studies").
@@ -368,7 +368,7 @@ export interface CitationJudgement {
 /**
  * The judge's verdict on a citation as words: the tier's label over the
  * judge's own rationale, or what the tier means when it gave none. No tier
- * yet says it is unchecked (lead, round 12); an unknown tier says nothing.
+ * yet says it is unchecked; an unknown tier says nothing.
  *
  * Args:
  *   tier: The judge's tier, or null/undefined before the check.

@@ -1,6 +1,6 @@
 """The Task Agent turn taken while a longlist exists and no walk is active.
 
-Task 045, deliverable 10 (D13, A8, A14; ADR 0039 decision 11). While an
+ADR 0039 decision 11. While an
 options-scoping task has a longlist and no parentless walk is running or
 paused, a Task Agent turn is admitted, reserved as an ordinary transcript row
 and then *sorted* by the lead-authored ``longlist_verbs_v1`` surface into one
@@ -412,7 +412,7 @@ def sort_turn(
 def _verbatim(words: str | None, utterance: str) -> str:
     """The user's words for the option: the sort's quote only when it is theirs.
 
-    Mirrors the gate's carried-text rule (044 S2): model output is not the
+    Mirrors the gate's carried-text rule: model output is not the
     user speaking, so a quote that is not verbatim in the utterance falls back
     to the whole utterance.
     """
@@ -807,7 +807,7 @@ def _apply_add(
     """Apply a confirmed *add*: the option, its History event and this turn in one commit.
 
     The turn completes — consuming the pending action — in the transaction
-    that mints the option (A4), so a retried turn finds nothing pending and
+    that mints the option, so a retried turn finds nothing pending and
     can never mint a second option. The option search opens after that
     commit; its id is then written onto the stored turn.
     """

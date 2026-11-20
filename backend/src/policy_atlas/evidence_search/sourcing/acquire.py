@@ -170,7 +170,7 @@ class ExtendedSearchBackend(SearchBackendBase, Protocol):
 
 
 # Existing search execution still accepts the established five-verb seam;
-# callers that use the Phase 2 transport additions type against this extension.
+# callers that use the transport additions type against this extension.
 SearchBackend = SearchBackendBase
 
 
@@ -268,7 +268,7 @@ def _slim_authorships(authorships: list[dict[str, Any]] | None) -> list[dict[str
 
 
 _OPENALEX_RETAIN_KEYS = (
-    "primary_location",  # URL/OA block — required by slice 008
+    "primary_location",  # URL/OA block
     "best_oa_location",
     "open_access",
     "topics",
@@ -289,7 +289,7 @@ _OPENALEX_RETAIN_KEYS = (
 # so it is handled explicitly in _map_openalex_work below.
 
 _OVERTON_RETAIN_KEYS = (
-    "document_url",  # slice 008; multi-PDF documents are real
+    "document_url",  # multi-PDF documents are real
     "pdf_url",
     "grouped_pdf_ids_in_result",
     "source",  # geography + publisher typing for characterise
@@ -305,7 +305,7 @@ _OVERTON_RETAIN_KEYS = (
     "added_on",
     "languages",
     "authors_are_organizations",
-    "authors",  # 042: author names (string or list); normalised at read time
+    "authors",  # Author names (string or list); normalised at read time
     # LLM-generated, like llm_document_description — retained but always
     # identifiable as machine text, never mixed into document-own-words fields
     "llm_document_theme",
@@ -366,7 +366,7 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
     Overton expresses absence as empty strings/lists on always-present keys —
     empty-string/empty-list is treated as absent throughout.
 
-    English-first title mapping (contract rev 3.6a): the envelope title is
+    English-first title mapping: the envelope title is
     ``translated_title`` when present, else the native ``title`` — unusable
     only when both are absent. The native title is always retained in
     ``provider_fields`` (``_OVERTON_RETAIN_KEYS``) so it survives displacement.
@@ -441,7 +441,7 @@ _RECORD_ID_KEYS = {
 def returned_record_ids(backend_name: str, records: list[dict[str, Any]]) -> list[str]:
     """The backend record ids one search call returned, in order, once each.
 
-    Written on ``search.executed`` as ``record_ids`` (task 058, round 12) so a
+    Written on ``search.executed`` as ``record_ids`` so a
     reader can filter the sources table to what one query returned: the
     values match ``source_snapshot.metadata.backend_record_id``.
 
@@ -543,7 +543,7 @@ def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str,
         # cuts from the end, so a long topic list loses topics, not the theme or series.
         tags = [
             *_dedupe_tag_values([record.get("llm_document_theme")], "overton_llm"),
-            # decision 20 (rev 3.6b): the document series is methodological/
+            # The document series is methodological/
             # structural material, not a topical assertion.
             *_dedupe_tag_values(
                 [record.get("overton_policy_document_series")],
@@ -572,13 +572,13 @@ class _Candidate(NamedTuple):
 def publish_acquire_progress(
     found: int, round_index: int, *, candidates: int | None = None
 ) -> None:
-    """Publish the acquire stage's running count (task 058, N2).
+    """Publish the acquire stage's running count.
 
     Args:
         found: Records acquired so far on this pass.
         round_index: 1 for the first search on a scope, 2 or more after.
         candidates: The distinct records the search's calls returned, when
-            the search counted them as it ran (round 9). The line then reads
+            the search counted them as it ran. The line then reads
             "keeping {kept} of {found} candidates", counting ``done`` against
             that ``total``, so the count the search showed never reads as a drop.
     """
@@ -630,7 +630,7 @@ def acquire_sources(
         depth: Search-depth directive recorded in events and coverage.
         scope_wire_params: Per-backend executed wire params or variant payloads
             recorded on the coverage record.
-        search_guidance: B1 (024 steering surface) executed ``search.guidance``
+        search_guidance: The executed ``search.guidance``
             list, echoed verbatim onto ``search_coverage_record.scope_filters``
             as a sibling ``guidance`` key when present.
         pools: Ranked raw records as ``(record, origin, verb)`` tuples. When
@@ -642,7 +642,7 @@ def acquire_sources(
         round_index: 1 on a fresh scope, 2 or more when the search is run
             again on the same scope; it picks the progress line's wording.
         search_found: The distinct records the search returned, when it
-            counted them (round 9); the progress line then reads "keeping
+            counted them; the progress line then reads "keeping
             {kept} of {search_found} candidates".
 
     Returns:
@@ -692,7 +692,7 @@ def acquire_sources(
     seen_hashes: set[str] = set()
     # The same keys → the task's document, so a theory-of-change search that
     # finds a document the task already holds can say so (``source.seen_again``):
-    # the check reads which documents each link's own search found (task 054).
+    # the check reads which documents each link's own search found.
     # Only that kind writes the row; a longlist's many option searches would
     # otherwise log every shared paper again, and nothing reads it.
     says_seen_again = context.context.get("capability") == "theory_of_change"
@@ -828,7 +828,7 @@ def acquire_sources(
                 text_basis="abstract_only",  # metadata envelope in hand, not full text
                 source_locator=mapped["source_locator"],
                 # None-valued envelope keys are persisted as *absent* —
-                # authentic absence (contract decision 4), and exactly what
+                # authentic absence, and exactly what
                 # _stub_screen's fail-open default expects (missing abstract
                 # -> title_only, no screen changes).
                 metadata={
@@ -901,7 +901,7 @@ def acquire_sources(
 
         counts["acquired"] += 1
         acquired_tss_by_verb.setdefault(verb, []).append(str(tss_id))
-        # Task 058, N2: the running count of records kept so far.
+        # The running count of records kept so far.
         found = sum(b["acquired"] for b in by_backend.values())
         publish_acquire_progress(found, round_index, candidates=search_found)
 
@@ -926,7 +926,7 @@ def acquire_sources(
             "result_count": result_count,
             "error": error,
             "evidence_scope_id": str(context.scope_id),
-            # Round 12: what the call returned, for the sources table's
+            # What the call returned, for the sources table's
             # filter by query (ok calls only; passes too).
             "record_ids": returned_record_ids(backend.name, call.records)
             if call.status == "ok"
@@ -963,11 +963,11 @@ def acquire_sources(
         kept = 0
         cap = caps.get(name)
         for index, (record, origin, verb) in enumerate(pools.get(name, [])):
-            # The cap is a cut on the ranked list by position (contract D7):
+            # The cap is a cut on the ranked list by position:
             # a ranked entry the task already holds, or that is unusable, is
             # not refilled from beyond the cut, so what is persisted is always
-            # a subset of the first `cap` ranked entries (review finding,
-            # 2026-10-09). Checked before the identity guards, never after:
+            # a subset of the first `cap` ranked entries.
+            # Checked before the identity guards, never after:
             # `is_new` *claims* the keys it checks, so running it on a record
             # we are about to drop would make a later backend's genuine record
             # look already-acquired and lose it.
@@ -1071,9 +1071,9 @@ def acquire_sources(
     # run -> inadequate (nothing screenable came back). An empty-but-successful
     # backend beside a productive one is honest coverage, not inadequacy.
     #
-    # Honest stop attribution (task 019 item 5): a clean run is 'completed',
-    # never a claimed truncation. 'wall_clock_exceeded' left the vocabulary
-    # with the wall clock itself (task 030) — every planned call now runs.
+    # Honest stop attribution: a clean run is 'completed',
+    # never a claimed truncation. There is no wall-clock stop: every planned
+    # call runs.
     stop_condition = "error" if any_error else "completed"
     usable = totals["acquired"] + totals["already_acquired"]
     adequacy_verdict = "inadequate" if (any_error or usable == 0) else "adequate"

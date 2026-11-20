@@ -4,6 +4,7 @@ import json
 import aws_cdk as cdk
 from aws_cdk import Environment
 
+from infra.cognito_auth import sign_in_block
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
 from infra.analytics_stack import PaV3AnalyticsStack
@@ -69,6 +70,12 @@ if deploy_analytics:
             raise ValueError("Context variable 'metabase_allowlist_size' is required when analytics is deployed. scripts/deploy.sh passes it; for a manual synth use '-c metabase_allowlist_size=<number of allowlisted CIDRs>'.")
         metabase_allowlist_size = int(metabase_allowlist_size)
 
+ops_allowlist_size = app.node.try_get_context("ops_allowlist_size")
+if stage == "all":
+    if ops_allowlist_size is None or not str(ops_allowlist_size).isdigit():
+        raise ValueError("Context variable 'ops_allowlist_size' is required when the ops service is deployed. scripts/deploy.sh passes it; for a manual synth use '-c ops_allowlist_size=<number of allowlisted CIDRs>'.")
+    ops_allowlist_size = int(ops_allowlist_size)
+
 # Add 'VPCManaged': true tag to all resources recursively.
 # Just in case we're looking manually and need to spot what this has built.
 cdk.Tags.of(app).add("VPCManaged", "true", apply_to_launched_instances=True)
@@ -101,6 +108,7 @@ if stage == "all":
         app,
         "PaV3CertStack",
         network_config=network_config,
+        auth_domain=sign_in_block(pa_config["policy_atlas_config"].get("sign_in")).get("domain"),
         env=cert_env,
         cross_region_references=True,
     )
@@ -129,8 +137,10 @@ if stage == "all":
         "PaV3AppStack",
         pa_config=pa_config,
         certificate=cert_stack.certificate,
+        auth_certificate=cert_stack.auth_certificate,
         env=pa_env,
         env_name=env_name,
+        ops_allowlist_size=ops_allowlist_size,
         cross_region_references=True,
     )
 

@@ -3,7 +3,14 @@ type: Invariant
 title: Harness scope lookups must filter by project_id, not just by ID
 description: A harness node that loads a scope-like row (e.g. evidence_scope) by its own ID must also filter by the run's task_id, or a scope belonging to another task is silently accepted.
 tags: [harness, cross-task, security, invariant]
-timestamp: 2026-07-01
+generated:
+  by: process:okf-migrate
+  at: 2026-07-01
+sources:
+  - resource: "../tasks/005-classify/verification.md"
+    title: "[005-classify/verification.md](../tasks/005-classify/verification.md) (Review findings \u2014 `/code-review` finding 3)"
+  - resource: "src/policy_atlas/harness.py"
+    title: "`_run_scope_component` in `src/policy_atlas/harness.py`"
 ---
 
 **The row this concept calls `project` is `task` as of task 038** — the filename (an OKF
@@ -38,9 +45,3 @@ and was only caught by review, not by a test targeting this exact path — the e
 cross-task tests (`test_cross_task_fk_rejected`) exercise the FK on *insert*, not the
 harness's own scope lookup. Any new harness node added for a future component (`appraise` is
 next) that loads a scope/plan-referenced row by ID needs this filter from the start.
-
-# Citations
-
-- [005-classify/verification.md](../tasks/005-classify/verification.md) (Review findings —
-  `/code-review` finding 3)
-- `_run_scope_component` in `src/policy_atlas/harness.py`

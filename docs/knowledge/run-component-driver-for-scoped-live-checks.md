@@ -1,9 +1,18 @@
 ---
 type: Testing rule
 title: Scoped dev-DB live checks drive the real runner through the agent CLI, never a hand-rolled harness
-description: The single-component driver this concept first named (`skeleton._run_component`, task 020) was retired with the skeleton in task 023; the standardised smoke and live-check vehicle since then is the runtime agent CLI (`python -m policy_atlas.runtime.agent`), which owns the run row, plan compile, harness wiring and tracing on the production execution path. Substrate discipline is unchanged: reuse an existing screened selection (never re-search); pass explicit backend instances for exactly the surfaces under test; force `DATABASE_URL` after `load_dotenv`.
+description: 'The single-component driver this concept first named (`skeleton._run_component`, task 020) was retired with the skeleton in task 023; the standardised smoke and live-check vehicle since then is the runtime agent CLI (`python -m policy_atlas.runtime.agent`), which owns the run row, plan compile, harness wiring and tracing on the production execution path. Substrate discipline is unchanged: reuse an existing screened selection (never re-search); pass explicit backend instances for exactly the surfaces under test; force `DATABASE_URL` after `load_dotenv`.'
 tags: [live-check, dev-db, harness, verification, tracing]
-timestamp: 2026-09-05
+generated:
+  by: process:okf-migrate
+  at: 2026-09-05
+sources:
+  - resource: "backend/src/policy_atlas/runtime/agent.py"
+    title: "`backend/src/policy_atlas/runtime/agent.py` (module docstring: \"Runnable as `python -m policy_atlas.runtime.agent`\")"
+  - resource: "../tasks/023-codebase-health/verification.md"
+    title: "[023 close-out](../tasks/023-codebase-health/verification.md) (skeleton retired; `orchestrate` as the standardised check vehicle)"
+  - resource: "../tasks/020-extract-v2/verification.md"
+    title: "[020 live check](../tasks/020-extract-v2/verification.md) (the original driver and its evidence)"
 ---
 
 # Rule
@@ -39,9 +48,3 @@ re-search; chain the second component off the first's run id.
   (check the persisted rows, not the roll-up);
   [run-id-fk-shapes-audit-carriers](run-id-fk-shapes-audit-carriers.md)
   (how run-scoped queries reach tables without a run_id column).
-
-# Citations
-
-- `backend/src/policy_atlas/runtime/agent.py` (module docstring: "Runnable as `python -m policy_atlas.runtime.agent`")
-- [023 close-out](../tasks/023-codebase-health/verification.md) (skeleton retired; `orchestrate` as the standardised check vehicle)
-- [020 live check](../tasks/020-extract-v2/verification.md) (the original driver and its evidence)

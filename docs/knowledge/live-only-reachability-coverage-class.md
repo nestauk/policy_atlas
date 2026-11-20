@@ -3,7 +3,16 @@ type: Testing
 title: Live-only reachability is a real coverage class — enumerate the branches only a live model or enabled tracer can reach
 description: Three 022 bugs passed the full deterministic suite and fell over only on live runs — a judge emitting verdicts for envelope ids it was never asked to judge, enriched persisted records re-entering a strict wire validator, and a tracing-enabled-only reader of a changed payload shape; each sat behind live-model behaviour or an observability-only branch that stubs structurally cannot exercise.
 tags: [testing, live-checks, coverage, tracing, judge, stubs]
-timestamp: 2026-07-14
+generated:
+  by: process:okf-migrate
+  at: 2026-07-14
+sources:
+  - resource: "../tasks/022-synthesis-refinement/verification.md"
+    title: "[022 verification.md \u00a7 Live-check bug fixes](../tasks/022-synthesis-refinement/verification.md)"
+  - resource: "`test_judge_extra_verdicts_for_span_only_ids_are_dropped_not_fatal` (tests/test_synthesise.py)"
+    title: "`test_judge_extra_verdicts_for_span_only_ids_are_dropped_not_fatal` (tests/test_synthesise.py)"
+  - resource: "src/policy_atlas/synthesise.py"
+    title: "`_wire_claim_data` in `src/policy_atlas/synthesise.py`; `grouping_score_summary` in `src/policy_atlas/tracing.py`"
 ---
 
 # Rule
@@ -32,9 +41,3 @@ Stubs are scripted to the contract; these bugs live exactly where reality
 exceeds the contract (models act on everything they can see; persisted records
 outgrow their wire shape; tracing code paths are dark in CI). A suite that is
 green by construction on those branches reports coverage it does not have.
-
-# Citations
-
-- [022 verification.md § Live-check bug fixes](../tasks/022-synthesis-refinement/verification.md)
-- `test_judge_extra_verdicts_for_span_only_ids_are_dropped_not_fatal` (tests/test_synthesise.py)
-- `_wire_claim_data` in `src/policy_atlas/synthesise.py`; `grouping_score_summary` in `src/policy_atlas/tracing.py`

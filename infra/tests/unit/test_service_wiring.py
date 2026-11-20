@@ -15,6 +15,9 @@ API_ENVIRONMENT_NAMES = {
     "APP_ORIGIN",
     "PA_BACKEND_MODE",
     "RUN_EXECUTOR_MAX",
+    "RUNS_PER_USER",
+    "TASK_QUOTA_PER_YEAR",
+    "FORWARDED_ALLOW_IPS",
     "DB_POOL_SIZE",
     "DB_MAX_OVERFLOW",
     "LOG_LEVEL",
@@ -34,6 +37,13 @@ APP_SECRET_NAMES = {
     "LANGFUSE_PUBLIC_KEY",
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_HOST",
+}
+OPS_ENVIRONMENT_NAMES = {
+    "OIDC_ISSUER", "OIDC_JWKS_URL", "OIDC_CLIENT_ID", "APP_ORIGIN",
+    "POLICY_ATLAS_SERVICE_ROLE", "POLICY_ATLAS_SELF_SIGNUP",
+    "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", "OPS_UI_DIR",
+    "RUNS_PER_USER", "TASK_QUOTA_PER_YEAR", "DB_POOL_SIZE", "DB_MAX_OVERFLOW",
+    "FORWARDED_ALLOW_IPS", "LOG_LEVEL", "LOG_FORMAT", "PA_BACKEND_MODE",
 }
 
 
@@ -67,6 +77,9 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["APP_ORIGIN"] == "https://v3.policyatlas.uk"
     assert environment["PA_BACKEND_MODE"] == "live"
     assert environment["RUN_EXECUTOR_MAX"] == "10"
+    assert environment["RUNS_PER_USER"] == "3"
+    assert environment["TASK_QUOTA_PER_YEAR"] == "50"
+    assert environment["FORWARDED_ALLOW_IPS"] == "1.2.3.4/5"
     assert environment["DB_POOL_SIZE"] == "15"
     assert environment["DB_MAX_OVERFLOW"] == "10"
     assert environment["LOG_LEVEL"] == "INFO"
@@ -80,7 +93,7 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
 
 
 def test_theory_of_change_is_on_in_staging_only():
-    """Task 054 (C15): colleagues try it on staging; production stays off."""
+    """Colleagues try it on staging; production stays off."""
     config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
     backends = {env: config[env]["policy_atlas_config"]["backend"] for env in config}
     assert {env: backend.get("theory_of_change") for env, backend in backends.items()} == {
@@ -90,7 +103,7 @@ def test_theory_of_change_is_on_in_staging_only():
 
 
 def _uploads_bucket_id(template: dict | None = None) -> str:
-    """The logical id of the uploads bucket (task 054 increment 5)."""
+    """The logical id of the uploads bucket."""
     return next(
         name
         for name, resource in _resources(template or TEMPLATES["app"], "AWS::S3::Bucket")
@@ -163,8 +176,73 @@ def test_api_container_references_database_and_app_secrets_without_values():
         assert "secretsmanager" in rendered or "Fn::" in rendered or "Ref" in rendered
 
 
+def test_ops_container_has_the_complete_least_privilege_environment_and_secret_map():
+    container = _container(_task_definition("policy-atlas-v3-ops"))
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+    assert set(environment) == OPS_ENVIRONMENT_NAMES
+    assert environment == {
+        "OIDC_ISSUER": environment["OIDC_ISSUER"],
+        "OIDC_JWKS_URL": environment["OIDC_JWKS_URL"],
+        "OIDC_CLIENT_ID": environment["OIDC_CLIENT_ID"],
+        "APP_ORIGIN": "https://ops.v3.policyatlas.uk",
+        "POLICY_ATLAS_SERVICE_ROLE": "ops",
+        "POLICY_ATLAS_SELF_SIGNUP": "0",
+        "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "100",
+        "OPS_UI_DIR": "/app/ops-ui",
+        "RUNS_PER_USER": "3",
+        "TASK_QUOTA_PER_YEAR": "50",
+        "DB_POOL_SIZE": "5",
+        "DB_MAX_OVERFLOW": "5",
+        "FORWARDED_ALLOW_IPS": "1.2.3.4/5",
+        "LOG_LEVEL": "INFO",
+        "LOG_FORMAT": "json",
+        "PA_BACKEND_MODE": "stub",
+    }
+    secrets = _secret_map(container)
+    assert set(secrets) == {"DATABASE_URL"}
+    assert "OpsDbSecret" in json.dumps(secrets["DATABASE_URL"])
+    assert "db_connection_string" in json.dumps(secrets["DATABASE_URL"])
+
+
+def test_ops_and_api_task_roles_hold_only_their_expected_cognito_permissions():
+    policies = _resources(TEMPLATES["app"], "AWS::IAM::Policy")
+    api_role = _task_definition("policy-atlas-v3-api")["TaskRoleArn"]["Fn::GetAtt"][0]
+    ops_role = _task_definition("policy-atlas-v3-ops")["TaskRoleArn"]["Fn::GetAtt"][0]
+    api_actions = []
+    ops_actions = []
+    for _, policy in policies:
+        roles = policy["Properties"]["Roles"]
+        # CloudFormation writes one action as a plain string, several as a list.
+        all_actions = [
+            action
+            for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+            for action in (
+                [statement["Action"]] if isinstance(statement["Action"], str) else statement["Action"]
+            )
+        ]
+        assert "*" not in all_actions and "cognito-idp:*" not in all_actions
+        actions = [action for action in all_actions if action.startswith("cognito-idp:")]
+        if {"Ref": api_role} in roles:
+            api_actions.extend(actions)
+        if {"Ref": ops_role} in roles:
+            ops_actions.extend(actions)
+            for statement in policy["Properties"]["PolicyDocument"]["Statement"]:
+                if any(str(a).startswith("cognito-idp:") for a in (
+                    [statement["Action"]] if isinstance(statement["Action"], str) else statement["Action"]
+                )):
+                    # Scoped to the pool, never a wildcard resource.
+                    assert "Arn" in json.dumps(statement["Resource"]) and "UserPool" in json.dumps(statement["Resource"])
+                    assert statement["Resource"] != "*"
+    assert not api_actions
+    assert sorted(ops_actions) == sorted([
+        "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
+        "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
+        "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
+    ])
+
+
 def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
-    """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
+    """A Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
     container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
     environment = {item["Name"]: item["Value"] for item in container["Environment"]}
     assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock"
@@ -192,14 +270,35 @@ def test_migration_task_is_one_shot_and_has_only_the_database_secret():
     assert migration["Memory"] == "1024"
 
     container = _container(migration)
-    assert container["Command"] == ["alembic", "upgrade", "head"]
+    assert container["Command"][:2] == ["sh", "-c"]
+    assert container["Command"][2].startswith("alembic upgrade head && (python -m policy_atlas.ops.db_role sync || echo")
+    assert [item["Name"] for item in container["Environment"]] == ["OPS_DB_SECRET_ARN"]
+    assert "OpsDbSecret" in json.dumps(container["Environment"])
     secrets = _secret_map(container)
     assert set(secrets) == {"DATABASE_URL"}
     assert "db_connection_string" in json.dumps(secrets["DATABASE_URL"])
 
     services = _resources(TEMPLATES["app"], "AWS::ECS::Service")
-    assert len(services) == 1
-    assert services[0][1]["Properties"]["DesiredCount"] == 0
+    assert len(services) == 2
+    assert all(service["Properties"]["DesiredCount"] == 0 for _, service in services)
+
+
+def test_migration_task_role_can_read_and_update_only_the_ops_database_secret():
+    migration_role = _task_definition("policy-atlas-v3-migrate")["TaskRoleArn"]["Fn::GetAtt"][0]
+    policies = [
+        policy["Properties"]["PolicyDocument"]["Statement"]
+        for _, policy in _resources(TEMPLATES["app"], "AWS::IAM::Policy")
+        if policy["Properties"]["Roles"] == [{"Ref": migration_role}]
+    ]
+    actions = {
+        action
+        for statements in policies
+        for statement in statements
+        for action in statement["Action"]
+        if action.startswith("secretsmanager:")
+    }
+    assert actions == {"secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"}
+    assert all("OpsDbSecret" in json.dumps(statement["Resource"]) for statements in policies for statement in statements)
 
 
 def test_alb_timeout_and_migration_deploy_export_are_present_without_autoscaling():

@@ -224,14 +224,14 @@ class EvidenceItemOut(BaseModel):
     # the provider's LLM-written description (flagged as such).
     abstract: str | None = None
     abstract_source: Literal["provider", "llm_description"] | None = None
-    # Task 058, round 10: the publisher country by its one display name, the
+    # The publisher country by its one display name, the
     # value the Landscape chart's row shows and the `country` filter takes;
     # null when the provider sent none (the chart's "Not reported").
     country: str | None = None
-    # Task 058, round 12: where the full text came from, for the All sources
+    # Where the full text came from, for the All sources
     # "Full text" link; null unless the text was collected.
     full_text_url: str | None = None
-    # Task 058, round 14: where the full text's fetch stands. `queued` is a
+    # Where the full text's fetch stands. `queued` is a
     # fetch handed to the ingest queue and not yet back ("Collecting…").
     full_text_status: Literal[
         "not_attempted", "queued", "ingested", "fetch_failed", "parse_failed"
@@ -766,9 +766,9 @@ class ChunkContextOut(BaseModel):
     authorships: list[AuthorshipOut] = Field(default_factory=list)
 
 
-# --- The options-scoping longlist (task 045, S12; contract deliverables 9, 11) ---
+# --- The options-scoping longlist (11) ---
 #
-# Assembled from the longlist walk's records, never written by a model (D15):
+# Assembled from the longlist walk's records, never written by a model:
 # the option rows, the run-keyed ``longlist_result`` (themes, coverage,
 # judgements, guesses, counts) and the membership rows. Names on the wire are
 # the product's; nothing here ever says "how sure" (ruling 33).
@@ -780,7 +780,7 @@ OptionOrigin = Literal["clustered", "suggested", "from_evidence_search", "added_
 #: An option's state. "No in-scope evidence" is a condition, not a state.
 OptionState = Literal["included", "excluded"]
 
-#: An option's place on the shortlist (task 055): a Policy Atlas pick, a
+#: An option's place on the shortlist: a Policy Atlas pick, a
 #: place the user added, or a pick the user removed. Mirrors
 #: `schema.OPTION_SHORTLIST_STATES`.
 ShortlistState = Literal["proposed", "added_by_you", "set_aside"]
@@ -1441,7 +1441,7 @@ class OptionAddedOut(BaseModel):
     opened_run: LatestRun | None = None
 
 
-#: Where an option's own search stands (task 058, N22): no child walk yet,
+#: Where an option's own search stands: no child walk yet,
 #: the walk running or paused, the walk finished with a result, or the walk
 #: ended without one (failed, aborted or interrupted).
 OptionSearchStatus = Literal["queued", "searching", "searched", "failed"]

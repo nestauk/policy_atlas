@@ -3,7 +3,18 @@ type: Architecture
 title: Two-stage clustering (open discovery + validated batch assignment) closes the exhaustive-partition capacity cliff
 description: The ~184-value duplicate-id failure was the one-call exhaustive-partition RESPONSE FORMAT, not raw model capacity — open discovery (labels only, never ids) plus batched assignment validated against the deterministically known unit-id list ran 0/9 replay arms with id fabrication on the exact corpus that failed 4/4; the same framing change also removed the over-fragmentation pressure (25 values→12 groups became 30→5 with no lower bound). Component sentinel words must be forbidden in discovery.
 tags: [clustering-engine, group, characterise, model-capacity, scale, prompt-design, slice-c]
-timestamp: 2026-07-14
+generated:
+  by: process:okf-migrate
+  at: 2026-07-14
+sources:
+  - resource: "../adr/0018-multi-facet-clustering-engine.md"
+    title: "[ADR 0018](../adr/0018-multi-facet-clustering-engine.md) (decisions 1, 5)"
+  - resource: "../tasks/022-synthesis-refinement/verification.md"
+    title: "[022 verification.md \u00a7 replay evidence](../tasks/022-synthesis-refinement/verification.md)"
+  - resource: "facet-partition-value-list-scale-limit.md"
+    title: "[The failure this closes](facet-partition-value-list-scale-limit.md)"
+  - resource: "src/policy_atlas/core/clustering_engine.py"
+    title: "`cluster_units`, `validate_assignments` in `src/policy_atlas/core/clustering_engine.py`"
 ---
 
 # Rule
@@ -43,10 +54,3 @@ catch-all buckets. One framing defect, two symptom classes.
 - Scale pressure moves to batch size and the pre-computable call budget — the
   budget math must match what the repair loop actually spends
   (`assignment_repair_cap` is honoured per batch since the 022 review stack).
-
-# Citations
-
-- [ADR 0018](../adr/0018-multi-facet-clustering-engine.md) (decisions 1, 5)
-- [022 verification.md § replay evidence](../tasks/022-synthesis-refinement/verification.md)
-- [The failure this closes](facet-partition-value-list-scale-limit.md)
-- `cluster_units`, `validate_assignments` in `src/policy_atlas/core/clustering_engine.py`

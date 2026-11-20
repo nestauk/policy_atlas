@@ -1,10 +1,10 @@
-"""The draft walk's step: write the first theory of change (task 054, step 1.3).
+"""The draft walk's step: write the first theory of change.
 
-``toc_draft`` reads the walk's plan, asks the model for a draft, runs the E1
+``toc_draft`` reads the walk's plan, asks the model for a draft, runs the
 structure checks, retries once with the problems named, and writes the graph
 through :mod:`policy_atlas.theory_of_change.store`. A draft written onto an
 empty canvas is drawn on the page as it is written
-(:mod:`policy_atlas.theory_of_change.draft_stream`, task 054, S12).
+(:mod:`policy_atlas.theory_of_change.draft_stream`).
 """
 
 from __future__ import annotations
@@ -127,12 +127,12 @@ def walk_toc_plan(
     )
 
 
-#: The event a clarification to the plan is stored as (C49).
+#: The event a clarification to the plan is stored as.
 TOC_CLARIFICATION_EVENT = "toc.clarification"
 
 
 def clarifications(conn: Connection, task_id: uuid.UUID) -> list[str]:
-    """The user's clarifications to the plan, oldest first (C49)."""
+    """The user's clarifications to the plan, oldest first."""
     return [
         str(payload.get("text"))
         for payload in conn.execute(
@@ -208,12 +208,12 @@ def with_trimmed_conditions(draft: DraftResponse) -> DraftResponse:
 
 
 def draft_problems(draft: DraftResponse, *, as_drawn: bool = False) -> list[str]:
-    """The E1 problems of a draft, plus the checks only a draft can fail.
+    """The structure problems of a draft, plus the checks only a draft can fail.
 
     ``as_drawn``: the user's diagram kept as given, checked by the lighter rules.
     """
     problems = check_graph(draft_graph(draft), as_drawn=as_drawn)
-    # The user's own steps keep their shape (owner, 2026-11-04): a step they drew
+    # The user's own steps keep their shape: a step they drew
     # from an input straight to an outcome is theirs to keep, not a reason to redraft.
     theirs = {link.key for link in draft.links if link.from_user_theory}
     problems = [
@@ -359,7 +359,7 @@ def adopt_sketch(
     boxes: list[Any],
     links: list[Any],
 ) -> tuple[DraftResponse, dict[str, uuid.UUID]]:
-    """Keep the user's canvas as drawn and fill it in from the draft (owner, 2026-11-05).
+    """Keep the user's canvas as drawn and fill it in from the draft.
 
     The user's boxes and connections stay where they are. A draft box with
     the same text is theirs; a draft link between two of them is their
@@ -476,7 +476,7 @@ def suggest_the_rest(
     def op(**values: object) -> EditOpWire:
         return EditOpWire.of(**{"reason": COMPLETES, **values})
 
-    # One route at a time (owner, 2026-11-04): each route's new boxes, its new
+    # One route at a time: each route's new boxes, its new
     # links, then the pathway, tagged r1, r2 ... A box or link two routes share
     # goes with the first; accepting the second brings it along.
     box_of = {box.key: box for box in draft.boxes}
@@ -581,7 +581,7 @@ def toc_draft_scope(
             if part
         )
     # Drawn live only when the draft becomes the canvas as written: the user's own
-    # boxes or diagram keep their place, and the draft only fills them in (S12).
+    # boxes or diagram keep their place, and the draft only fills them in.
     sketch = SketchFrames() if not sketched and not as_drawn(plan) else None
 
     def ask(problems: list[str] | None = None) -> UsageResult[DraftResponse]:
@@ -611,8 +611,7 @@ def toc_draft_scope(
                 sketch.reset()
             raise DraftFailure("the draft failed its structure checks: " + "; ".join(problems))
     # An uploaded diagram: the canvas starts with the user's own boxes and arrows;
-    # what the draft added to complete the theory waits as one suggestion
-    # (owner, 2026-11-04).
+    # what the draft added to complete the theory waits as one suggestion.
     if sketched_links:
         kept, ids = adopt_sketch(
             conn,

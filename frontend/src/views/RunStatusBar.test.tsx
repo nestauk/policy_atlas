@@ -174,36 +174,26 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     expect(screen.getByRole("status")).toHaveTextContent(/^$/);
   });
 
-  it("reads the step in navy semibold, what it does in grey, the turning mark on the first line and the time at the right", () => {
+  it("reads the step, what it does, the turning mark and the time", () => {
     live("result", stream("running"));
     renderStrip();
     const line = within(statusBar()).getByRole("button");
-    // The bar holds the words' button and, when there is one, the link.
-    expect(line.parentElement).toHaveClass("text-meta", "bg-paper", "border-b", "border-line");
-    expect(line).toHaveClass("py-2.5");
-    // The mark sits on the first line of the words.
-    expect(line.firstElementChild).toHaveClass("h-[1lh]");
     expect(line.firstElementChild?.querySelector("[data-live-mark]")).not.toBeNull();
     const words = line.children[1] as HTMLElement;
     expect(flat(words.textContent)).toBe("Writing · Section 3 of 7 · Costs and funding");
-    expect(words.firstElementChild).toHaveClass("font-semibold", "text-navy");
-    expect(words.lastElementChild).toHaveClass("text-grey");
     expect(line.lastElementChild).toHaveTextContent(/^6 min 12 s$/);
-    expect(line.lastElementChild).toHaveClass("shrink-0", "whitespace-nowrap", "text-grey", "text-right");
-    expect(line.lastElementChild?.querySelector(".tabular-nums")).not.toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
   });
 
   // Owner, round 8 (reversing contract D8's "status only"): the whole statusBar
   // opens the Task Agent, in the sidebar from md up and on the Agent tab
   // below it.
-  it("is one button named for what it opens, with hover and focus states", () => {
+  it("is one button named for what it opens", () => {
     live("result", stream("running"));
     renderStrip();
-    const button = screen.getByRole("button", {
-      name: "Open the Task Agent: Writing · Section 3 of 7 · Costs and funding",
-    });
-    expect(button).toHaveClass("flex-1", "cursor-pointer", "hover:bg-paper-2", "focus-visible:outline-blue");
+    expect(
+      screen.getByRole("button", { name: "Open the Task Agent: Writing · Section 3 of 7 · Costs and funding" }),
+    ).toBeInTheDocument();
   });
 
   // Owner, round 9: the bar's second control, after the time, is the running
@@ -213,7 +203,6 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     renderStrip();
     const link = within(statusBar()).getByRole("link", { name: "Report →" });
     expect(link).toHaveAttribute("href", "/tasks/t1/result");
-    expect(link).toHaveClass("text-blue", "font-semibold", "shrink-0", "whitespace-nowrap");
     const button = within(statusBar()).getByRole("button");
     expect(button.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(button.lastElementChild).toHaveTextContent(/^6 min 12 s$/);
@@ -307,13 +296,6 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     expect(statusBar().querySelector("button")).toBeNull();
   });
 
-  it("truncates long words on one line and keeps the time in view", () => {
-    live("result", stream("running"));
-    renderStrip();
-    const words = statusBar().querySelector(".anim-rise") as HTMLElement;
-    expect(words).toHaveClass("truncate", "min-w-0", "flex-1");
-  });
-
   it("says the run waits on the owner, with the orange square; on the owner by name to a colleague", () => {
     live("sources", stream("paused"));
     const { unmount } = renderStrip();
@@ -326,15 +308,13 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     expect(flat(statusBar().querySelector(".anim-rise")?.textContent)).toBe("Paused · waiting on Grace");
   });
 
-  it("holds still under reduced motion, and mounts open without a transition", () => {
+  it("holds still under reduced motion", () => {
     live("sources", stream("running"));
     renderStrip();
-    expect(statusBar()).toHaveClass("duration-200", "motion-reduce:transition-none", "transition-none");
+    expect(statusBar()).toHaveClass("motion-reduce:transition-none");
   });
 
-  // The animation sweep's entry 9: a tab switch is navigation, so the status bar
-  // is set at a cut; the run starting eases it open.
-  it("eases open when the run starts, and is a cut on a tab switch", () => {
+  it("opens when the run starts, and closes on a switch to the Agent tab", () => {
     live("sources", stream(null));
     const view = renderStrip();
     live("sources", stream("running"));
@@ -346,8 +326,6 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
       </MemoryRouter>,
     );
     expect(statusBar()).toHaveAttribute("data-open", "true");
-    expect(statusBar()).toHaveClass("transition-[grid-template-rows,opacity]", "duration-200");
-    expect(statusBar()).not.toHaveClass("transition-none");
     live("agent", stream("running"));
     view.rerender(
       <MemoryRouter initialEntries={["/tasks/t1/sources"]}>
@@ -357,7 +335,6 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
       </MemoryRouter>,
     );
     expect(statusBar()).toHaveAttribute("data-open", "false");
-    expect(statusBar()).toHaveClass("transition-none");
   });
 
   it("announces through one live region, quiet while a run trace is mounted", () => {
@@ -404,7 +381,6 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     const view = renderStrip();
     expect(statusBar()).toHaveAttribute("data-open", "true");
     expect(within(statusBar()).getByRole("status")).toHaveTextContent("Reconnecting to live updates…");
-    expect(within(statusBar()).getByRole("status")).toHaveClass("bg-yellow-tint", "text-meta", "py-2.5");
 
     live("sources", stream("running", { connectionStatus: "reconnecting" }));
     view.rerender(

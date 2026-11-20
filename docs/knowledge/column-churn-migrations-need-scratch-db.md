@@ -3,7 +3,16 @@ type: Testing rule
 title: Column-churning migration tests need a per-test scratch database
 description: Postgres counts DROPPED columns toward a table's 1600-column tuple-descriptor limit, so a migration-roundtrip test that adds/drops columns on the shared test DB permanently consumes slots every run until CREATEs start failing. Provision a scratch database instead.
 tags: [testing, migrations, postgres, alembic, review-lesson]
-timestamp: 2026-07-21
+generated:
+  by: process:okf-migrate
+  at: 2026-07-21
+sources:
+  - resource: "backend/tests/core/test_migrations_025.py"
+    title: "`backend/tests/core/test_migrations_025.py`"
+  - resource: "backend/tests/core/test_migrations_028.py"
+    title: "`backend/tests/core/test_migrations_028.py`"
+  - resource: "028 verification.md \u00a7 Known unverified (the 2026-08-05 incident record)"
+    title: "028 verification.md \u00a7 Known unverified (the 2026-08-05 incident record)"
 ---
 
 # Rule
@@ -51,9 +60,3 @@ test; the remedy is recreating `policy_atlas_test` (only a from-scratch
 rewrite reclaims dropped-column slots — `VACUUM FULL` does not). Migrating
 the remaining shared-DB churn tests to this scratch pattern is a recorded
 seam (docs/deferred.md § task 028 seams).
-
-# Citations
-
-- `backend/tests/core/test_migrations_025.py`
-- `backend/tests/core/test_migrations_028.py`
-- 028 verification.md § Known unverified (the 2026-08-05 incident record)

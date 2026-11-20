@@ -1,4 +1,4 @@
-"""The agent CLI — the one new public interface of slice 017.
+"""The agent CLI.
 
 Runnable as ``python -m policy_atlas.runtime.agent``. It owns the whole
 user-facing product path: a task_agent conversation (intent -> refined,
@@ -118,7 +118,7 @@ MAX_TASK_AGENT_TURNS = 10
 # intent-sized first-turn cap would land on a mid-conversation turn.
 assert (MAX_TASK_AGENT_TURNS - 1) * 2 + 1 <= PLANNER_HISTORY_TURNS_MAX
 
-# Exit codes. No token/cost surface — time only (contract decision 11).
+# Exit codes. No token/cost surface — time only.
 EXIT_SUCCESS = 0
 EXIT_RUN_FAILED = 2
 EXIT_ABORTED = 3
@@ -134,8 +134,8 @@ _EXIT_BY_STATUS: dict[str, int] = {
 
 _STEERING_MODES = frozenset({"frequent", "moderate", "minimal", "unattended"})
 
-# The delegation-posture labels (contract § Modes as delegation postures; annex
-# § the target-shape mode table). The mode is a delegation posture — "when
+# The delegation-posture labels.
+# The mode is a delegation posture — "when
 # should I come back to you?" — and moves who decides, never what is decided or
 # recorded. Plan values are unchanged; these are presentation only.
 _MODE_ORDER: tuple[str, ...] = ("frequent", "moderate", "minimal", "unattended")
@@ -149,7 +149,7 @@ _DEFAULT_MODE = "moderate"
 
 # Canonical-option ids that the always-present console frame already covers
 # (Continue / Change steering mode / Abort). They are dropped from the numbered
-# canonical block so the generic non-lattice floor (finding M6) and any
+# canonical block so the generic non-lattice floor and any
 # point-local continue/abort are not rendered twice. Filtering is display-only —
 # the durable pause payload carries the full option list unchanged.
 _FRAME_OPTION_IDS: frozenset[str] = frozenset({"continue", "change_mode", "abort"})
@@ -191,8 +191,8 @@ def _route_option_delta(delta: dict[str, Any]) -> dict[str, Any]:
 def _bundle_headline(key: str, value: Any) -> str:
     """A compact one-line headline for one decision-bundle key.
 
-    Bundle keys with headline numbers only — never full document lists
-    (contract deliverable § pause rendering upgrades). Scalars print their
+    Bundle keys with headline numbers only — never full document lists.
+    Scalars print their
     value; collections print a count (or their scalar sub-fields, when the
     dict carries headline numbers).
     """
@@ -294,7 +294,7 @@ class StdConsole:
         Args:
             message: The text to print.
         """
-        print(_strip_control(message))
+        print(_strip_control(message))  # noqa: T201 - command-line output
 
 
 @dataclass
@@ -349,7 +349,7 @@ class CliIO:
         self._console.print(render_check_in(payload))
 
     def confirm(self, render: str) -> bool:
-        """Render a router fan-out and take the confirm gate (contract decision 3).
+        """Render a router fan-out and take the confirm gate.
 
         Nothing a free-text steer compiles into applies until the user confirms
         the rendered fan-out — the fan-out already declares each fragment's re-run
@@ -442,7 +442,7 @@ class CliIO:
                 continue
             if not raw:
                 continue
-            # Free prose → the router (contract decision 3). The runner compiles
+            # Free prose → the router. The runner compiles
             # it, re-validates author-blind, confirms, and applies — or degrades
             # to this menu with an honest note appended to the render.
             return FreeText(raw)
@@ -680,9 +680,9 @@ def build_plan(
                     rule["delta"] = raw
     # Constant capability, not a lookup: the input is a ``PlanDraftWire``, the
     # Evidence search Task Agent's own draft shape, so this function is
-    # Evidence search by its argument type. The scoping draft gets its own
-    # builder in phase 3. Routed through the registry all the same, so the
-    # single validation seam holds (C9).
+    # Evidence search by its argument type. The scoping draft has its own
+    # builder. Routed through the registry all the same, so the
+    # single validation seam holds.
     return expect_task_plan(validate_plan(EVIDENCE_SEARCH, data))
 
 
@@ -854,11 +854,11 @@ def live_task_agent_and_backends(
         ),
         document_fetcher=fetcher,
         langfuse_client=langfuse_client,
-        # The options-scoping suggest step's judgment call (task 045, S10).
+        # The options-scoping suggest step's judgment call.
         suggest=OpenAIAgentBackend(langfuse_client=langfuse_client),
-        # The options-scoping longlist step's calls (task 045, S8).
+        # The options-scoping longlist step's calls.
         longlist=OpenAILonglistBackend(langfuse_client=langfuse_client),
-        # Every theory-of-change step's calls (task 054).
+        # Every theory-of-change step's calls.
         toc=OpenAITocBackend(langfuse_client=langfuse_client),
     )
     task_agent = OpenAITaskAgentBackend(langfuse_client=langfuse_client)
@@ -895,7 +895,7 @@ def _seed_stub_corpus(engine: Engine, task_id: uuid.UUID) -> None:
 
 
 def _scoping_scope_fields(plan: Any) -> dict[str, Any]:
-    """Compile a scoping plan's intent record (task 044, X7).
+    """Compile a scoping plan's intent record.
 
     The intent text is deterministic — compiled from the plan by
     ``baseline_prompt.compile_intent``, never written by a model (contract
@@ -937,7 +937,7 @@ def persist_approved_plan(
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Persist an approved plan and its execution scope for an existing task.
 
-    Every plan shape takes this one path (task 044, X7). A scoping plan differs
+    Every plan shape takes this one path. A scoping plan differs
     in what its intent record says and in two columns the Evidence search
     leaves null: ``purpose='baseline'`` and ``plan_id``, pointing back at the
     plan row minted in this very call. Because ``evidence_scope.plan_id``
@@ -945,9 +945,9 @@ def persist_approved_plan(
     inserted first without it and updated once the plan row exists — one
     transaction, so no reader ever sees a scope whose ``plan_id`` is missing.
     A theory-of-change plan does the same with ``purpose='toc'`` and
-    ``context.toc_walk='draft'`` (task 054).
+    ``context.toc_walk='draft'``.
 
-    A **new scope row per plan version** is deliberate (C3): the plan row's
+    A **new scope row per plan version** is deliberate: the plan row's
     ``evidence_scope_id`` is one-to-one, so an amended plan or a rebuild must
     not inherit the previous version's scope — otherwise "which plan version
     was this baseline built from" has two answers.
@@ -980,7 +980,7 @@ def persist_approved_plan(
     if isinstance(plan, ScopingPlan):
         scope_fields = _scoping_scope_fields(plan)
     elif isinstance(plan, TocPlan):
-        # A theory of change starts with its draft walk (task 054, S3).
+        # A theory of change starts with its draft walk (S3).
         scope_fields = {
             "intent": plan.question,
             "context": {
@@ -1186,7 +1186,7 @@ def main(
         default_agent = StubAgentBackend()
     task_agent = task_agent if task_agent is not None else default_task_agent
     if backends is None:
-        # The full-text ingest queue for POLICY_ATLAS_INGEST_MODE (task 057);
+        # The full-text ingest queue for POLICY_ATLAS_INGEST_MODE;
         # a caller's own bundle without one gets the in-process queue from run_plan.
         ingest_mode = ingest_mode_from_env()
         backends = with_ingest_queue(

@@ -1,6 +1,6 @@
 """Synthesise component: terminal evidence artefact composition.
 
-This module owns task 013's terminus component. It resolves optional upstream
+This module owns the terminus component. It resolves optional upstream
 references, mints the artefact, proposes sections, runs the capped section
 agent loop, validates typed claims, judges cited/reasoning claims, performs the
 single bounded repair pass, writes the 001 substrate rows and finally writes the
@@ -201,11 +201,11 @@ KEY_FINDINGS_FOCUS = "The report's headline claims."
 # Section focus the judge sees for the key-findings pass (envelope v2).
 KEY_FINDINGS_SECTION_FOCUS = "key findings"
 # The headline evidence claim types the key-findings pass may re-state —
-# finding/chunk/pattern plus gap restatements (task 034 S3). Theme and
+# finding/chunk/pattern plus gap restatements. Theme and
 # reasoning stay out. Intersected with the run's available claim types.
 KEY_FINDINGS_CLAIM_TYPES = {"finding", "chunk", "pattern", "gap"}
 
-# Case studies (task 034 S4): programme-grain cards after key findings.
+# Case studies: programme-grain cards after key findings.
 CASE_STUDIES_TITLE = "Case studies"
 CASE_STUDIES_CLAIM_TYPES = {"finding", "chunk", "reasoning"}
 CASE_STUDIES_MIN_CARDS = 2
@@ -408,19 +408,19 @@ class SectionSpec:
     title: str
     focus: str
     group_ids: list[str] = field(default_factory=list)
-    # Short contents-list label (task 032 G6). Optional: artefacts produced
+    # Short contents-list label. Optional: artefacts produced
     # before that slice carry none, and the client falls back to a shortened
     # title rather than treating absence as an error.
     nav_label: str | None = None
     # Composition role (ADR 0015 §8): "standard" for proposed/directive
     # sections, "conclusions" for the code-injected foot section, "key_findings"
     # for the final key-findings pass, "sources" for the baseline's
-    # code-rendered coverage foot (task 044). Roll-up only — never a
+    # code-rendered coverage foot. Roll-up only — never a
     # block-table column, and the read model coerces an unknown role to
     # "standard" so a new one never hides a block.
     role: str = "standard"
     # Per-section generation-loop bound. ``None`` means the run-level default
-    # (``SECTION_TURN_CAP``); a template's sections carry their own (task 044).
+    # (``SECTION_TURN_CAP``); a template's sections carry their own.
     turn_cap: int | None = None
 
     def as_seed(self) -> dict[str, Any]:
@@ -702,8 +702,8 @@ def generation_budget_max(section_turn_caps: Sequence[int] | None = None) -> int
     Args:
         section_turn_caps: The run's actual per-section turn caps, in section
             order. Given by an output kind whose section list is known up front
-            and whose sections carry their own caps (the baseline, task 044
-            phase 4.2): the section term is then the sum of the real lanes
+            and whose sections carry their own caps (the baseline): the section term is then
+            the sum of the real lanes
             rather than the worst case, and every Evidence-search-shaped pass
             the baseline does not run — key findings, case studies, the
             most-relevant-source notes and the full-report intro — drops out of
@@ -729,8 +729,8 @@ def generation_budget_max(section_turn_caps: Sequence[int] | None = None) -> int
 def build_ledger(claims: Sequence[ClaimDraft]) -> list[dict[str, Any]]:
     """Build the rolling prior-section ledger (prompt-facing; slimmed).
 
-    Per-record ``cited_ids``/``flags``/a repeated non-citable note are dropped
-    (022 rider 18 / F0 § DTO spec): the "ledger is context, never evidence,
+    Per-record ``cited_ids``/``flags``/a repeated non-citable note are dropped:
+    the "ledger is context, never evidence,
     not citable" rule is already stated once at the prompt level
     (``SECTION_SYSTEM_PROMPT``), so repeating it — and carrying fields the
     prompt tells the model never to cite — on every record was pure input
@@ -1180,8 +1180,8 @@ def _load_bases_for_snapshots(
 ) -> dict[str, BasisText]:
     """Batch-load basis text for a set of distinct source snapshots.
 
-    Replaces the former one-chunk-query-per-snapshot pattern (013 review N+1
-    finding, task 020 C3 rider): every snapshot's chunks are fetched in ONE
+    Avoids a one-chunk-query-per-snapshot (N+1) pattern:
+    every snapshot's chunks are fetched in ONE
     query over the whole distinct-snapshot set, then grouped in Python. A
     chunkless snapshot (abstract-only basis) reads its envelope metadata's
     ``abstract`` from ``metadata_by_snapshot`` — already selected by the
@@ -1371,7 +1371,7 @@ def _extraction_profile_ids(extraction_row: Mapping[str, Any] | None) -> set[str
 
 
 def _relevance_annotations(extraction_row: Mapping[str, Any] | None) -> dict[str, str]:
-    """Read this run's B2′ relevance marks from the extraction provenance.
+    """Read this run's relevance marks from the extraction provenance.
 
     Run-scoped by design (ADR 0023): relevance is question-relative, so it lives
     in the extraction result's ``extraction_provenance["relevance"]["annotations"]``
@@ -1741,7 +1741,7 @@ def _characterisation_summary_prompt(
 
     Internal consumers (``SubstrateView.characterisation``) keep the full
     ``_characterisation_summary`` records, ``member_ids`` included — this
-    slims only at the seed/prompt boundary (F0 § DTO spec).
+    slims only at the seed/prompt boundary.
     """
     if summary is None:
         return None
@@ -1758,7 +1758,7 @@ def _grouping_summary_prompt(summary: dict[str, Any] | None) -> dict[str, Any] |
 
     Internal consumers (``SubstrateView.grouping``) keep the full
     ``_grouping_summary`` records, ``member_finding_ids`` included — this
-    slims only at the seed/prompt boundary (F0 § DTO spec): prompt-side group
+    slims only at the seed/prompt boundary: prompt-side group
     records carry id/label/description/size/spread, residuals carry counts,
     never membership UUID lists.
     """
@@ -1845,8 +1845,8 @@ def _validate_sections(
     Returns ``(sections, reasons, normalisations)``. Integrity rules reject
     (``reasons`` drive the one bounded repair — instructive sentences, fed
     back verbatim as data, or the repair repeats the mistake). Two live model
-    slips are instead **normalised and recorded** (the rev 8 M5
-    clamp-over-reject posture — they annotate, they are not evidence-bearing):
+    slips are instead **normalised and recorded** (clamp over
+    reject — they annotate, they are not evidence-bearing):
     overlong titles/foci truncate to their bound with an ellipsis, and
     group_ids on a run with no grouping are stripped. ``normalisations`` is
     recorded in provenance, never silent.
@@ -1955,7 +1955,7 @@ def _sections_from_directive(
     ]
 
 
-# --- Baseline mode (task 044 phase 4.2; contract § Baseline, ADR 0037) ---
+# --- Baseline mode (ADR 0037) ---
 
 
 def _baseline_rejections(
@@ -2168,7 +2168,7 @@ def _baseline_evidence_restrictions(
     The restrictions live on the approved plan the scope points at, not in the
     scope context: the two that reach retrieval are compiled into the acquire
     search filters (``country_group`` and the publication-date bounds) and the
-    language restriction deliberately is not (C8), so the plan row is the one
+    language restriction deliberately is not, so the plan row is the one
     place that carries both what was applied and what was recorded and not
     applied. Read defensively — a scope with no plan row, or a payload shape
     this component does not recognise, yields no restrictions rather than
@@ -2312,7 +2312,7 @@ def _baseline_sources_prose(
     return "\n\n".join(lines)
 
 
-# --- The pre-synthesise steer surface (022 item 14 / F5, § Steer schemas) ---
+# --- The pre-synthesise steer surface (022 item 14, § Steer schemas) ---
 #
 # Two side-effect-free callables an out-of-band caller uses to steer synthesise
 # without a runtime pause (deferred seam): ``propose_synthesis_plan`` reads the
@@ -2333,10 +2333,10 @@ def propose_synthesis_plan(
     synthesis_backend: SynthesisBackend,
     section_budget: int | None = None,
 ) -> dict[str, Any]:
-    """Propose a synthesis plan for a scope without minting anything (022 F5).
+    """Propose a synthesis plan for a scope without minting anything.
 
     A read-only, side-effect-free entry point for the pre-synthesise steer
-    point (contract item 14). Unlike ``synthesise_scope``'s own proposal path —
+    point. Unlike ``synthesise_scope``'s own proposal path —
     which mints the artefact *before* proposing sections — this resolves the
     same upstream substrate references, calls the backend's ``propose_sections``
     seam and reads the persisted grouping payload, minting no artefact and
@@ -2421,7 +2421,7 @@ def propose_synthesis_plan(
 
 
 def compile_synthesis_directive(response: Mapping[str, Any]) -> dict[str, Any]:
-    """Compile a steer response into the ``context["synthesis"]`` directive (022 F5).
+    """Compile a steer response into the ``context["synthesis"]`` directive.
 
     Deterministic, fail-closed and pure: it maps the out-of-band user response
     ``{"sections": [...], "group_ids": [...], "retrieval_boosts": {...}}`` to the
@@ -4287,7 +4287,7 @@ def _section_claims(
 ) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
     """Check a section's claims, repair the failing ones once, and settle its prose.
 
-    While it runs it tells the user what is happening (task 058, N3 and N7):
+    While it runs it tells the user what is happening:
     "Checking claims" before the judge; when claims fail, "Revising n claims"
     and the draft ranges being rewritten, before the repair call. Once the
     prose is settled the live draft is forgotten; the durable
@@ -4430,7 +4430,7 @@ def _publish_revising(
     *,
     section_line: str | None,
 ) -> None:
-    """Tell the user which claims are being rewritten (task 058, N3 and N7).
+    """Tell the user which claims are being rewritten.
 
     Publishes "Revising n claim(s)" and the draft ranges of the failing claims
     that bound to the prose (a claim that never bound has no range).
@@ -4764,7 +4764,7 @@ def _blocks_rollup(
     unverified = sum(1 for claim in claims if "quote_unverified" in claim.flags)
     return {
         "title": section.title,
-        # X8: the "label that sentence as reasoning" instruction is prompt-only,
+        # The "label that sentence as reasoning" instruction is prompt-only,
         # so a baseline reasoning section can come back with no reasoning claim
         # at all. Make the absence visible instead of inferring it from a zero
         # in the tier distribution.
@@ -4943,7 +4943,7 @@ def _key_findings_ledger(
     ``claim_type``, ``verdict``, ``cited_finding_ids`` and chunk citations
     (``chunk_record_id`` + ``quote``). Gap claims also carry
     ``payload["gap"]`` (grade + coverage base) so the pass can re-state
-    them (task 034 S3). Data, not instructions (ADR 0015 §8).
+    them. Data, not instructions (ADR 0015 §8).
     """
     ledger: list[dict[str, Any]] = []
     for section, claims in section_claim_groups:
@@ -5024,7 +5024,7 @@ def _key_findings_pass(
     When the backend can stream (``write_key_findings_stream``) and the page
     has a key-findings slot (``display_index``), the prose streams into the
     slot and the writer's citations are marked as they close, as for a body
-    section (task 058, round 8); ``sources`` names what the cited ids are
+    section; ``sources`` names what the cited ids are
     for those marks. The parsed reply is the same either way.
 
     A schema-constrained emission over the run's surviving claims ledger, then
@@ -5059,7 +5059,7 @@ def _key_findings_pass(
         "available_tools": [],
         "available_claim_types": sorted(kf_available),
         "ledger": ledger,
-        # The key findings are always the page's first section (task 058).
+        # The key findings are always the page's first section.
         "display_index": 0,
         # Chunk-content map filtered to chunks cited by surviving claims only
         # (022 rider 16) — the pass's evidence surface, since it runs
@@ -5076,7 +5076,7 @@ def _key_findings_pass(
     }
     usage_totals = UsageAccumulator()
     # The section line names the slot, so the page's mark and action line
-    # show on it as on the body sections (task 058, round 8).
+    # show on it as on the body sections.
     liveness.publish_progress(
         activity=activity("synthesise.key_findings"), section=KEY_FINDINGS_TITLE
     )
@@ -5187,7 +5187,7 @@ def _build_doc_meta(
             ),
         )
     ).fetchall()
-    # Reader-facing label per document: a score word, or "Unrated" (task 056).
+    # Reader-facing label per document: a score word, or "Unrated".
     label_by_tss: dict[str, str | None] = {}
     for row in appraisal_rows:
         key = str(row.task_source_snapshot_id)
@@ -5334,7 +5334,7 @@ def _ground_case_study_card(
 ) -> tuple[list[ClaimDraft], dict[str, int], dict[str, int]] | None:
     """Validate and judge one case-study card without repair.
 
-    Failing cards are dropped whole (task 034 plan Phase B): any span-bind,
+    Failing cards are dropped whole: any span-bind,
     structural, or judge failure returns ``None``.
 
     Args:
@@ -5437,7 +5437,7 @@ def _case_studies_pass(
 
     When the backend can stream (``write_case_studies_stream``) and the page
     has a case-studies slot (``display_index``), each card is sent to the
-    page as it closes in the reply (task 058, round 7); the parsed reply is
+    page as it closes in the reply; the parsed reply is
     the same either way.
 
     Returns a result dict: ``present`` plus, when present, the minted
@@ -5450,7 +5450,7 @@ def _case_studies_pass(
     )
     usage_totals = UsageAccumulator()
     # The section line names the slot, so the page's mark and action line
-    # show on it as on the ordinary sections (task 058, round 7).
+    # show on it as on the ordinary sections.
     liveness.publish_progress(
         activity=activity("synthesise.case_studies"), section=CASE_STUDIES_TITLE
     )
@@ -5657,7 +5657,7 @@ def _ranked_top_sources(
     Returns:
         List of dicts with source_id + metadata for note generation.
     """
-    # Unrated (no score, task 056) ranks after every scored band; no label ranks last.
+    # Unrated (no score) ranks after every scored band; no label ranks last.
     appraisal_order = {
         "Very strong": 0, "Strong": 1, "Moderate": 2, "Limited": 3, "Weak": 4,
         UNRATED_LABEL: 5,
@@ -5729,7 +5729,7 @@ def _write_mrs_notes(
 
     Fail-soft: a failing note is omitted, never fails the run.
 
-    Each note is visible as it is written (task 058, round 8): the activity
+    Each note is visible as it is written: the activity
     line names the source ("Writing a source note · Smith 2023") and each
     kept note is sent to the page with the source's title. Neither is saved;
     the notes this returns are the record.
@@ -5798,7 +5798,7 @@ def _write_full_report_intro(
 
     When the backend can stream (``write_full_report_intro_stream``) and the
     page has an introduction slot (``display_index``), the text streams into
-    the slot (task 058, round 8); the parsed reply is the same either way.
+    the slot; the parsed reply is the same either way.
 
     Args:
         intent: The evidence-scope intent.
@@ -5827,7 +5827,7 @@ def _write_full_report_intro(
     }
     try:
         # The section line names the introduction, not its "Full report" slot
-        # title (task 058, round 9).
+        # title.
         liveness.publish_progress(
             activity=activity("synthesise.intro"), section=INTRO_SECTION_LINE
         )
@@ -5912,7 +5912,7 @@ def synthesise_scope(
         "key_findings_judge": 0,
         "key_findings_repair": 0,
         "key_findings_rejudge": 0,
-        # Case studies pass (task 034 S4).
+        # Case studies pass.
         "case_studies": 0,
         "case_studies_judge": 0,
         "case_studies_repair": 0,
@@ -5946,7 +5946,7 @@ def synthesise_scope(
     retrieval_scope = None
     retriever: ChunkRetriever | None = None
     if corpus.screened_docs > 0:
-        # Searches read through this run's own connection (task 057 N8): inside
+        # Searches read through this run's own connection: inside
         # the component transaction, like every other read here.
         retrieval_scope = build_retrieval_scope(
             conn,
@@ -5971,7 +5971,7 @@ def synthesise_scope(
         selected_tss_ids=selected_tss_ids_str,
         appraised_tss_ids=corpus.appraised_tss_ids,
     )
-    # B2′ (024 / ADR 0023): this run's relevance marks, read run-scoped from the
+    # ADR 0023: this run's relevance marks, read run-scoped from the
     # extraction provenance. Empty when the run carried no emphasis / the
     # annotator failed open. Threaded into every finding surface so member
     # findings and query_findings results carry the mark; the priority block
@@ -6015,7 +6015,7 @@ def synthesise_scope(
 
     created_at = datetime.now(UTC)
     artefact_id = uuid.uuid4()
-    # Baseline mode (task 044 phase 4.2). One flag, read below wherever an
+    # Baseline mode. One flag, read below wherever an
     # Evidence-search-shaped pass would otherwise run: the code-injected
     # Conclusions section, the key-findings pass, the case-studies pass, the
     # most-relevant-source notes and the full-report intro. Everything else
@@ -6072,8 +6072,8 @@ def synthesise_scope(
                 ),
             )
             # The directive's section_budget is the proposed-section
-            # allowance; a directive without one (the rapid depth, task 044
-            # phase 8) writes the supplied list and makes no proposal call.
+            # allowance; a directive without one (the rapid depth)
+            # writes the supplied list and makes no proposal call.
             extras: list[SectionSpec] = []
             if directive.section_budget is not None:
                 extras, baseline_notes = _baseline_extra_sections(
@@ -6180,14 +6180,14 @@ def synthesise_scope(
         else generation_budget_max()
     )
     if progress_emitter is not None:
-        # X8: the skeleton IS the run's own section list. "Key findings" leads
+        # The skeleton IS the run's own section list. "Key findings" leads
         # it only when the key-findings pass will actually run.
         progress_emitter.emit_skeleton(
             [{"title": section.title, "focus": section.focus} for section in sections],
             key_findings=es_passes,
-            # Task 058, round 7: the case studies stream into their own slot.
+            # The case studies stream into their own slot.
             case_studies=es_passes,
-            # Round 8: so does the full report's introduction.
+            # So does the full report's introduction.
             intro=es_passes,
         )
 
@@ -6248,10 +6248,10 @@ def synthesise_scope(
     repair_unparseable_any = False
 
     source_labeller = make_source_labeller(conn, task_id=task_id)
-    # Task 058, round 7: each completed section carries its citations, with
+    # Each completed section carries its citations, with
     # the reference numbers the saved report will give them.
     reference_numbering = ReferenceNumbering(conn, task_id=task_id)
-    # Round 8: what each id the sections could cite is from, so the key
+    # What each id the sections could cite is from, so the key
     # findings' streamed citations can be marked (they run transcript-free).
     kf_sources: tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] = (
         {},
@@ -6260,7 +6260,7 @@ def synthesise_scope(
     for section_index, section in enumerate(written_sections):
         if progress_emitter is not None:
             progress_emitter.section_started(section_index)
-        # Task 058, N2 and N3: the section line rides on ``section=`` with
+        # The section line rides on ``section=`` with
         # every writer line for this section; ``done`` counts the sections
         # finished before this one.
         section_line = activity(
@@ -6288,7 +6288,7 @@ def synthesise_scope(
             "section_index": section_index,
             # The page's index for this section (key findings first at 0):
             # streamed text and revising spans are addressed with it, never
-            # with the loop's own count (task 058; owner round 5).
+            # with the loop's own count.
             "display_index": (
                 progress_emitter.display_index(section_index)
                 if progress_emitter is not None
@@ -6306,7 +6306,7 @@ def synthesise_scope(
                 )
             ],
             "available_claim_types": sorted(available_claim_types),
-            # Task 056 X3: run-stable, so every section's request prefix is
+            # Run-stable, so every section's request prefix is
             # identical. Read by section_prompt.section_request_tools to offer
             # only the lookup kinds the reader above can serve; a control field
             # on the seed, never part of the run message's data payload.
@@ -6314,11 +6314,11 @@ def synthesise_scope(
             "member_findings": member_findings,
             "computed_spread": _computed_spread(section, substrate),
             "ledger": build_ledger(all_claims),
-            # B2′ (024): gates the v8 priority-findings block into the section
+            # Gates the v8 priority-findings block into the section
             # system prompt (a control flag on the seed, never a data-payload
             # field — see section_prompt._section_system_prompt).
             "priority_block_active": priority_block_active,
-            # Output kind (task 044): selects the section writer's preamble.
+            # Output kind: selects the section writer's preamble.
             # ``None`` is the Evidence search report — today's prompt, unchanged.
             "template": directive.template,
         }
@@ -6330,7 +6330,7 @@ def synthesise_scope(
         )
         try:
             # The sources read and cited are named on the page as the
-            # section is written (task 058, owner 2026-11-05).
+            # section is written.
             with source_labelling(source_labeller):
                 loop_result = run_section_loop(
                     synthesis_backend,
@@ -6459,7 +6459,7 @@ def synthesise_scope(
         for finding_id, source in by_finding.items():
             kf_sources[1].setdefault(finding_id, source)
 
-    # --- The baseline's code-rendered Sources foot (task 044 § Baseline) ---
+    # --- The baseline's code-rendered Sources foot ---
     #
     # Written from the coverage record, never by a model, and carrying no
     # claims: how many documents were read, what was not searched and how the
@@ -6534,7 +6534,7 @@ def synthesise_scope(
             progress_emitter.key_findings_started()
         try:
             # The streamed key findings' citations are named on the page as
-            # the sections' are (task 058, round 8).
+            # the sections' are.
             with source_labelling(source_labeller):
                 key_findings_result = _key_findings_pass(
                     conn,
@@ -6616,7 +6616,7 @@ def synthesise_scope(
             if progress_emitter is not None:
                 progress_emitter.key_findings_completed(prose="")
 
-    # --- Case studies pass (task 034 S4) ---
+    # --- Case studies pass ---
     #
     # Guard 3 of 3: a baseline profiles one situation in one place, so there is
     # no comparator case to card up.
@@ -6658,7 +6658,7 @@ def synthesise_scope(
                 "usage": UsageAccumulator().payload(),
             }
         # The streamed cards were the reply still to be checked; the
-        # completed section below brings the checked ones (task 058, round 7).
+        # completed section below brings the checked ones.
         liveness.clear_section_draft()
         call_counts["case_studies"] += int(case_studies_result.get("emission_calls", 0))
         usage_totals.add_payload(
@@ -6700,7 +6700,7 @@ def synthesise_scope(
                 progress_emitter.case_studies_completed(prose="")
 
 
-    # --- Most-relevant-source notes (task 034 S5) ---
+    # --- Most-relevant-source notes ---
     #
     # These last two are Evidence-search-shaped too: a per-source note ranked
     # over the report's citations, and an intro to a full report. A baseline
@@ -6744,7 +6744,7 @@ def synthesise_scope(
         except Exception:  # noqa: BLE001 - full-report intro fail-soft
             log.warning("synthesis.full_report_intro.failed", exc_info=True)
         # The streamed text was the reply; the completed slot carries the
-        # introduction as the report keeps it (task 058, round 8).
+        # introduction as the report keeps it.
         liveness.clear_section_draft()
         if progress_emitter is not None:
             progress_emitter.intro_completed(prose=full_report_intro or "")
@@ -6811,7 +6811,7 @@ def synthesise_scope(
             "groups_unsectioned_by_facet": groups_unsectioned_by_facet,
             # Deterministic proposal normalisations (visible, never silent):
             # overlong title/focus truncation; group_ids stripped when no
-            # grouping is referenced (the rev 8 M5 clamp-over-reject posture).
+            # grouping is referenced (the clamp-over-reject posture).
             "proposal_normalisations": proposal_normalisations,
         },
         "caps": {
@@ -6824,7 +6824,7 @@ def synthesise_scope(
         "sections": section_provenance,
         "inherited_chain_base": _inherited_chain_base(refs),
         "directive": directive.as_provenance(),
-        # B2′ (024 / ADR 0023): whether the v8 priority-findings block rendered
+        # ADR 0023: whether the v8 priority-findings block rendered
         # (iff the run carried relevance annotations) and how many findings the
         # run marked — so a reader distinguishes an annotated run from a bare one.
         "relevance": {
@@ -6849,8 +6849,8 @@ def synthesise_scope(
         unspanned_unlocated=total_unspanned_unlocated,
         tool_calls_total=total_tool_calls,
     )
-    # Task 058 review (trace lane): the streamed write turn fell back to the forced tool
-    # call once on a real run and only the trace showed it. The count rides in the
+    # The streamed write turn can fall back to the forced tool call, and
+    # otherwise only the trace would show it. The count rides in the
     # completed payload so the run row says so (``headline_counts``).
     counts["stream_fallbacks"] = (
         getattr(synthesis_backend, "stream_fallbacks", 0) - fallbacks_before
@@ -6861,7 +6861,7 @@ def synthesise_scope(
     counts["case_studies"] = case_studies_rollup
     if baseline_mode:
         # What kind of artefact this is, and how deep the pass behind it went
-        # (C18). The Result view reads the label; it is never derived there.
+        # . The Result view reads the label; it is never derived there.
         counts["template"] = BASELINE_TEMPLATE_KEY
         counts["depth_label"] = BASELINE_DEPTH_LABEL
     if mrs_notes:
@@ -6962,9 +6962,9 @@ def write_summaries_after_commit(
     disabled_logged = False
 
     for index, spec in enumerate(block_specs):
-        # Round 14: the line moves section by section. ``done`` counts the
+        # The line moves section by section. ``done`` counts the
         # sections already summarised, so the first line reads "0 of N"
-        # (task 058 review: it ran one ahead).
+        # (it ran one ahead).
         liveness.publish_progress(
             activity=activity("synthesise.summary_section", done=index, total=len(block_specs)),
             done=index,
@@ -7216,7 +7216,7 @@ def _artefact_summary_detail(
     }
 
 
-# Deterministic floor under the judge (review 028): the prompt's length and
+# Deterministic floor under the judge: the prompt's length and
 # no-citations rules were instruction-only, so a faithful-but-oversized or
 # citation-carrying summary could persist as verified. Ceilings run 1.5x the
 # prompt's ask — a hard stop for the pathological case, not a style check.

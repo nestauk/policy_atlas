@@ -1,152 +1,87 @@
-# Policy Atlas v3.0
+# Policy Atlas
 
-An evidence-led policy-analysis workspace: capabilities run bounded, inspectable
-pipelines over an acquired evidence corpus and produce grounded artefacts - evidence
-syntheses whose significant claims carry citations, verbatim quotes and appraisal. 
-The v3.0 backend ships one capability,
-**Evidence search**: plan → acquire → screen → classify → appraise → ingest →
-(characterise · select · extract · group, plan-selected) → synthesise.
+Policy Atlas is an evidence-led policy-analysis workspace. It is for policy makers and policy
+analysts in government and the civil service who must give an answer that they can defend with
+evidence. It is not a document generator and not a chatbot.
 
-Product intent and system contracts live in [`docs/specs/`](docs/specs/index.md);
-architectural decisions in [`docs/adr/`](docs/adr/); per-task plans and evidence
-in [`docs/tasks/`](docs/tasks/).
+A **Task** is one use of a **Capability**. A Task makes **Artefacts**, for example a report with
+citations and a screened source list. A **Project** is a collection of Tasks. The code has three
+Capabilities: Evidence search, Options scoping and Theory of change. The web app shows Options
+scoping and Theory of change only when their feature flags are set (see
+[environment.md](docs/agentic-ops/environment.md)).
 
-## Layout
+A second, separate service, the operations service (the ops service), gives operators their own pages to manage
+organisations, people, quotas, sign-up requests and cohorts. It runs from the same code with
+its own database login. Architecture decision record (ADR)
+[0046](docs/adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md) gives the design.
 
-```
-backend/                     Python project (import-neutral hoist, task 025 A.2)
-backend/src/policy_atlas/
-  runtime/                   agent CLI, capability runner, LangGraph harness,
-                             planner, steering, run-spec compile
-  evidence_search/           the EB capability
-    sourcing/                search backends + loop, acquisition, full-text ingest
-    assess/                  screening, classification, appraisal
-    corpus/                  characterise, select, ranking, theme grouping
-    extract/                 Intervention, outcome and context findings extraction, vetters, quote verification
-    group/                   multi-facet grouping over extracted findings
-    synthesis/               artefact composition, section generation loop, grounding judge
-  core/                      schema, db, events, logging, tracing, usage, model-client
-                             plumbing, embeddings, model routes
-  model_routes.toml          which AI model each step uses, per route (see below)
-backend/alembic/             database migrations
-backend/tests/               mirrors the src tree; conftest runs migrations once per session;
-                             backend/tests/data/ holds all fixtures (full-text corpus +
-                             sanitized provider records)
-frontend/                    web app — React 19 + TS strict + Vite + Tailwind (task 025)
-infra/                       CDK (reserved)
-docs/              specs, ADRs, task records, knowledge base, agentic-ops
-```
+The product intent is in [docs/specs/](docs/specs/index.md). The product words are defined in
+[vocabulary.md](docs/specs/vocabulary.md). The users and the product principles are in
+[PRODUCT.md](PRODUCT.md). The visual design system is in [DESIGN.md](DESIGN.md).
 
-## Setup
+## What is in the repository
 
-Requires Python ≥ 3.12, [uv](https://docs.astral.sh/uv/), Docker (Postgres), Node ≥ 20
-and [pnpm](https://pnpm.io) 10+ (see `frontend/README.md` for pnpm install options).
+| Folder | What it holds |
+| --- | --- |
+| [backend/](backend/README.md) | The Python application: the web API, the operations service, the Capabilities, the database schema and migrations, and the tests |
+| [frontend/](frontend/README.md) | The web app and the operations pages (React, TypeScript, Vite and Tailwind CSS) |
+| [infra/](infra/README.md) | The Amazon Web Services (AWS) infrastructure, written with the AWS Cloud Development Kit (CDK) |
+| `scripts/` | Repository checks, deploy scripts, operations scripts, and the evaluation scripts under `scripts/evals/` |
+| `docs/` | Specs, architecture decision records (ADRs) in `docs/adr/`, task records in `docs/tasks/`, the verified-facts bundle in `docs/knowledge/`, and the agent process docs in `docs/agentic-ops/` |
+| `output/` | Exported infrastructure diagrams |
+| `.claude/` | Claude Code settings, project skills and pinned subagents |
 
-```sh
-docker compose up -d      # Postgres (dev + test databases)
-make setup                # uv sync + test DB provisioning
-make verify               # okf-validate · tests · mypy · ruff · build · frontend gates
-make verify-fast          # inner-loop variant (skips the slow ingest suite)
-```
+## Set up and run locally
 
-## Running the web app (backend + frontend)
+You need:
 
-A fresh clone reaches a running app in the steps below (≤ 30 min budget). All
-commands are given relative to the repo root unless noted; `backend/` commands
-run from `backend/` (`make -C backend <target>` from the root works the same).
+- [uv](https://docs.astral.sh/uv/) (the Python package manager) and Python 3.12 or later;
+- Docker (it runs the local Postgres database);
+- Node.js 20 or later, and pnpm (the frontend package manager). Install pnpm as a standalone
+  tool. `frontend/package.json` pins its version in the `packageManager` field.
 
-**1. Backend config.** Copy the example env file and fill in the dev-issuer
-values (defaults are pre-filled and work as-is for local dev):
+Run these commands from the repository root, in this order:
 
 ```sh
-cp backend/.env.example backend/.env
+cp backend/.env.example backend/.env   # local settings; the defaults work for local use
+make setup                             # starts Postgres, makes the test database, installs the
+                                       # Python packages and migrates the dev database
+make frontend-install                  # installs the frontend packages from the lockfile
+make dev                               # API on http://localhost:8000, web app on http://localhost:5173
+make dev-seed                          # optional: adds a sample organisation and two more users
 ```
 
-`uv run` auto-loads `backend/.env` — nothing else to export. See the file for
-what each variable does; `DATABASE_URL`/`APP_ORIGIN`/`OIDC_*` are required by
-`make -C backend dev`.
+`make dev` signs you in as a local user. You do not need a password. With no model key in
+`backend/.env`, the API uses stub (fake) model and search backends, so a run costs nothing. To
+use real models and real search, set the keys that `backend/.env.example` describes.
 
-**2. Dev-issuer bootstrap** (once — issues a local RSA keypair; never used in
-production, where Cognito is the real issuer):
+[environment.md](docs/agentic-ops/environment.md) has the details: the local environment
+variables, what to do after you pull a change, the test databases, and the known problems (for example,
+how to run in a git worktree).
 
-```sh
-cd backend
-uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer
-uv run python -m policy_atlas.api.dev_issuer mint --dir .dev-issuer \
-  --sub dev-user --client-id policy-atlas-dev  # prints a bearer token — copy it
-```
+## Run the checks
 
-**3. Backend dev server** (from `backend/`, or `make -C backend dev` from root):
+| Command | What it runs | When to use it |
+| --- | --- | --- |
+| `make verify` | The full check: the knowledge-bundle format check, the backend tests, type check, lint and build, the evaluation-script checks, the infrastructure tests, the path audit, the prompt-hash guard, the font guard, the generated-API drift check, and the frontend type check, lint, unit tests and build | Before you open a pull request. Continuous integration (CI) runs it on every pull request |
+| `make verify-fast` | The backend tests without the slow full-text ingest tests, the backend type check and lint, and the evaluation-script checks | For a commit between steps of backend work |
+| `make frontend-verify-fast` | The frontend type check, lint and unit tests, without the production build | For a commit of frontend-only work |
 
-```sh
-make -C backend dev       # uvicorn --reload on :8000
-curl http://localhost:8000/healthz   # => {"status": "ok"}
-```
+`make verify` and `make verify-fast` need the Postgres database from `make setup`. The browser
+tests run on their own: `make fe-api-smoke` (the built web app against the real local API) and
+`cd frontend && pnpm e2e` (the web app against mock data). The [Makefile](Makefile) lists every
+target.
 
-The API composes **stub** planner/search backends by default and goes live
-when the selected model route's key is set (`OPENAI_API_KEY` on the default
-route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route); `PA_BACKEND_MODE=live|stub|auto`
-makes the posture explicit (see `backend/.env.example`).
+## How the work is organised
 
-**Choosing AI models.** Every model name lives in one committed file,
-`backend/src/policy_atlas/model_routes.toml`. The file has two parts:
-
-- `[steps]` gives each AI step (for example `longlist_judgment`) a tier: `fast`,
-  `standard` or `frontier`.
-- `[routes.<name>]` says which model each tier uses on that route, plus the
-  embedding model and provider settings.
-
-One setting picks a route from it:
-
-| `POLICY_ATLAS_MODEL_ROUTE` | where AI calls go | key it reads |
-|---|---|---|
-| unset (`openai-direct`) | OpenAI directly: Luna, Terra, Sol | `OPENAI_API_KEY` |
-| `bedrock` | Amazon Bedrock in London: GPT-5.6 models, Cohere embeddings | `AWS_BEARER_TOKEN_BEDROCK` |
-| `bedrock-claude` | not in use; kept for testing Claude models later | `AWS_BEARER_TOKEN_BEDROCK` |
-
-To change a model, edit the route file and open a pull request. To try a model
-without a pull request, put your own route in a separate file and name it using an env variable `POLICY_ATLAS_MODEL_ROUTE_FILE`. The old per-step `POLICY_ATLAS_*_MODEL`
-settings are ignored. Staging and production pick their route in
-`infra/pa_config.json` (`backend.model_route`, `openai-direct` in both today).
-Diagrams and details:
-[`docs/tasks/053-bedrock-local-route/model-routing.html`](docs/tasks/053-bedrock-local-route/model-routing.html)
-(open it in a browser).
-
-**4. Frontend dev server** (from `frontend/`; installs once with `pnpm install`):
-
-```sh
-cd frontend
-pnpm install
-pnpm dev                  # Vite on :5173, proxying /api/* to :8000
-```
-
-Open <http://localhost:5173>. With no `VITE_OIDC_AUTHORITY` set (the default),
-the app shows a dev-only "paste a dev token" panel — paste the token minted in
-step 2 to sign in.
-
-**5. Mock-mode journey** (no backend/Postgres/auth required — a scripted
-fixture project + SSE narrative, used by the Playwright acceptance journey):
-
-```sh
-cd frontend
-pnpm exec playwright install chromium   # once
-VITE_MOCK=1 pnpm dev                    # or just `pnpm e2e` below, which starts its own server
-pnpm e2e                                # runs playwright test against a VITE_MOCK=1 dev server
-```
-
-`pnpm e2e` starts its own `VITE_MOCK=1` dev server — but it will **reuse any
-dev server already on :5173, including a plain (non-mock) one**, and every
-spec then fails at the sign-in panel. If you had `pnpm dev` running for step
-4, stop it before `pnpm e2e`.
-
-## Running the agent CLI 
-
-The capability-runner CLI is the non-web entry point:
-
-```sh
-uv run --project backend python -m policy_atlas.runtime.agent
-```
+[AGENTS.md](AGENTS.md) holds the rules for people and coding agents. Each piece of engineering
+work is a task with its records in `docs/tasks/<task-id>/`. The task-cycle skills in
+`.claude/skills/` (start at [task-cycle](.claude/skills/task-cycle/SKILL.md)) give the steps
+from contract to merge. [docs/agentic-ops/](docs/agentic-ops/harness.md) describes the agent
+setup, the local environment and the known failures. The Claude Code plugins that the skills
+use are declared in `.claude/settings.json` (`enabledPlugins` and `extraKnownMarketplaces`).
+Each contributor installs them in their own Claude Code.
 
 ## Licence
 
-AGPL-3.0-only (see [LICENSE](LICENSE)).
+GNU Affero General Public License v3.0 only (AGPL-3.0-only). See [LICENSE](LICENSE).

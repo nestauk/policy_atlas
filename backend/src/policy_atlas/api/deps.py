@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
+from dataclasses import dataclass
+from typing import Any, cast
 
 import structlog
 from fastapi import Request
@@ -45,6 +46,21 @@ from policy_atlas.runtime.task_agent import (
 log = structlog.get_logger()
 
 
+@dataclass(frozen=True)
+class Identity:
+    """The operations service's optional Cognito identity-provider client.
+
+    Args:
+        cognito: Cognito Identity Provider client, when the issuer names a pool.
+        pool_id: Cognito user-pool identifier, when configured.
+        region: AWS region that owns the user pool, when configured.
+    """
+
+    cognito: Any | None
+    pool_id: str | None
+    region: str | None
+
+
 #: Product-egress keys a fully-live deployment is expected to carry; missing
 #: entries degrade coverage silently (the pinned live check ran with
 #: OVERTON_API_KEY absent and produced an honest-but-thin evidence base).
@@ -54,8 +70,8 @@ _LIVE_SEARCH_KEYS = ("OVERTON_API_KEY", "OPENALEX_API_KEY")
 def _live() -> bool:
     """Whether API seams compose live provider backends.
 
-    ``PA_BACKEND_MODE`` makes the posture explicit (review finding adv-M4,
-    2026-07-21): ``live`` demands the core key and fails loud without it,
+    ``PA_BACKEND_MODE`` makes the posture explicit: ``live`` demands the
+    core key and fails loud without it,
     ``stub`` pins stubs even on a keyed box (demos, load tests, scans),
     and the default ``auto`` preserves the key-presence switch that
     ``agent`` uses.
@@ -95,6 +111,19 @@ def get_settings(request: Request) -> Settings:
         The lifespan-independent application configuration.
     """
     return cast(Settings, request.app.state.settings)
+
+
+def get_identity(request: Request) -> Identity:
+    """Return the identity-provider seam owned by the operations lifespan.
+
+    Args:
+        request: Incoming request whose application owns the identity seam.
+
+    Returns:
+        The configured Cognito identity, or an empty identity in development.
+    """
+    return cast(Identity, request.app.state.identity)
+
 
 
 def get_engine(request: Request) -> Engine:
@@ -225,7 +254,7 @@ def get_agent_backend() -> AgentBackend:
 
 
 def get_title_backend() -> TitleWriter:
-    """Return the backend that writes task and chat titles (task 058, round 14).
+    """Return the backend that writes task and chat titles.
 
     Returns:
         The live OpenAI agent backend when the route's key is configured,

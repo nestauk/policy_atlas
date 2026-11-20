@@ -30,7 +30,7 @@ from policy_atlas.evidence_search.extract.finding_references import (
     render_field_sections,
 )
 
-# Fingerprint components (contract decision 2): named constants; any
+# Fingerprint components: named constants; any
 # output-affecting change bumps a version and thus the extraction fingerprint.
 # PROFILE_ID is a stable requirement-family id ("ES's base IOF extraction");
 # field-set evolution rides the schema/prompt/rules version components, which
@@ -40,7 +40,7 @@ PROFILE_ID = "eb_iof_base_v1"
 SCHEMA_VERSION = "iof_v3"  # covers the wire AND stored model layers
 
 # The segment id carried by an abstract-basis payload; anchors naming it map to
-# chunk_id null at write (contract decision 4, abstract-envelope location).
+# chunk_id null at write (abstract-envelope location).
 ABSTRACT_SEGMENT_ID = "abstract"
 
 EffectDirection = Literal["increase", "decrease", "no_effect", "mixed", "unclear"]

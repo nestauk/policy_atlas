@@ -1,42 +1,29 @@
 ---
 type: Convention
-title: The event log's run-id FK decides what can carry audit state — no run, no event
-description: Anything that happens without a run — a skipped component, a pre-run plan event, a steering interaction — needs a table-first or outcome-object carrier instead; the same constraint resurfaced three times in one slice. Corollary — some tables reach their run only transitively (annotation via block → artefact), shaping how run-scoped queries must be written.
-tags: [event-log, persistence, audit, agent, architecture]
-timestamp: 2026-07-12
+title: Run-less audit events carry no run id; some tables reach their run only through another table
+description: event_log.run_id is nullable, so task lifecycle events outside any run are appended with run_id None, while the composite foreign key still stops a run of one task from writing into another task's log. Annotation has no run_id and reaches its run through block and artefact.
+tags: [event-log, persistence, audit]
+generated:
+  by: claude-opus/5.5
+  at: 2026-11-20
+sources:
+  - id: schema
+    resource: backend/src/policy_atlas/core/schema.py
+    title: event_log, annotation
+  - id: lifecycle
+    resource: backend/src/policy_atlas/api/lifecycle.py
 ---
 
 # Rule
 
-`event_log` rows require a `run_id` (composite FK; see
-[event-log sequence](event-log-sequence.md)), so only things that happen
-*inside a run* can be evented. Anything without a run needs a different
-carrier, chosen deliberately:
+- `event_log.run_id` is nullable. Task lifecycle events that happen outside a run (for example
+  rename and archive in `api/lifecycle.py`) are appended with `run_id=None`.
+- When a run id is present, the composite foreign key `fk_event_log_run_task`
+  (`run_id`, `task_id`) → `runs` stops a run of one task from writing into another task's log.
+- Plan lifecycle state lives in `plan` version rows, not in events.
+- `annotation` has no `run_id` column. It reaches its run only through `block` → `artefact`.
+  A run-scoped annotation query joins that path; when it wants one specific write it orders
+  newest first and filters on the payload shape (for example
+  `a.payload ? 'cited_finding_ids'`).
 
-- **plan lifecycle** (proposed/approved/superseded, before any run) →
-  table-first: `plan` version rows (017 contract rev 2.5).
-- **skipped components** (a skip means no run row exists) → the
-  `RunPlanOutcome` object + end-of-run collation.
-- **steering interactions** → a user-attributed plan version row for
-  attribution, with the fine directive in the re-run's
-  `selection_result.selection_provenance` (the re-run *has* a run).
-
-# Why
-
-017 hit this constraint three separate times while wiring the orchestrator;
-each time the first instinct was "emit an event" and each time the FK made
-that impossible. Naming the pattern avoids re-deriving it: when audit state
-has no run, pick table-first or outcome-object up front.
-
-# Watch out
-
-Outcome-object carriers are not durable — a skip reason lives only in the
-process that ran the plan. If durable skip provenance is ever needed, that is
-a schema decision (recorded on the deferred provenance seam), not an event.
-
-The transitive-reach corollary (020 live check): `annotation` has no
-`run_id` column — it reaches its run only via `block` → `artefact`. A
-run-scoped annotation query therefore joins that path and, when picking a
-specific mint, wants newest-first plus a payload-shape filter
-(`a.payload ? 'cited_finding_ids'` for finding-claim citations) rather than
-assuming run scoping exists on the table.
+See also [event-log-sequence](event-log-sequence.md).

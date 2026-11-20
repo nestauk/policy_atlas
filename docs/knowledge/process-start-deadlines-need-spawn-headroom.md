@@ -3,7 +3,9 @@ type: Testing rule
 title: A deadline clock that starts at Process.start() is really asserting "spawn + import < deadline"
 description: On a loaded host, child-process spawn plus package import can exceed a tight parse deadline before the worker runs a line of real work — mislabelling a healthy worker as the very timeout the test rules out.
 tags: [testing, multiprocessing, timeouts, flakiness]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

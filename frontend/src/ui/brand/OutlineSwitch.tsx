@@ -1,8 +1,7 @@
 import { cn } from "./cn";
 
 /**
- * A switch between two or three views (task 058, round 10 finding 3; one
- * component since round 11): the outline button's look, joined into one bar,
+ * A switch between two or three views: the outline button's look, joined into one bar,
  * `aria-pressed` on each; the chosen one takes a Navy border and Navy words,
  * the others stay Grey and turn Navy on hover. Never a fill: the fill belongs
  * to the page's one primary. 40 px tall beside the page's other controls (the

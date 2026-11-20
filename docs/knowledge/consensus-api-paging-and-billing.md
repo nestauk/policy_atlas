@@ -3,7 +3,16 @@ type: Integration quirk
 title: Consensus API pages are zero-indexed, refuse to cross 1,000, and bill every call on our account
 description: Consensus answers HTTP 400 to any page where (page + 1) x page_size > 1000 and sends next_page null one page early, so at the plan's echoed size 300 the last request must be page 9 at size 100; pages hold a few results fewer than their size, so paging arithmetic must count positions, not results; our API beta account is billed $0.05 per call (one call per 100 results returned) with no included amount.
 tags: [search-backends, consensus, paging, billing, evaluation, live-probe]
-timestamp: 2026-09-25
+generated:
+  by: process:okf-migrate
+  at: 2026-09-25
+sources:
+  - resource: "../tasks/046-search-baselines/contract.md"
+    title: "[046 contract \u00a7 Arms](../tasks/046-search-baselines/contract.md) (facts pinned from the Consensus docs, 2026-09-25)"
+  - resource: "../tasks/046-search-baselines/verification.md"
+    title: "[046 verification \u00a7 Consensus preflight and flagged deviation 1](../tasks/046-search-baselines/verification.md)"
+  - resource: "scripts/evals/search/measure/baseline_recall.py"
+    title: "`scripts/evals/search/measure/baseline_recall.py` `fetch_consensus`, `cost_usd`; `tests/test_measure.py::test_baseline_paging_consensus`"
 ---
 
 # Rules
@@ -45,11 +54,3 @@ same 10 calls.
   [eval-cost-figures-name-their-unit](eval-cost-figures-name-their-unit.md).
 - The site blocks plain fetchers; `https://docs.consensus.app/llms-full.txt` is the same
   documentation as text.
-
-# Citations
-
-- [046 contract § Arms](../tasks/046-search-baselines/contract.md) (facts pinned from the
-  Consensus docs, 2026-09-25)
-- [046 verification § Consensus preflight and flagged deviation 1](../tasks/046-search-baselines/verification.md)
-- `scripts/evals/search/measure/baseline_recall.py` `fetch_consensus`, `cost_usd`;
-  `tests/test_measure.py::test_baseline_paging_consensus`

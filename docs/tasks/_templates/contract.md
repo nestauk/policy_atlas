@@ -81,7 +81,7 @@ grow past this slice, or the turn/token budget is spent. Report the blocker; don
 
 ## Acceptance checks
 
-- `make verify` (test · typecheck · lint · build) — green.
+- `make verify` — green.
 - Deterministic vs AI eval: name which apply (schema/event-log/quote-presence are tests; judge
   behaviour is an eval). If a check is red, say whether it's expected for this slice, a known repo
   failure, or a blocker — don't call the slice done with an unexplained red check.

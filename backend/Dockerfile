@@ -23,6 +23,10 @@ RUN uv sync --no-dev --no-group ops --no-install-project --frozen
 
 COPY . .
 
+# deploy.sh builds the ops pages into backend/ops-ui/ before this image build
+# (task 065 B3, plan P1). The API uses this image too and never reads it.
+RUN mkdir -p /app/ops-ui
+
 # Install the src-layout project itself into the virtual environment.
 RUN uv sync --no-dev --no-group ops --frozen
 
@@ -42,6 +46,7 @@ COPY --from=builder --chown=app:app /app/.venv ./.venv
 COPY --from=builder --chown=app:app /app/src ./src
 COPY --from=builder --chown=app:app /app/alembic ./alembic
 COPY --from=builder --chown=app:app /app/alembic.ini ./alembic.ini
+COPY --from=builder --chown=app:app /app/ops-ui ./ops-ui
 
 # Compile every Python file to bytecode once, at build time (task 057, N13).
 # Without this, each fresh container (an API task or an ingest function) compiles
@@ -55,4 +60,9 @@ EXPOSE 8000
 
 USER app
 
-CMD ["uvicorn", "policy_atlas.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# The load balancer keeps idle connections open for 120 s, but uvicorn's default
+# is 5 s, which closed them first and caused 502 errors; 125 s outlasts the
+# balancer. --proxy-headers gives the real client address (from X-Forwarded-For,
+# trusted only from FORWARDED_ALLOW_IPS). --no-server-header stops the
+# "server: uvicorn" response header.
+CMD ["uvicorn", "policy_atlas.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "125", "--proxy-headers", "--no-server-header"]

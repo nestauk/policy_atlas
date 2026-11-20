@@ -3,7 +3,9 @@ type: Process rule
 title: Binary verification evidence (screenshots, recordings) is never committed — attach it to the task PR
 description: The repo is public and squash-merged blobs live in every clone forever; 026 and 027 committed 32 evidence PNGs before the pattern was caught at the 027 merge. Evidence dirs are gitignored; verification.md references the PR attachment.
 tags: [process, task-cycle, git, public-repo, evidence]
-timestamp: 2026-08-06
+generated:
+  by: process:okf-migrate
+  at: 2026-08-06
 ---
 
 # Rule

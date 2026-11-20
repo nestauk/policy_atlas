@@ -13,7 +13,7 @@ setup:
 	uv sync
 	uv run alembic upgrade head
 
-# Local dev API server (task 025 I.1 clean-clone acceptance). Loads
+# Local dev API server. Loads
 # backend/.env via `uv run --env-file` — the ONE place local env loading
 # happens (settings stays pure os.environ so tests never inherit live keys). Requires the dev-issuer bootstrap
 # (`uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer`)
@@ -28,7 +28,7 @@ dev:
 # constraints, which Postgres validates against existing rows — so one orphaned
 # `search_coverage_record` row with a post-widen `stop_condition` fails the
 # downgrade and reds the whole suite for a reason nowhere near the test that
-# leaked it (cost us a build, 2026-08-10). Dropping is the cheap fix: the full
+# leaked it. Dropping is the cheap fix: the full
 # schema rebuilds from the migration chain in well under a second, and it means
 # no test can ever inherit another run's state.
 # `dropdb --force` is irreversible, so the target refuses to fire unless BOTH
@@ -50,12 +50,12 @@ reset-test-db:
 		dropdb --force --if-exists -U policy_atlas $(TEST_DB_NAME); \
 	docker compose -f ../docker-compose.yml exec -T db \
 		createdb -U policy_atlas $(TEST_DB_NAME)
-	@# Task 057: the tests need the pgvector extension (vector search) in the fresh database.
+	@# The tests need the pgvector extension (vector search) in the fresh database.
 	@docker compose -f ../docker-compose.yml exec -T db \
 		psql -U policy_atlas -d $(TEST_DB_NAME) -X -c "CREATE EXTENSION IF NOT EXISTS vector"
 
 # -n auto: one pytest-xdist worker per core, each on its own copy of the test database
-# (tests/conftest.py makes the copies; task 056, owner 2026-11-02).
+# (tests/conftest.py makes the copies).
 test: reset-test-db
 	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest -n auto
 
@@ -73,15 +73,16 @@ lint:
 build:
 	uv build
 
-# Schema-first OpenAPI export (task 025 F.1): the Pydantic contract package
+# Schema-first OpenAPI export: the Pydantic contract package
 # (`policy_atlas.api.contract`) is the sole source of truth; this is the one
 # place the document is generated from it. The frontend's generated TS
 # client is regenerated from this file's output (`make openapi-sync` at
 # root); `make drift-check` at root fails CI if it goes stale.
 openapi:
 	uv run python -m policy_atlas.api.export_openapi ../frontend/openapi.json
+	uv run python -m policy_atlas.api.export_openapi ../frontend/openapi-ops.json --mode ops
 
-# Dependency-vulnerability audit (016 contract rev 2.2): PyPA/OSV advisories over
+# Dependency-vulnerability audit: PyPA/OSV advisories over
 # the locked dependency set. Audits the synced environment (= the uv.lock closure;
 # the editable first-party project is the one expected skip) rather than an
 # exported requirements file: pip-audit's `-r` mode builds a throwaway venv via

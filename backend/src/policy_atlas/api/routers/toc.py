@@ -189,11 +189,11 @@ def check_status(walk: Row[Any] | None) -> CheckStatus:
     if walk.status in ("succeeded", "degraded"):
         if kind == TOC_WALK_CHECK:
             return "checked"
-        # A draft that landed is followed at once by its check (S4), unless it
-        # is an uploaded theory waiting for the user's review (increment 5).
+        # A draft that landed is followed at once by its check, unless it
+        # is an uploaded theory waiting for the user's review.
         return "drafted" if (walk.context or {}).get(TOC_REVIEW_FIRST_KEY) else "checking"
     if walk.status == "aborted" and kind == TOC_WALK_CHECK:
-        return "stopped"  # the user's Stop (C48)
+        return "stopped"  # the user's Stop
     return "failed"
 
 
@@ -268,7 +268,7 @@ def toc_graph_out(conn: Connection, task_id: uuid.UUID, *, public: bool = False)
             conn, {row.edited_by for row in [*rows.boxes.values(), *rows.links.values()]}
         )
     )
-    # A check named on links (C40) is "checking" only those links; updating the
+    # A check named on links is "checking" only those links; updating the
     # report checks none.
     walk_context = (walk.context or {}) if walk is not None else {}
     named = set(walk_context.get(TOC_LINKS_KEY) or [])
@@ -391,7 +391,7 @@ def _source_type(metadata: dict[str, Any]) -> Literal["academic", "policy", "web
     return _SOURCE_TYPE.get(str(metadata.get("backend")), "academic")
 
 
-#: Least relevance of a document whose levels a box shows (fit review, 2026-10-30).
+#: Least relevance of a document whose levels a box shows (fit review).
 BOX_FIGURE_RELEVANCE = 2
 
 
@@ -477,13 +477,13 @@ def toc_evidence_out(
         key: [] for key in rows.boxes
     }
     indicators: dict[str, list[str]] = {key: [] for key in rows.boxes}
-    # Each judged document's short citation, for its figures (C37).
+    # Each judged document's short citation, for its figures.
     cites: dict[uuid.UUID, dict[str, Any]] = {}
     # The current judgement of each (link, document), for its figures' quote in context.
     judgement_of: dict[tuple[str, uuid.UUID], uuid.UUID] = {}
     #: The counted judgement's relevance, for which box figures show.
     relevance_of: dict[tuple[str, uuid.UUID], int] = {}
-    #: Judgements that count now: accepted and not removed (C42, C44); only their figures show.
+    #: Judgements that count now: accepted and not removed; only their figures show.
     countable: set[tuple[str, uuid.UUID]] = set()
     for row in evidence:
         key = str(row.link_id)
@@ -581,7 +581,7 @@ def toc_evidence_out(
         key = str(figure.link_id)
         link_row = rows.links.get(key)
         cite = cites.get(figure.task_source_snapshot_id)
-        # Only the link's current wording counts, as for its judgements (C19).
+        # Only the link's current wording counts, as for its judgements.
         judgement = judgement_of.get((key, figure.task_source_snapshot_id))
         if (
             link_row is None
@@ -739,7 +739,7 @@ def get_toc_evidence_context(
     return result
 
 
-# --- Editing (C41, C47, C10, C40) ---------------------------------------------------------
+# --- Editing ---------------------------------------------------------
 
 
 def _editable_toc(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser) -> None:
@@ -1291,7 +1291,7 @@ def stop_toc_check(
     return {"status": "stopping"}
 
 
-# --- Review, suggestions and the report (C45, C46) -------------------------------------
+# --- Review, suggestions and the report -------------------------------------
 
 
 @router.post("/review", status_code=202)

@@ -1,4 +1,4 @@
-"""Seminal works: the studies the check's documents cite most (task 054, ruling 2026-11-04).
+"""Seminal works: the studies the check's documents cite most.
 
 The item searches find recent documents by meaning, so an older, much-cited
 study that shaped a field can be missed. After every item search has
@@ -110,7 +110,7 @@ def fetch_seminal_works(
     try:
         found = list(openalex.lookup_ids(targets, wire_params=wire))
     except Exception as exc:  # any provider failure: carry on without them
-        log.warning("toc_seminal.lookup_failed", task_id=str(task_id), error=str(exc))
+        log.warning("toc_seminal.lookup_failed", task_id=str(task_id), error=type(exc).__name__)
         counts["lookup_failed"] = True
         return counts
     # Most-cited first, so the pool rank on each event is the citation rank.

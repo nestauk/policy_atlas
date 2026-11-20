@@ -3,6 +3,7 @@ import { type ComponentProps, useState } from "react";
 import { type TocEdit, useTocEdit } from "../../api/mutations";
 import { useTocHistory } from "../../api/queries";
 import { formatDate } from "../../lib/dates";
+import { conflictSentences } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { CloseButton } from "../../ui/brand/CloseButton";
@@ -36,11 +37,12 @@ function refusal(error: unknown): string {
   if (code === "toc_duplicate") return "These two boxes are already connected.";
   if (code === "run_active") return "A check is running. Try again when it finishes.";
   if (code === "capacity") return "Policy Atlas is busy. Try again in a minute.";
+  if (code === "user_capacity") return conflictSentences.user_capacity;
   return (error as Error | null)?.message ?? "That did not work. Try again.";
 }
 
 /**
- * The editing state of the Result page (C41): runs edits, keeps the Undo
+ * The editing state of the Result page: runs edits, keeps the Undo
  * toast for the last one, and the error line for a refused one. Undo in the
  * toast reverses the newest undoable change in History.
  */
@@ -162,7 +164,7 @@ function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onCli
 }
 
 /**
- * The bar across the top of the canvas (round 5): the pathway choice, the edit
+ * The bar across the top of the canvas: the pathway choice, the edit
  * buttons and the more menu. It sits inside the full-screen area, so all of it
  * works in full screen too.
  */
@@ -192,7 +194,7 @@ export function CanvasBar({
   onReview: () => void;
   onGuide: () => void;
   guideOpen: boolean;
-  /** Suggestions waiting, and whether their panel is open (owner, 2026-11-04). */
+  /** Suggestions waiting, and whether their panel is open. */
   suggestions: number;
   suggestionsOpen: boolean;
   onSuggestions: () => void;
@@ -244,8 +246,8 @@ export function CanvasBar({
   );
 }
 
-/** The Download menu (contract item 6), grouped by what people do next. It
- *  sits in the report's kind row (task 054, A14). An image that cannot be
+/** The Download menu, grouped by what people do next. It
+ *  sits in the report's kind row. An image that cannot be
  *  made reports through `onFailed` (the page's error toast), never a browser
  *  dialog. */
 export function tocDownloads(graph: TocGraph, onFailed?: (message: string) => void) {
@@ -261,7 +263,7 @@ export function tocDownloads(graph: TocGraph, onFailed?: (message: string) => vo
   ];
 }
 
-/** Add a box: its layer and text (C41). */
+/** Add a box: its layer and text. */
 export function AddBoxForm({ editor, onDone }: { editor: Editor; onDone: (boxId: string | null) => void }) {
   const [layer, setLayer] = useState<BoxLayer>("outcome_short");
   const [text, setText] = useState("");
@@ -297,7 +299,7 @@ export function AddBoxForm({ editor, onDone }: { editor: Editor; onDone: (boxId:
   );
 }
 
-/** The toast after an edit: what changed, and Undo (C41). */
+/** The toast after an edit: what changed, and Undo. */
 export function UndoToast({ text, onUndo, onClose }: { text: string; onUndo: () => void; onClose: () => void }) {
   return (
     <div role="status" className={cn(TOAST_CLASS, "fixed bottom-4 right-4 z-50 w-96 max-w-[92vw] items-center border-line-2 text-body")}>
@@ -310,7 +312,7 @@ export function UndoToast({ text, onUndo, onClose }: { text: string; onUndo: () 
   );
 }
 
-/** "Edited by Ada · 30 Oct, 11:20" under a title (C41); nothing when nobody has edited it. */
+/** "Edited by Ada · 30 Oct, 11:20" under a title; nothing when nobody has edited it. */
 export function EditedLine({ by, at }: { by?: string | null; at?: string | null }) {
   if (by == null) return null;
   return (

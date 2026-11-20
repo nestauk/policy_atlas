@@ -20,12 +20,12 @@ import { StashAndSplashRedirect } from "../routes/StashAndSplashRedirect";
 import { useForgetReportExpandOnLeave } from "./ArtefactOutline";
 
 /**
- * Layout for a public (link-shared) Task opened without signing in —
- * task 037. Same URL as the app; only Results and Sources render, behind
+ * Layout for a public (link-shared) Task opened without signing in.
+ * Same URL as the app; only Results and Sources render, behind
  * the backend's public read leg. A Task that is not public (or unknown,
  * or archived) 404s on the tokenless task read and falls through to
- * the existing stash-and-splash behaviour, so a private link looks
- * exactly like it did before this slice.
+ * the stash-and-splash behaviour, so a private link looks
+ * like any signed-out link.
  *
  * The run stream never connects (`connect={false}`) and the public-view
  * context disables the chat query and affordances inside the reused
@@ -33,7 +33,7 @@ import { useForgetReportExpandOnLeave } from "./ArtefactOutline";
  */
 export function PublicTaskShell() {
   const { taskId = "" } = useParams();
-  // Leaving the task forgets its report's expand state (round 12).
+  // Leaving the task forgets its report's expand state.
   useForgetReportExpandOnLeave(taskId);
   const task = useTask(taskId);
   const auth = useAuth();
@@ -79,7 +79,7 @@ export function PublicTaskShell() {
           <RunStreamProvider taskId={taskId} connect={false}>
             <div className="flex h-svh w-full min-w-0 max-w-full flex-col overflow-hidden">
               {/* Its own View Transition layer, held still above the page, so a
-                  longlist regroup never draws over it (round 13, owner). */}
+                  longlist regroup never draws over it. */}
               <NavBar aria-label="App" className="shrink-0 [view-transition-name:app-nav] [view-transition-class:shell-chrome]">
                 <NavHomeLink />
                 <Button size="sm" onClick={onSignIn}>

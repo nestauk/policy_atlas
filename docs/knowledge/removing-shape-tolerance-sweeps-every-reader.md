@@ -3,7 +3,9 @@ type: Convention
 title: Removing a persisted-shape tolerance must sweep every reader of the shape
 description: When a fallback for an old persisted shape is removed (021 amendment — old flat roll-up), the sweep is defined by readers of the shape, not by the module named in the decision; a twin fallback in a parallel module (synthesise's _extraction_profile_ids beside synthesis_tools' _load_extraction_docs) survived the amendment and turned "raise loudly" into "silently degrade" on one of two paths.
 tags: [persisted-shapes, fail-closed, migration, review-stack, extraction-rollup]
-timestamp: 2026-07-13
+generated:
+  by: process:okf-migrate
+  at: 2026-07-13
 ---
 
 # Rule

@@ -1,4 +1,4 @@
-"""Section-loop tools, retrieval helper, loop runner and directive parser (task 013).
+"""Section-loop tools, retrieval helper, loop runner and directive parser.
 
 This module owns the *code-enforced* side of the repo's first agent loop: the
 plan-pinned constants, the three read-only scoped tools (``search_chunks`` /
@@ -9,7 +9,7 @@ surfaces live in :mod:`policy_atlas.evidence_search.synthesis.section_prompt` an
 :mod:`policy_atlas.evidence_search.synthesis.grounding_judge`; nothing in this module
 composes prose.
 
-Disciplines binding here (contract 013): the tool set is closed, read-only and
+Disciplines binding here: the tool set is closed, read-only and
 substrate-scoped; an unknown tool name is a validation error, never executed;
 caps are enforced in code and cap exhaustion forces the claims emission, never
 extends the loop; ``search`` remains acquire's alone — no egress verb exists in
@@ -87,9 +87,9 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-# --- Plan-pinned constants (plan.md rev 2 — binding; the caps-bind test
+# --- Pinned constants (binding; the caps-bind test
 # asserts these module constants are the values enforced on the live path,
-# the V2 dead-config lesson) ---
+# so none is dead config) ---
 
 SECTION_CAP = 8
 # Generation turns per section loop. The forced claims emission IS the
@@ -103,7 +103,7 @@ SECTION_TURN_CAP = 6
 READ_CALLS_PER_TURN_CAP = 6
 SYNTH_CHUNK_TOP_K = 8
 SYNTH_CHUNK_CHAR_BUDGET = 24_000
-# Top-N per relevance leg BEFORE fusion (plan review M5): priors/boosts/the
+# Top-N per relevance leg BEFORE fusion: priors/boosts/the
 # reranker operate on this bounded candidate set; "zero-relevance never
 # surfaced by boost alone" is defined as not-in-either-leg's-pool → not a
 # candidate.
@@ -119,7 +119,7 @@ RRF_K = 60
 # selected documents get this multiplicative boost on the fused score,
 # recorded in provenance.
 SELECTION_PRIOR_BOOST = 2.0
-# Directive retrieval-boost weights clamp to this range (contract rev 8 M5).
+# Directive retrieval-boost weights clamp to this range.
 # Deliberate divergence from the select precedent (plan review m6): select
 # REJECTS out-of-range weights; the synthesise directive grammar CLAMPS them.
 BOOST_CLAMP_MIN = 0.1
@@ -138,18 +138,18 @@ BOOST_COLUMNS = ("origin", "primary_evidence_type", "text_basis")
 SEARCH_QUERY_MAX_LENGTH = 1000
 # Shared row cap for windowed lookup/selection returns (one knob, two surfaces).
 LOOKUP_ROW_CAP = 100
-# Bounds shared with the directive grammar (contract rev 8 M5).
+# Bounds shared with the directive grammar.
 DIRECTIVE_SECTION_TEXT_MAX = 200
 # A template's section instructions are code, not model output: the baseline's
 # eight foci (``baseline_prompt.BASELINE_SECTIONS``) are lead-authored, versioned
 # with the template and 250-450 characters each. The 200-character bound above
 # exists to fence *untrusted* directive text — a steering delta, a proposal —
 # so it still governs every title, every nav label and every focus outside
-# template mode (task 044, plan S2).
+# template mode.
 DIRECTIVE_TEMPLATE_FOCUS_MAX = 600
 DIRECTIVE_LIST_MAX = 200
 
-# The closed lookup query vocabulary v1 (plan rev 2). Unknown kind → tool-level
+# The closed lookup query vocabulary v1. Unknown kind → tool-level
 # validation error, never executed; all queries scoped to task_id + the
 # resolved run references; side-effect-free.
 #
@@ -196,13 +196,13 @@ class ChunkSearchResult(TypedDict):
     content: str  # the full frozen chunk text (the only quotable surface)
     text_basis: NotRequired[str]  # "full_text" | "abstract_only"
     origin: str  # "selected" | "unselected_screened"
-    # Citability under the appraised-evidence rule (contract rev 8 M4):
+    # Citability under the appraised-evidence rule:
     # produce-grounded-block cites only appraised evidence, while screen bounds
     # READING — the model may read unappraised chunks but a citation to one
     # rejects, so the record says which is which.
     appraised: bool
     fused_score: float
-    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): terse, attached
+    # Default metadata set (ADR 0015 §8): terse, attached
     # on the record itself, each key present ONLY when its value exists
     # (omit-if-absent). ``is_retracted`` is deliberately not surfaced.
     year: NotRequired[Any]
@@ -241,10 +241,10 @@ class FindingRecord(TypedDict):
     effect_basis: str | None
     is_primary: bool | None
     field_coverage: dict[str, str]
-    # B2′ (024 / ADR 0023): "priority" | "normal" when this run's extraction
+    # ADR 0023: "priority" | "normal" when this run's extraction
     # carries relevance annotations; absent otherwise (never fabricated).
     relevance: NotRequired[str]
-    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3): omit-if-absent.
+    # Default metadata set (ADR 0015 §8): omit-if-absent.
     year: NotRequired[Any]
     evidence_type: NotRequired[str]
     appraisal_label: NotRequired[str]
@@ -274,7 +274,7 @@ class ICFFindingRecord(TypedDict):
     resource_requirements: str | None
     workforce_requirements: str | None
     field_coverage: dict[str, str]
-    # B2′ (024 / ADR 0023): "priority" | "normal" when this run carries
+    # ADR 0023: "priority" | "normal" when this run carries
     # relevance annotations; absent otherwise (never fabricated).
     relevance: NotRequired[str]
     year: NotRequired[Any]
@@ -333,10 +333,8 @@ class SynthesisDirective:
 
     sections: list[dict[str, Any]] | None = None  # validated section specs
     section_budget: int | None = None
-    #: Output kind. ``None`` is the Evidence search report — today's behaviour,
-    #: unchanged. ``"baseline"`` is **parsed** as of task 044 phase 3.2 and its
-    #: behaviour lands in phase 4.2; until then ``synthesise_scope`` accepts it
-    #: and does nothing beyond the supplied-sections path it already has.
+    #: Output kind. ``None`` is the Evidence search report. ``"baseline"`` is the
+    #: options-scoping baseline template (baseline mode in ``synthesise``).
     template: str | None = None
     column_boosts: dict[str, dict[str, float]] = field(default_factory=dict)
     tag_boosts: dict[str, float] = field(default_factory=dict)
@@ -350,7 +348,7 @@ class SynthesisDirective:
         return {
             "sections_source": "scope_context" if self.sections is not None else "proposal",
             "section_budget": self.section_budget,
-            # The output kind the run executed (task 044): ``None`` is the
+            # The output kind the run executed: ``None`` is the
             # Evidence search report. Recorded so replay never has to infer it.
             "template": self.template,
             "retrieval_boosts": {
@@ -365,7 +363,7 @@ class SynthesisDirective:
         }
 
 
-# --- The cross-encoder reranker seam (contract rev 7.5) ---
+# --- The cross-encoder reranker seam ---
 
 
 class ChunkRerankerBackend(Protocol):
@@ -437,7 +435,7 @@ def borrowed_connection(conn: Connection) -> ConnectionFactory:
 
 @dataclass(frozen=True)
 class RetrievalScope:
-    """The frozen retrieval scope of one synthesis run or one chat turn (task 057).
+    """The frozen retrieval scope of one synthesis run or one chat turn.
 
     It holds the documents and the snapshot each one's text lives in, read once;
     every search then runs one SQL statement over those snapshots, so no chunk
@@ -499,7 +497,7 @@ class SectionLoopResult(TypedDict):
     # silent; the component lands them in claims_rejected_structural.
     malformed_claims: int
     # Further tool calls a forced final turn carried beyond the emission that
-    # was taken (task 056 D10: parallel tool calls stay on for that turn).
+    # was taken (parallel tool calls stay on for that turn).
     extra_tool_calls_ignored: int
     usage_totals: dict[str, int]
 
@@ -534,15 +532,14 @@ _DIRECTIVE_KEYS = {"sections", "retrieval_boosts", "section_budget", "template"}
 
 #: The output kinds ``template`` may name. Fail-closed: an unrecognised
 #: template would otherwise silently fall back to the Evidence search report
-#: while the plan row claims a baseline was written (task 044, plan S2).
+#: while the plan row claims a baseline was written.
 TEMPLATE_KEYS = frozenset({"baseline"})
 
 _SECTION_KEYS_REQUIRED = {"title", "focus"}
 _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
-#: ``nav_label`` is an optional extra on any section spec. ``SectionSpec`` and
-#: ``_sections_from_directive`` have always read it; before task 044 the key
-#: set below rejected it first, so a supplied section could never carry one.
-#: ``turn_cap`` joined it in phase 4.2: a template's sections carry their own
+#: ``nav_label`` is an optional extra on any section spec, read by
+#: ``SectionSpec`` and ``_sections_from_directive``.
+#: ``turn_cap`` is one too: a template's sections carry their own
 #: generation-loop bound (the baseline's is
 #: ``baseline_prompt.BASELINE_SECTION_TURN_CAP``), and a supplied section that
 #: omits it falls back to the template default / ``SECTION_TURN_CAP``.
@@ -1043,7 +1040,7 @@ def parse_synthesis_directive(
         else None
     )
     # In template mode ``section_budget`` means "proposals allowed on top of
-    # the supplied list" (task 044, plan S2/P14), not "ceiling on the whole
+    # the supplied list", not "ceiling on the whole
     # report" — the baseline supplies eight required sections and allows two
     # proposals, so capping the supplied list at two would refuse the very
     # directive the template exists to carry. Outside template mode the
@@ -1173,7 +1170,7 @@ def _doc_record(row: Any, selected_tss_ids: set[uuid.UUID]) -> dict[str, Any]:
         "origin": row.origin,
         "primary_evidence_type": row.primary_evidence_type,
         "text_basis": row.text_basis,
-        # "4" for a scored row, "Unrated" for a row with no score (task 056); None
+        # "4" for a scored row, "Unrated" for a row with no score; None
         # only when the document has no appraisal row, which keeps it uncitable.
         "appraisal_tier": appraisal_tier(
             row.quality_score, unrated=bool(getattr(row, "unrated", False))
@@ -1242,11 +1239,11 @@ def build_retrieval_scope(
     """Load the screened-in chunk retrieval scope.
 
     Reads the documents and the snapshot each one's text lives in, once; no
-    chunk text, unit or vector is loaded (task 057 N8). Every later search reads
+    chunk text, unit or vector is loaded. Every later search reads
     the chunks of exactly these snapshots through ``connect``, so documents
     screened in after this call never join a running synthesis.
 
-    **Several scopes** (task 045, S11, P13): an options-scoping chat answers
+    **Several scopes**: an options-scoping chat answers
     over the longlist scope and the option searches' targeted scopes at once.
     A document screened in under more than one of them is **one** document:
     the precedence rule keeps one row per ``task_source_snapshot_id`` — the
@@ -1449,7 +1446,7 @@ def oversized_chunk_window(
     The one window rule for every place that hands chunk text to the section
     writer: the ``search_chunks`` tool return (anchored on the winning
     embedding unit) and the repair's dependency chunks (anchored on the cited
-    quote, task 056 N5). A chunk at or under ``UNIT_CHAR_BUDGET`` characters is
+    quote). A chunk at or under ``UNIT_CHAR_BUDGET`` characters is
     never windowed. An oversized one becomes the anchor stretch widened by
     ``OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS`` on each side, clipped to the chunk.
     The caller marks the cut record with ``window_start`` / ``window_end``.
@@ -1554,7 +1551,7 @@ def _repair_chunk_anchor(
 
 
 def window_repair_dependency_chunks(failing: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Cut each failing claim's oversized dependency chunks to a window (task 056 N5).
+    """Cut each failing claim's oversized dependency chunks to a window.
 
     Each dependency chunk over the oversized threshold goes through
     :func:`oversized_chunk_window`, anchored on the claim's citation quote for
@@ -1621,7 +1618,7 @@ def window_repair_dependency_chunks(failing: Sequence[dict[str, Any]]) -> list[d
     return windowed
 
 
-# The one statement behind ``ChunkRetriever.search`` (task 057 N8, D7). It
+# The one statement behind ``ChunkRetriever.search``. It
 # reproduces the in-memory Python retriever it replaced, rule for rule:
 #
 # - The units searched are the scope's units: the chunks of the frozen
@@ -1635,7 +1632,7 @@ def window_repair_dependency_chunks(failing: Sequence[dict[str, Any]]) -> list[d
 #   cut to its best ``:pool`` units, ties broken on the unit id (a uuid orders
 #   like its text form, which the Python tie-break compared).
 # - Word leg: the share of the query's distinct words found in the unit's
-#   ``tokens`` (D7: the product's own score, not Postgres full-text ranking);
+#   ``tokens`` (the product's own score, not Postgres full-text ranking);
 #   ``tokens && query`` keeps units sharing at least one word (served by the GIN
 #   index). Cut and tie-break as the vector leg.
 # - Reciprocal-rank fusion per unit: the sum of 1 / (:rrf_k + rank) over the legs
@@ -1849,8 +1846,7 @@ class ChunkRetriever:
             candidate for candidate in reranked if candidate["chunk_record_id"] in allowed_ids
         ]
         returned = sanitized[:SYNTH_CHUNK_TOP_K]
-        # Provenance records the prior factors of the returned chunks only
-        # (owner, 2026-11-03).
+        # Provenance records the prior factors of the returned chunks only.
         for candidate in returned:
             chunk_id = candidate["chunk_record_id"]
             self._soft_prior_factors[chunk_id] = factors_by_chunk[chunk_id]
@@ -1921,7 +1917,7 @@ class ChunkRetriever:
         tier or quality score) before one without, then the smaller id.
         """
 
-        # task 057 review: Codex 4 - the document that carries the boosts and the
+        # The document that carries the boosts and the
         # citation identity is chosen by priors, not by whichever id sorts first.
         def priority(tss_id: str) -> tuple[bool, bool, str]:
             doc = self._scope.docs[tss_id]
@@ -1987,7 +1983,7 @@ class ChunkRetriever:
         if window_start is not None and window_end is not None:
             result["window_start"] = window_start
             result["window_end"] = window_end
-        # Owner-adopted default metadata set (ADR 0015 §8 / B-B3), sourced from
+        # Default metadata set (ADR 0015 §8), sourced from
         # the doc record, omit-if-absent (no null-noise).
         year = doc.get("year", doc.get("publication_year"))
         if year is not None:
@@ -2300,7 +2296,7 @@ def _finding_record(row: Any) -> FindingRecord:
         "is_primary": cast("bool | None", row.is_primary),
         "field_coverage": cast("dict[str, str]", row.field_coverage),
     }
-    # Owner-adopted default metadata set (ADR 0015 §8 / B-B3), omit-if-absent.
+    # Default metadata set (ADR 0015 §8), omit-if-absent.
     year = _metadata_year(metadata)
     if year is not None:
         record["year"] = year
@@ -2553,7 +2549,7 @@ def priority_counts_by_group(
     """Per-group priority/normal/total member counts for the P4 proposal render.
 
     Pure (no DB, no I/O): the P4 steering bundle shows, per group, how many of
-    its member findings the B2′ annotator marked ``priority`` — so the user
+    its member findings the relevance annotator marked ``priority`` — so the user
     sees where their stated emphasis landed before steering the synthesis shape.
 
     Args:
@@ -2720,7 +2716,7 @@ def make_findings_reader(
         extraction_run_id: Referenced extraction run id.
         evidence_scope_id: Evidence scope id.
         grouping_groups: Optional grouping records for group-id filtering.
-        relevance_annotations: B2′ run-scoped marks (``finding_id`` → "priority"
+        relevance_annotations: Run-scoped relevance marks (``finding_id`` → "priority"
             | "normal") from this run's extraction result, or ``None``. When
             present, each returned ``query_findings`` record gains a
             ``"relevance"`` key for its finding id; findings not in the map (and
@@ -2883,7 +2879,7 @@ def _screened_in_doc_ids(
 def _scope_precedence(
     scope_column: ColumnElement[uuid.UUID], scope_id: uuid.UUID
 ) -> ColumnElement[int]:
-    """Order the primary scope's row first (task 045, P13)."""
+    """Order the primary scope's row first."""
     return case((scope_column == scope_id, 0), else_=1)
 
 
@@ -3081,7 +3077,7 @@ def available_lookup_kinds(
     The same facts :func:`make_lookup_reader` checks before it reads: a kind in
     :data:`LOOKUP_KIND_REQUIRED_RUN` is servable only when its upstream run id
     is referenced. The section writer's ``lookup`` tool then offers only these
-    kinds (task 056 X3), so the model never spends a turn on a kind that can
+    kinds, so the model never spends a turn on a kind that can
     only fail.
 
     Args:
@@ -3118,7 +3114,7 @@ def make_lookup_reader(
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Create the universal closed-vocabulary lookup reader.
 
-    With ``extra_scope_ids`` (task 045, S11) the per-document and scope-wide
+    With ``extra_scope_ids`` the per-document and scope-wide
     reads span every scope, a per-document label reading the primary scope's
     row first and then the latest (the retrieval precedence rule, P13); the
     selection, characterisation and grouping reads stay the primary scope's,
@@ -3180,7 +3176,7 @@ def make_lookup_reader(
                     }
                 )
                 if row is not None and row.unrated:
-                    # Only on an Unrated row (no score, task 056), so a scored
+                    # Only on an Unrated row (no score), so a scored
                     # row's result is unchanged.
                     result["unrated"] = True
             elif kind == "classification_by_doc":
@@ -3620,16 +3616,16 @@ def run_section_loop(
 ) -> SectionLoopResult:
     """Run one bounded section loop against the closed read-only tool set.
 
-    While it runs, the loop publishes what the writer is doing (task 058,
-    N3): before each read tool, "Looking for: <query>", "Reading findings" or
+    While it runs, the loop publishes what the writer is doing:
+    before each read tool, "Looking for: <query>", "Reading findings" or
     "Looking up sources"; before the write turn, "Writing". Each line
     carries ``section_line`` so the user sees which section it belongs to.
 
     After each read tool returns, the loop also publishes the sources its
     results came from, so the page can say which sources the writer is
-    drawing on (task 058, owner 2026-11-05; see :func:`read_sources`).
+    drawing on (see :func:`read_sources`).
 
-    The write turn (task 058, owner 2026-11-05) runs when the writer says it
+    The write turn runs when the writer says it
     has gathered enough (a ``ready`` turn: it called ``write_section``) or
     when the turn budget runs out. It is the same loop turn as the ready
     signal, and its tokens are added to that turn's. A backend that returns
@@ -3698,7 +3694,7 @@ def run_section_loop(
         else:
             result, usage = backend.section_turn(seed, transcript, force_emit=False)
             if result.get("ready"):
-                # The writer said it has enough (write_section, task 058):
+                # The writer said it has enough (write_section):
                 # write in this same loop turn and count both calls' tokens.
                 result, write_usage = write(transcript)
                 usage = add_token_usage(usage, write_usage)
@@ -3768,7 +3764,7 @@ def gathered_ids(transcript: Sequence[ToolExchange]) -> dict[str, set[str]]:
     return {"chunk_ids": chunk_ids, "finding_ids": finding_ids}
 
 
-# Sources named on the page while a section is written (task 058, owner 2026-11-05)
+# Sources named on the page while a section is written
 
 #: Gives each source id (a task source snapshot id) the short name the page shows.
 type SourceLabeller = Callable[[Sequence[str]], Mapping[str, str]]
@@ -3950,7 +3946,7 @@ def _first_author(metadata: Mapping[str, Any]) -> str | None:
 
 
 def source_short_name(metadata: Mapping[str, Any], locator: str | None) -> str:
-    """Return the short name the page shows for a source (task 058).
+    """Return the short name the page shows for a source.
 
     The first author's family name (or, without authors, the publisher) and
     the year, as "Smith 2023", when both are known; otherwise the title, as

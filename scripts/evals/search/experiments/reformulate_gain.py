@@ -1,14 +1,14 @@
-"""Needs the tagged commit ``search-round-loop-last``: task 051 deleted the exemplar
-reader (``_read_exemplars``, ``_exemplar``) this script imports from ``search_loop``.
+"""Needs the tagged commit ``search-round-loop-last``: later code has no exemplar
+reader (``_read_exemplars``, ``_exemplar``), which this script imports from ``search_loop``.
 
-Does query reformulation add papers the snowball does not? (R&D, task 051)
+Does query reformulation add papers the snowball does not? (R&D)
 
 The production round loop's ``reformulate`` arm has never been measured on its own.
 It takes screened exemplars (up to 8 relevant, 4 not relevant), asks the language
 model to rewrite the queries anchored to the original question, and sends up to 4 new
 OpenAlex queries. This script runs exactly that call, from the seed verdicts the
 ``screened_seeds.py`` experiment wrote, and asks one question: how many ground-truth
-papers do the 4 reformulated queries return that the task 047 pool (seeds, backward
+papers do the 4 reformulated queries return that the snowball pool (seeds, backward
 snowball, forward chasing) does not already hold?
 
 The comparison is the cheaper way to spend the same budget: adding 200 more

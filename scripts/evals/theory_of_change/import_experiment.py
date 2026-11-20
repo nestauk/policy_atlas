@@ -1,4 +1,4 @@
-"""Experiment: read a theory-of-change diagram image into boxes and arrows (task 054, increment 5).
+"""Experiment: read a theory-of-change diagram image into boxes and arrows.
 
 A candidate ``toc_import`` prompt sends one image to the frontier model and
 asks for a faithful transcription: every box (its words exactly, and our layer),

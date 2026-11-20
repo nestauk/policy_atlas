@@ -1,7 +1,7 @@
 # Agent protocol
 
 - Use the commands in the `Makefile`. `make verify` is the green bar; `make verify-fast`
-  gates intermediate commits.
+  (backend) and `make frontend-verify-fast` (frontend) gate intermediate commits.
 - For non-trivial work, plan before editing. The per-slice lifecycle is the `task-cycle`
   skill (`.claude/skills/task-cycle/`), tiered by risk.
 - Write Google-style docstrings (`Args:`/`Returns:`/`Raises:` sections) for public modules,
@@ -12,24 +12,30 @@
 - Use `docs/tasks/<task-id>/` for per-task artefacts: `contract.md` (scope), `rubric.md`
   (completion criteria, when risk is medium or high), `verification.md` (evidence, or in the
   PR). `<task-id>` is `NNN-slug` (zero-padded). Templates live in `docs/tasks/_templates/`.
-- Agent-side model routing: the lead (Fable 5) plans, judges, synthesizes; delegate volume via
-  the pinned agents in `.claude/agents/` — `deep-reasoner` (Opus) for reasoning offload,
-  `fast-worker` (Sonnet) for mechanical sweeps and search, `frontend-designer` (Opus, loads
-  every frontend design skill and `DESIGN.md` first) for any delegated frontend work — and
-  Codex for the heterogeneous peer (review/rescue). **Prompt-bearing work (product prompts, judge rubrics, eval criteria)
-  is lead-only — never delegated to a weaker model.** Details: `docs/agentic-ops/harness.md`
-  § Agent-side model routing.
+- The lead orchestrates: it plans, judges and synthesizes, and delegates work to the
+  subagents in `.claude/agents/` (each description says what the subagent is for) and to
+  Codex for review by a second model family. Prompt-bearing work (product prompts, judge
+  rubrics, eval criteria) stays with the lead. Start a `general-purpose` agent with
+  `model: "opus"` (not Fable, not Sonnet), also when the caller is itself an Opus agent.
+  The exception is `/code-review`: its reviewers run on the lead's model.
+  Details: `docs/agentic-ops/harness.md`.
+- Tests: one focused test for each stated behaviour, at a public boundary (route, public
+  function, rendered component, stored row). Mock only what the repository does not own.
+  A test never asserts a style class name. Scratch checks are not committed.
+- Code, comments, docstrings and test names carry no task numbers, dates, review or polish
+  rounds, contract item ids or owner rulings. ADR numbers may stay.
 - Deterministic work (date math, parsing, counting, format conversion) runs as a script or
   command, not in latent space — if the same question twice must give the same answer,
   compute it.
-- Do not change schema, auth, dependencies, CI, production config or public interfaces
-  without approval.
+- Hard gates: do not change schema, auth, runtime egress (the running product sending
+  project data to an outside service), dependencies, CI, production config, public
+  interfaces or the project scaffold without approval.
 - Never edit generated files or secrets.
 - Touch only what the task requires.
 
 # Landmines
 
-Each line traces to a real failure or a hard constraint. Delete a line when a test, hook or
+Facts about this repository that are easy to get wrong. Delete a line when a test, hook or
 command makes it redundant.
 
 - `docs/specs/sources/**` is frozen (ADR 0002): change the spec, not the source. The
@@ -39,16 +45,21 @@ command makes it redundant.
 - Prompt text is hash-pinned (`scripts/prompt_hashes.json`, `make prompt-guard`). A prompt
   edit is deliberate slice work: re-pin with `python3 scripts/prompt_hash_guard.py --update`
   and record the diff.
-- "Task" has two meanings: the product Task (code row `project` until task 038 lands, `task`
-  after) and "task NNN", an engineering slice under `docs/tasks/`. Sweeps must not confuse
+- "Task" has two meanings: the product Task (code row `task`) and "task NNN", an
+  engineering slice under `docs/tasks/`. Sweeps must not confuse
   them. Merged task docs and ADRs are never rewritten by later renames.
 - `.claude/agents/` holds pinned model routes, not product code; keep it out of codebase
   sweeps.
 - `docs/knowledge/` is the verified-facts OKF bundle (`make okf-validate`). Filenames are
   concept ids: do not rename them.
-- Codex jobs: `scripts/codex_job.sh wait <job-id>`. Never hand-roll a status poll
-  (`docs/agentic-ops/failure-log.md`, 2026-07-07).
-- Test lanes that share one Postgres database break migration round-trips
-  (`docs/deferred.md` § Codebase health). `make test` gives each worker its own copy
-  (`tests/conftest.py`, task 056); a second suite on the same Postgres still needs its own
+- Codex jobs: `scripts/codex_job.sh wait <job-id>`. Do not write your own status poll: a
+  filtered background loop can hide a hard error until it times out.
+- Test lanes that share one Postgres database break migration round-trips. `make test` gives each worker its own copy
+  (`backend/tests/conftest.py`); a second suite on the same Postgres still needs its own
   `DATABASE_URL` name.
+- A pytest run outside `make test` must set `DATABASE_URL` to the `*_test` database
+  (`postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test`
+  locally) or conftest refuses.
+- A test must build the app with explicit `Settings` (a throwaway key from
+  `dev_issuer.init(tmp_path)`), never `create_app()` bare: bare reads the environment,
+  which locally finds `backend/.dev-issuer` and on CI finds nothing.

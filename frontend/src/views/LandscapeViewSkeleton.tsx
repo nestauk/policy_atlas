@@ -8,7 +8,7 @@ const SKELETON_BARS = [88, 64, 47, 31] as const;
 const SKELETON_SECTIONS = ["From search to citation", "Evidence types"] as const;
 
 /**
- * The Landscape while its reads load (task 058, landscape polish): the
+ * The Landscape while its reads load (landscape polish): the
  * section frame with four rows of placeholder bars at the ranked-bar
  * geometry (14 px bars on a 30 px pitch), so the page does not jump when the
  * data arrives. The bars breathe on the status mark's rhythm and hold still

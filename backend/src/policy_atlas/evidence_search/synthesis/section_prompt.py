@@ -39,33 +39,33 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
 )
 from policy_atlas.evidence_search.synthesis.voice_prompt import VOICE_PRINCIPLES
 
-# v5 (task 034 S6/S7): titles are short contents-ready theme names (P9);
-# the 028 strand-12 answer-shaped overview lead is dropped — front matter
+# v5: titles are short contents-ready theme names (P9);
+# the answer-shaped overview lead is dropped — front matter
 # now frames the report. ``nav_label`` may equal the title when the title
 # is already sidebar-short. The plan's ordinary-section budget clause is
 # unchanged.
 SECTIONS_PROMPT_VERSION = "synthesise_sections_v5"
-# v9 (task 034 S7): shared voice block (P1–P8, P10) plus the corpus-touring
+# v9: shared voice block (P1–P8, P10) plus the corpus-touring
 # ban. The v8 priority-findings block is unchanged — it still renders
 # CONDITIONALLY via ``seed["priority_block_active"]``; provenance still
 # records that flag. The version tracks the surface, not the block.
-# v11 (task 056 D8/D10/X3): the prompt text is unchanged; the request shape
+# v11: the prompt text is unchanged; the request shape
 # changes. The run message is a text content part carrying an explicit cache
 # breakpoint; section turns send five tools (``emit_repairs`` appended) with an
 # ``allowed_tools`` choice over the four section tools and parallel tool calls
 # on every turn; the ``lookup`` tool offers only the kinds the run can serve.
-# v12 (task 058, owner 2026-11-05): the writer calls ``write_section`` when it
+# v12: the writer calls ``write_section`` when it
 # has gathered enough and writes the section on the next turn as a streamed
 # JSON reply; ``emit_section`` is no longer offered on open turns (the forced
 # fallback still calls it by name). Six tools on every request.
 SECTION_PROMPT_VERSION = "synthesise_section_v12"
-# The repair surface's own version (task 056 D10). v1 was the unversioned repair
+# The repair surface's own version. v1 was the unversioned repair
 # that rode SECTION_PROMPT_VERSION; v2 starts with the section's own first-turn
 # request (same tools, system, run and task messages) and appends the repair
 # instruction, forcing ``emit_repairs``.
 SECTION_REPAIR_PROMPT_VERSION = "synthesise_repair_v2"
 
-# The v8 additive priority-findings block (task 024 B2′ / ADR 0023) —
+# The v8 additive priority-findings block (ADR 0023) —
 # lead-authored text, rendered into the section system prompt ONLY when the
 # run's extraction carries relevance annotations (the version bump above and
 # this block move together so the version never claims behaviour it doesn't
@@ -86,7 +86,7 @@ Priority findings:
   mark never changes what the evidence says — only the order and prominence
   with which you treat it.
 """
-# v3 (task 034 S3/S7): lead-colon bullets (P5) and gap restatements (at most
+# v3: lead-colon bullets (P5) and gap restatements (at most
 # ``KEY_FINDINGS_GAP_MAX``), still a "- " list whose spans sit inside single
 # lines. Renderer-side crossing-bullet degrade is unchanged.
 KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v3"
@@ -97,11 +97,11 @@ KEY_FINDINGS_GAP_MAX = 2
 # Focus is roomier than the 200-char directive-grammar bound: live writers
 # routinely produce two-sentence foci and the proposal bound is ours to set
 # (the directive grammar's 200 is contract-pinned and unchanged).
-# Proposal reject bound (task 034 S6 / adversarial F10). ``SECTION_TITLE_MAX``
-# stays the read-path ceiling for artefacts minted before this slice.
+# Proposal reject bound. ``SECTION_TITLE_MAX``
+# stays the read-path ceiling for artefacts minted before this bound existed.
 SECTION_TITLE_PROPOSAL_MAX = 60
 SECTION_FOCUS_MAX = 300
-# The contents-list label (task 032 G6). Short enough to scan in a sidebar,
+# The contents-list label. Short enough to scan in a sidebar,
 # and unlike the two bounds above it REJECTS rather than truncates: a label
 # the writer had to be told to keep short is a proposal defect, and silently
 # clipping one produces a mid-word stub no reader can use.
@@ -509,7 +509,7 @@ EMIT_REPAIRS_TOOL_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: The writer's "I have enough" signal (task 058, owner 2026-11-05): it ends the
+#: The writer's "I have enough" signal: it ends the
 #: gathering, and the next turn writes the section as a streamed reply. The
 #: model used to write through ``emit_section`` itself, which the provider
 #: delivers in one burst at the end, so the page saw nothing until the section
@@ -541,8 +541,7 @@ LOOKUP_TOOL_KINDS: tuple[str, ...] = tuple(
     LOOKUP_TOOL_SCHEMA["function"]["parameters"]["properties"]["kind"]["enum"]
 )
 
-# Appended to the lookup description when the tool is offered for one run
-# (task 056 X3, lead words).
+# Appended to the lookup description when the tool is offered for one run.
 LOOKUP_RUN_KINDS_SENTENCE = " Only the kinds listed here exist for this run."
 
 
@@ -589,8 +588,8 @@ def lookup_tool_schema(available_kinds: Sequence[str]) -> dict[str, Any]:
     }
 
 
-#: The section-turn tools the ``allowed_tools`` choice permits (task 056 D10,
-#: task 058): the three read tools and ``write_section``; never
+#: The section-turn tools the ``allowed_tools`` choice permits:
+#: the three read tools and ``write_section``; never
 #: ``emit_section`` (the streamed write turn replaces it on open turns; the
 #: forced fallback still calls it by name) and never ``emit_repairs``.
 SECTION_TURN_TOOL_NAMES: tuple[str, ...] = (
@@ -744,13 +743,13 @@ of the original rules.
 """
 
 
-# --- The section-loop prompt (synthesise_section_v10; v3 = the 018 B-B2 voice
-# design; v4 = 018 C2 round 2 repetition/label-translation rules; v5 = 018 C2
-# round 3 multi-read-tool turns; v8 = 024 priority-findings block; v9 = 034
+# --- The section-loop prompt (synthesise_section_v10; v3 = the voice
+# design; v4 = repetition/label-translation rules; v5 =
+# multi-read-tool turns; v8 = priority-findings block; v9 =
 # shared voice + corpus-touring ban; v10 = optional one-sentence bridge from
 # the previous body section) ---
 
-# --- Template-keyed section writer (owner ruling 2026-09-09, task 044: "option 2").
+# --- Template-keyed section writer ("option 2").
 # One writer, one shared core; a short preamble per output kind. The Evidence
 # search report keeps its v10 text byte-for-byte (pinned by
 # test_section_system_prompt_report_is_byte_identical_to_v10); the baseline
@@ -951,11 +950,11 @@ SECTION_FINAL_TURN_MESSAGE = (
     "claims this section can support from what you have gathered."
 )
 
-#: The write turn (task 058, D1; owner 2026-11-05): after ``write_section``, or
+#: The write turn: after ``write_section``, or
 #: on the forced final turn, the section comes back as a streamed JSON reply in
 #: the shape of ``emit_section``'s arguments. The tools stay on the request
 #: (with no tool allowed) so the provider's cached prefix is reused; a
-#: structured-output schema would break that prefix (probe, 2026-11-05).
+#: structured-output schema would break that prefix (probe).
 SECTION_WRITE_TURN_MESSAGE = (
     "Write the section now: reply with one JSON object, the emit_section "
     "arguments (the prose, then the claims this section can support from what "

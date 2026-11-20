@@ -1,6 +1,6 @@
-"""Screened seeds against raw seeds for the citation snowball (R&D, task 051).
+"""Screened seeds against raw seeds for the citation snowball (R&D).
 
-The task 047 experiments built the snowball from raw search results: the first 200
+The earlier snowball experiments built the snowball from raw search results: the first 200
 records the generated queries returned, unscreened. In production every record is
 screened, so the seeds could be the screened-in set instead. Seed quality mattered
 more than seed count there (500 seeds scored below 200), so screened seeds might
@@ -9,14 +9,14 @@ cite the right papers. This script measures it.
 
 Per review:
 
-1. Take the seeds and the snowball of one configuration (the task 047 best run,
+1. Take the seeds and the snowball of one configuration (the best snowball run,
    through ``snowball_recall.load_or_expand``, cached).
 2. Fetch the seeds' abstracts (one batched OpenAlex call per 50 seeds, cached) and
    screen each seed with the production stage-1 code through the screening eval's
    harness: ``gpt-5.6-luna``, the ``screen_v4`` prompt, and the adaptive rule (one
    call; a second call only after a drop; keep if the second call keeps).
 3. Score three candidate lists at each cap, ranked by specificity:
-   ``raw``: the task 047 list as it is (no screen);
+   ``raw``: the snowball list as it is (no screen);
    ``raw-screened``: the same list with the dropped seeds removed (what production
    would keep from it);
    ``screened``: snowball and forward chasing rebuilt from the kept seeds only, with

@@ -1,4 +1,4 @@
-"""Write the task 051 test fixtures from recorded experiment data (plan Phase 0c, S12).
+"""Write the search-pool test fixtures from recorded experiment data.
 
 Two fixture sets, both deterministic (a second run writes identical files):
 
@@ -25,7 +25,7 @@ Two fixture sets, both deterministic (a second run writes identical files):
    ``load_or_expand`` with the experiment's exact settings; the script stops if the
    cache is missing rather than fetch.
 
-2. ``backend/tests/data/policy_replay/<slug>.json`` — one file per task 049 manual
+2. ``backend/tests/data/policy_replay/<slug>.json`` — one file per manual
    question (obesity, decarbonising heating, early years attainment): the three
    Overton result lists (the question and its two cached paraphrases, relevance
    order, first page of 50 trimmed to 40), the 15 landmark records, and the expected
@@ -38,7 +38,7 @@ Two fixture sets, both deterministic (a second run writes identical files):
 
    The raw Overton pages are fetched once and cached under
    ``results/cache/overton-replay-051/`` (git-ignored); the paraphrases come from the
-   task 047 generation cache (a miss costs one language-model call per question).
+   ``overton_recall`` generation cache (a miss costs one language-model call per question).
 
    ``expected``: ``interleaved`` (round-robin by rank, first occurrence by id),
    ``deduplicated`` (title duplicates dropped, the first copy kept, titleless kept),
@@ -306,7 +306,7 @@ def _title_of(doc: dict[str, Any]) -> str:
 
 
 def normalised_title(text: str) -> str:
-    """Lower-case, punctuation and whitespace collapsed (the contract's D8 rule)."""
+    """Lower-case, punctuation and whitespace collapsed."""
     return " ".join(re.sub(r"[^0-9a-z]+", " ", text.lower()).split())
 
 

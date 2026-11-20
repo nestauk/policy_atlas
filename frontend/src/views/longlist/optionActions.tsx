@@ -22,11 +22,11 @@ import {
 export const REASON_INPUT_CLASS =
   "min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80";
 
-/** A refused action's notice, next to the control it came from (task 045,
- *  F15); `optionId` null is the list's add row. */
+/** A refused action's notice, next to the control it came from;
+ *  `optionId` null is the list's add row. */
 export type ActionNotice = { optionId: string | null; text: string };
 
-/** Exclude (with an optional reason — owner, 2026-09-24) and include again,
+/** Exclude (with an optional reason — owner) and include again,
  *  shared by the list view and the option card. */
 export function useOptionActions(taskId: string, walkActive: boolean) {
   const excludeOption = useOptionVerb(taskId, "exclude");
@@ -46,7 +46,7 @@ export function useOptionActions(taskId: string, walkActive: boolean) {
     });
   };
 
-  // A whole group at once (round 13, owner): every given option through the
+  // A whole group at once: every given option through the
   // same per-option action, each its own request.
   const excludeGroup = (optionIds: readonly string[], reason: string) => {
     if (walkActive || optionIds.length === 0) return;
@@ -140,7 +140,7 @@ function holdsPlace(state: ShortlistState | null | undefined): boolean {
 /**
  * "Shortlisted" with no control, for a row that holds a place while the
  * longlist is still being built and on the public link: the filled circled
- * check in Electric Blue, its word for a screen reader (round 13, owner).
+ * check in Electric Blue, its word for a screen reader.
  */
 export function ShortlistedWord({ className, glyphSize }: { className?: string; glyphSize?: number }) {
   return (
@@ -152,7 +152,7 @@ export function ShortlistedWord({ className, glyphSize }: { className?: string; 
 }
 
 /**
- * The shortlist state as an icon toggle (round 13, owner): a circled check
+ * The shortlist state as an icon toggle: a circled check
  * in a 40 px target, an outline circle in Grey when the option holds no place, filled
  * Electric Blue when it does; `aria-pressed`, and its name and tooltip say
  * what pressing does ("Add to shortlist" / "Remove from shortlist"). The
@@ -174,7 +174,7 @@ export function ShortlistToggle({
   optionId: string;
   shortlistState: ShortlistState | null | undefined;
   excluded: boolean;
-  /** The option card's form (round 13, owner): the glyph, then "Add to
+  /** The option card's form: the glyph, then "Add to
    *  shortlist" / "Shortlisted" in the quiet style, beside Exclude. */
   worded?: boolean;
   /** The glyph's size; the target stays 40 px (the grid's tiles: 24). */
@@ -186,7 +186,7 @@ export function ShortlistToggle({
   const recorded = holdsPlace(shortlistState);
   // The pressed control shows its new state at once and keeps it until the
   // read agrees (or the request fails); no other control dims or changes
-  // while it is sent (round 13, owner: no marker flashes).
+  // while it is sent (no marker flashes).
   const [wanted, setWanted] = useState<boolean | null>(null);
   if (wanted !== null && wanted === recorded) setWanted(null);
   const holds = wanted ?? recorded;
@@ -241,8 +241,8 @@ export function ShortlistToggle({
 
 /**
  * Exclude, or Include again on an excluded option, as a quiet text control
- * (round 13, owner: on the option card only; one action is not a menu).
- * Exclude acts at once (round 13, owner: no reason asked first; "Add a
+ * (on the option card only; one action is not a menu).
+ * Exclude acts at once (no reason asked first; "Add a
  * reason" follows the exclusion line). Nothing on the public link.
  */
 export function OptionActionButton({
@@ -266,21 +266,21 @@ export function OptionActionButton({
       onClick={() => (excluded ? actions.include(optionId) : actions.exclude(optionId, ""))}
       className={cn(ACTION_CONTROL_CLASS, className)}
     >
-      {/* At the card's shortlist toggle's size (round 13, owner). */}
+      {/* At the card's shortlist toggle's size. */}
       <ActionGlyph include={excluded} size={TOGGLE_GLYPH_SIZE} />
       {excluded ? "Include again" : EXCLUDE_FROM_SHORTLISTING}
     </button>
   );
-  // What it does, on hover and focus (round 13, owner).
+  // What it does, on hover and focus.
   return excluded ? control : <WithTooltip note={EXCLUDE_OPTION_TOOLTIP}>{control}</WithTooltip>;
 }
 
 /** The list row's shortlist toggle glyph; a group's control draws its
- *  glyph at the same size, so the two make one column (round 13, owner). */
+ *  glyph at the same size, so the two make one column. */
 export const TOGGLE_GLYPH_SIZE = ICON_CHROME;
 
 /**
- * Exclude or Include again on the page's action column (round 13, owner):
+ * Exclude or Include again on the page's action column:
  * the words, then the glyph at the row toggle's size centred in the
  * toggle's 40 px width, so its glyph sits in the toggles' column; the hit
  * area is the line's height. One control for both states, on a group's
@@ -320,7 +320,7 @@ export function EdgeAction({
 }
 
 /** Whether an exclusion still invites the reader's reason: their own, with
- *  no words yet, or only the group it went with (round 13, owner). */
+ *  no words yet, or only the group it went with. */
 export function invitesReason(exclusion: { by: string; reason?: string | null } | null | undefined): boolean {
   if (exclusion == null || exclusion.by !== "user") return false;
   const reason = (exclusion.reason ?? "").trim();
@@ -328,7 +328,7 @@ export function invitesReason(exclusion: { by: string; reason?: string | null } 
 }
 
 /**
- * "Add a reason" after an exclusion line (round 13, owner): a quiet text
+ * "Add a reason" after an exclusion line: a quiet text
  * control that opens the inline field with Save and Cancel; saved, the
  * reason joins the line (after the group's words when it went with one).
  * The exclusion route records the new reason. Nothing on the public link.

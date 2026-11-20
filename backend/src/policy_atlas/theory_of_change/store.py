@@ -1,11 +1,11 @@
-"""Read and write one task's theory-of-change graph (task 054, C1, C9, C10).
+"""Read and write one task's theory-of-change graph.
 
 Plain SQLAlchemy Core over the ``toc_*`` tables. Every write a step makes goes
 through a :class:`ChangeLog`: inserts record the new row ids, updates record
-the row as it was before (enough for a later Undo to put it back, C9), and
+the row as it was before (enough for a later Undo to put it back), and
 :func:`record` writes the whole log as one ``toc.changed`` event. Updates
 apply only when the row's ``revision`` still equals the one the step read,
-so a row the user changed meanwhile is skipped and reported (C10).
+so a row the user changed meanwhile is skipped and reported.
 """
 
 from __future__ import annotations
@@ -35,11 +35,11 @@ from policy_atlas.core.schema import (
 from policy_atlas.theory_of_change.draft_prompt import DraftResponse
 from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway
 
-#: The event every graph write records (History; C1).
+#: The event every graph write records (History).
 TOC_CHANGED_EVENT = "toc.changed"
 
 #: Marks a ``toc.changed`` event that only moved boxes: it leaves the report
-#: current (task 054, S9).
+#: current.
 LAYOUT_KEY = "layout"
 
 _PRIMARY_KEY: dict[str, str] = {
@@ -157,7 +157,7 @@ def link_from_row(row: Row[Any]) -> Link:
     )
 
 
-#: The letter that starts a box's code, by layer (C35). Links use ``#``.
+#: The letter that starts a box's code, by layer. Links use ``#``.
 CODE_PREFIX: dict[str, str] = {
     "input": "A",
     "output": "P",
@@ -171,7 +171,7 @@ CODE_PREFIX: dict[str, str] = {
 def next_code(
     conn: Connection, log: ChangeLog, table: Table, task_id: uuid.UUID, prefix: str
 ) -> str:
-    """The next unused code for a prefix in one task, e.g. ``S4`` or ``#12`` (C35).
+    """The next unused code for a prefix in one task, e.g. ``S4`` or ``#12``.
 
     A code is never reused, even after its row is deleted (an Undo may bring
     the row back). So the number is one more than the highest ever used: on
@@ -241,7 +241,7 @@ def update(
     observed_revision: int,
     values: dict[str, Any],
 ) -> bool:
-    """Update one graph row if nobody changed it since it was read (C10).
+    """Update one graph row if nobody changed it since it was read.
 
     Raises the revision, stamps ``updated_at`` and keeps the before-state.
 
@@ -278,14 +278,14 @@ def delete(
     *,
     observed_revision: int | None = None,
 ) -> bool:
-    """Delete one graph row and keep its before-state, marked deleted (C9).
+    """Delete one graph row and keep its before-state, marked deleted.
 
     Args:
         conn: Open connection.
         log: The step's change log.
         table: A ``toc_*`` table with a single-column key.
         row_id: The row.
-        observed_revision: When given, the delete is compare-and-apply (C10): a row
+        observed_revision: When given, the delete is compare-and-apply: a row
             someone changed since is left alone and logged as skipped.
 
     Returns:
@@ -323,14 +323,14 @@ def record(
         run_id: The step's run.
         step: The step name (``toc_draft``, ``toc_merge``, ...).
         log: What the step wrote.
-        changes: Plain-language changes for the Task Agent's list (J5). A
+        changes: Plain-language changes for the Task Agent's list. A
             change about one pathway is ``{"text", "pathway_id"}``, so the list
             can leave out a pathway the same check added and then set aside.
         actor: The user who made the change (a user edit or Undo), or ``None``
             for Policy Atlas's own steps.
         undoes: The event an Undo reverses.
         layout: The change moves boxes only, so the report still describes
-            the theory (task 054, S9).
+            the theory.
     """
     payload = _payload(step, log, changes or [], actor, undoes, layout)
     batch = _BATCH.get()
@@ -374,7 +374,7 @@ def one_change(
     """Record every user edit made inside as one ``toc.changed`` event.
 
     So History shows one line, and one Undo reverses it all: an accepted
-    route's boxes, connections and pathway (owner, 2026-11-05). Nothing is
+    route's boxes, connections and pathway. Nothing is
     written when the block raises.
 
     Args:
@@ -447,8 +447,8 @@ def has_graph(conn: Connection, task_id: uuid.UUID) -> bool:
     """Whether a draft is on the canvas: a box Policy Atlas drafted or read from the user's theory.
 
     Boxes the user drew themselves before any draft (origin ``user``) do not
-    count: they are the user's own theory, which the draft keeps (owner,
-    2026-11-05). The draft marks them as from the user's theory.
+    count: they are the user's own theory, which the draft keeps.
+    The draft marks them as from the user's theory.
     """
     return (
         conn.execute(
@@ -482,7 +482,7 @@ def write_draft(
         Local key → row id, for boxes, links and pathways.
 
     Raises:
-        ValueError: If the task already has a graph (redraft is increment 2).
+        ValueError: If the task already has a graph.
     """
     if has_graph(conn, task_id):
         raise ValueError("this task already has a theory of change")

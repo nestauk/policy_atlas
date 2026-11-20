@@ -29,14 +29,14 @@ from dataclasses import dataclass
 
 BASELINE_PROMPT_VERSION = "baseline_template_v1"
 
-# Execution-bearing constants (contract § Plan object, C8).
+# Execution-bearing constants.
 BASELINE_PROPOSED_SECTIONS_MAX = 2
 BASELINE_SECTION_TURN_CAP = 4
 # Position (0-based, in the required order below) after which proposed
 # sections are inserted: after "What is contested".
 BASELINE_PROPOSED_INSERT_AFTER = "What is contested"
 
-# The directive key synthesise reads to enter baseline mode (plan S2).
+# The directive key synthesise reads to enter baseline mode.
 BASELINE_TEMPLATE_KEY = "baseline"
 
 # Prose the writer must not use as a section title for a proposed section.
@@ -199,7 +199,7 @@ SOURCES_LANGUAGE_NOT_APPLIED_LINE = (
 )
 
 # The deterministic intent text compiled from the plan for the baseline's
-# intent record (contract § Model route: never written by a model).
+# intent record (never written by a model).
 BASELINE_INTENT_TEMPLATE = (
     "What is the current situation, and the trend if nothing changes, for "
     "{target_unit} in {where}, with respect to {intended_change}? Outcomes of "
@@ -207,7 +207,7 @@ BASELINE_INTENT_TEMPLATE = (
 )
 
 # The artefact title (Baseline board), the Result band and the depth label
-# every scoping profile carries (C18).
+# every scoping profile carries.
 BASELINE_ARTEFACT_TITLE = "Do nothing: current policy and trajectory"
 BASELINE_BAND = "the situation these options would change"
 BASELINE_DEPTH_LABEL = "scoping pass"

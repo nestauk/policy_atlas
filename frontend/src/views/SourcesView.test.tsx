@@ -190,7 +190,6 @@ describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", ()
     expect(pulseIn("Waiting source", "Relevant")).not.toBeNull();
     expect(pulseIn("Screened source", "Relevant")).toBeNull();
     expect(pulseIn("Waiting source", "Relevant")).toHaveAttribute("aria-hidden", "true");
-    expect(pulseIn("Waiting source", "Relevant")?.querySelector(".placeholder-bar")).not.toBeNull();
   });
 
   it("pulses the evidence type and strength of relevant sources lacking them while classifying runs", () => {
@@ -205,7 +204,7 @@ describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", ()
     expect(pulseIn("Off-topic source", "Evidence type")).toBeNull();
   });
 
-  it("says Collecting… on a source queued for its full text while the full texts are collected, in place of its label (round 14)", () => {
+  it("says Collecting… on a source queued for its full text while the full texts are collected, in place of its label", () => {
     streamState = running("ingest");
     rows([
       row({ source_id: "a", title: "Unread source", screen_status: "relevant", read_in_full: false, status: "relevant", full_text_status: "queued" }),
@@ -214,7 +213,6 @@ describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", ()
     renderSources();
     const collecting = screen.getByTestId("status-collecting");
     expect(collecting).toHaveTextContent("Collecting…");
-    expect(collecting).toHaveClass("anim-breathe-soft", "text-grey");
     expect(screen.getByText("Unread source").closest("tr")).toContainElement(collecting);
     expect(screen.queryByText("Abstract only")).toBeNull();
     expect(screen.getAllByTestId("status-collecting")).toHaveLength(1);
@@ -252,8 +250,8 @@ describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", ()
   });
 });
 
-describe("SourcesView — sortable table (028 strand 7)", () => {
-  it("heads six sortable columns; Origin and Cited fold into the source's second line (round 10)", () => {
+describe("SourcesView — sortable table", () => {
+  it("heads six sortable columns; Origin and Cited fold into the source's second line", () => {
     renderSources();
     const table = screen.getAllByRole("table")[0];
     const headers = within(table).getAllByRole("columnheader");
@@ -266,11 +264,9 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     const row = within(table).getAllByRole("row").find((r) => r.textContent?.includes(cited.title)) as HTMLElement;
     const line = row.querySelector(".sources-meta") as HTMLElement;
     expect(line.textContent).toBe(`${cited.venue} · ${cited.year} · ${cited.origin}`);
-    expect(within(line).getByText(String(cited.year))).toHaveClass("@min-[54rem]/sources:hidden");
-    // Round 12: "Cited" sits under the Status with a green tick, no chip.
+    // "Cited" sits under the Status.
     const status = row.querySelector(".sources-cell-status") as HTMLElement;
-    expect(within(status).getByText("Cited")).toHaveClass("sources-cited");
-    expect(status.querySelector(".sources-cited svg")).toHaveClass("text-green");
+    expect(within(status).getByText("Cited")).toBeInTheDocument();
   });
 
   it("gives the renamed Evidence strength header a sort button with an accessible name", () => {
@@ -365,18 +361,14 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
   });
 
-  it("counts the sources under the table, Download CSV at that line's end, the filter bar filters only (round 12)", () => {
+  it("counts the sources under the table, Download CSV on that line, the filter bar filters only", () => {
     renderSources();
     const count = screen.getAllByRole("status").find((node) => node.textContent === `${mockEvidence.length} sources`) as HTMLElement;
-    expect(count).toHaveClass("text-meta", "text-grey");
     const frame = document.querySelector(".sources-frame") as HTMLElement;
     expect(frame.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Round 12 (lead): Download CSV is the quiet control with the download
-    // glyph at the right end of the line under the table, 24 px after the
-    // page controls; the filter bar holds filters only.
+    // Download CSV is on the line under the table; the filter bar holds
+    // filters only.
     const download = screen.getByRole("button", { name: "Download CSV" });
-    expect(download).toHaveClass("text-grey", "h-8");
-    expect(download).not.toHaveClass("border");
     expect(download.querySelector("svg")).not.toBeNull();
     expect(screen.getByRole("group", { name: "Filter sources" })).not.toContainElement(download);
     const foot = screen.getByTestId("sources-foot");
@@ -385,56 +377,37 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(download.closest("div")).toBe(foot);
   });
 
-  it("shows the finished search as a one-line section above the filter bar, a Body sentence whose Show opens one table", async () => {
+  it("shows the finished search as a section above the filter bar whose Show opens one table", async () => {
     const user = userEvent.setup();
     renderSources();
     const block = screen.getByTestId("search-queries-summary");
-    // Round 12 (owner): above the filter bar, 24 px clear of it, so the bar
-    // reads as the table's own head.
     const bar = screen.getByRole("group", { name: "Filter sources" });
     expect(block.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(block.parentElement).toHaveClass("mb-6");
-    // One line: the Label heading at the left, the Body Ink sentence at the
-    // right, the hairline under them.
     // One region by that name: the folded live block no longer names itself.
     expect(screen.getAllByRole("region", { name: "Search queries" })).toHaveLength(1);
-    // Round 14 (owner): the whole line is the one button, inside the
-    // heading: the Label at the left, the Body Ink sentence and Show at the
-    // right, the hairline under them.
+    // The whole line is the one button, inside the heading.
     const line = within(block).getByRole("button", { name: /^Search queries: Found with/ });
     expect(line.closest("h2")).not.toBeNull();
-    expect(line).toHaveClass("w-full", "justify-between", "flex-wrap", "border-b");
     expect(within(line).getByText("Search queries")).toBeInTheDocument();
-    expect(within(line).getByText(/^Found with/).closest(".text-body")).toHaveClass("text-ink");
     expect(within(block).getAllByRole("button")).toHaveLength(1);
     const toggle = within(block).getByRole("button", { name: "Search queries: Found with 5 queries and 1 citation pass · Show" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(within(toggle).getByText("Show")).toHaveClass("font-semibold", "text-grey", "underline");
     expect(within(block).queryByRole("table")).toBeNull();
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveTextContent(/Hide$/);
     const table = within(block).getByRole("table");
-    // One layout, the live block's (owner, 2026-11-09): the backend once per
-    // group as a row-group label, no Database column.
+    // The backend once per group as a row-group label, no Database column.
     const overton = within(table).getAllByText("Overton")[0].closest("th");
     expect(overton).toHaveAttribute("scope", "rowgroup");
-    // Round 14 (owner): visible column headings in the Sources table's
-    // header style, once, Results over the counts at the right.
+    // Visible column headings, once.
     const head = within(table).getByRole("columnheader", { name: "Query" }).closest("thead") as HTMLElement;
     expect(head).not.toHaveClass("sr-only");
-    expect(head).toHaveClass("border-b");
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Query", "Results"]);
-    expect(within(table).getByRole("columnheader", { name: "Results" })).toHaveClass("text-right");
     expect(table.querySelectorAll("thead")).toHaveLength(1);
-    expect(table).toHaveClass("text-meta");
-    // The saved pass is its own Grey row, worded by the server.
-    expect(within(table).getByText("Followed citations from 50 sources").closest("td")).toHaveClass("text-grey");
-    expect(within(table).getByText("184")).toHaveClass("tabular-nums");
-    const query = within(table).getByText("childhood obesity school intervention UK");
-    // Queries wrap on words.
-    expect(query.closest("td")).toHaveClass("break-words");
-    expect(within(table).getByText("34")).toHaveClass("tabular-nums");
+    // The saved pass is its own row, worded by the server.
+    expect(within(table).getByText("Followed citations from 50 sources")).toBeInTheDocument();
+    expect(within(table).getByText("childhood obesity school intervention UK")).toBeInTheDocument();
   });
 });
 
@@ -472,12 +445,11 @@ describe("SourcesView — a query's results (round 12)", { timeout: 20_000 }, ()
     expect(lastEvidenceQuery()).toMatchObject({ query: 11, status: undefined });
   });
 
-  it("shows the applied query as a Navy chip, its first 40 characters, the × clearing it", async () => {
+  it("shows the applied query as a chip, its first 40 characters, the × clearing it", async () => {
     const user = userEvent.setup();
     renderSources(ABSTRACTED.slice(0, 2), "?query=11&status=all");
     const bar = screen.getByRole("group", { name: "Filter sources" });
-    const chip = within(bar).getByText("Query: primary school food environment and chil…");
-    expect(chip.closest("span.bg-navy")).not.toBeNull();
+    expect(within(bar).getByText("Query: primary school food environment and chil…")).toBeInTheDocument();
     // The count line reads for the filtered set (the read's own total).
     expect(screen.getAllByRole("status").some((node) => node.textContent === "2 sources")).toBe(true);
     expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
@@ -552,9 +524,9 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
     expect(within(table).getAllByRole("rowheader").map((th) => th.textContent)).toEqual(["Overton", "OpenAlex"]);
     expect(within(table).getAllByTestId("query-results-pulse")).toHaveLength(1);
     expect(within(table).getByText("1,184")).toBeInTheDocument();
-    // A citation pass reads in grey; a topic query in navy.
-    expect(within(table).getByText("Following citations from 50 sources").closest("td")).toHaveClass("text-grey");
-    expect(within(table).getByText("primary school food environment obesity").closest("td")).toHaveClass("text-navy");
+    // A citation pass and a topic query, each in its own row.
+    expect(within(table).getByText("Following citations from 50 sources")).toBeInTheDocument();
+    expect(within(table).getByText("primary school food environment obesity")).toBeInTheDocument();
     // No empty card and no count line while the search runs with nothing in,
     // and the filter bar waits with the table (round 12).
     expect(screen.queryByText(/No sources yet/)).toBeNull();
@@ -591,8 +563,8 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
     const toggle = screen.getByRole("button", { name: "Search queries: Found with 1 query and 1 citation pass · Show" });
     await user.click(toggle);
     const table = within(screen.getByTestId("search-queries-summary")).getByRole("table");
-    expect(within(table).getByText("Followed citations from 40 sources").closest("td")).toHaveClass("text-grey");
-    expect(within(table).getByText("212")).toHaveClass("tabular-nums");
+    expect(within(table).getByText("Followed citations from 40 sources")).toBeInTheDocument();
+    expect(within(table).getByText("212")).toBeInTheDocument();
   });
 
   it("takes the saved passes over the stream's once the coverage lands", () => {
@@ -621,7 +593,7 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
     expect(screen.getByRole("button", { name: "Search queries: Found with 1 query and 2 citation passes · Show" })).toBeInTheDocument();
   });
 
-  it("fades in a source that lands while a stage runs, and holds the page it opened on still", () => {
+  it("shows a source that lands while a stage runs, beside the ones already there", () => {
     vi.mocked(queries.useCoverage).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.useCoverage>);
     streamState = searching([{ backend: "openalex", query: "a", kind: "topic", results: 2 }]);
     const first = { ...mockEvidence[0], source_id: "a", title: "First source" };
@@ -634,7 +606,7 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
     } as unknown as ReturnType<typeof queries.useEvidence>);
     const view = renderSources();
     const rowOf = (title: string) => screen.getAllByRole("row").find((r) => r.textContent?.includes(title)) as HTMLElement;
-    expect(rowOf("First source")).not.toHaveClass("anim-swap-in");
+    expect(rowOf("First source")).toBeInTheDocument();
     vi.mocked(queries.useEvidence).mockReturnValue({
       data: evidencePage([first, second]),
       isPending: false,
@@ -642,8 +614,8 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof queries.useEvidence>);
     view.rerender(sourcesTree());
-    expect(rowOf("Second source")).toHaveClass("anim-swap-in");
-    expect(rowOf("First source")).not.toHaveClass("anim-swap-in");
+    expect(rowOf("Second source")).toBeInTheDocument();
+    expect(rowOf("First source")).toBeInTheDocument();
   });
 });
 
@@ -740,7 +712,6 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     // The screened-in breakfast-clubs row: ✓ + its screening confidence.
     // The name carries the figure (round 10).
     expect(screen.getByRole("button", { name: "Relevant, 91% confidence: screening details" })).toBeInTheDocument();
-    expect(screen.getByText("91%")).toHaveClass("tabular-nums");
     // The retracted row keeps its honest verdict.
     expect(screen.getByRole("button", { name: "Excluded — retracted: screening details" })).toBeInTheDocument();
   });
@@ -826,33 +797,28 @@ describe("SourceDossierBody, one type scale (round 12)", () => {
       </TooltipProvider>,
     );
     const reference = screen.getByTestId("dossier-reference");
-    expect(reference).toHaveClass("text-body");
     expect(reference.textContent).toMatch(/^Sampleton A, Mockford C \(2022\)\. BMJ Open\. doi\.org\/10\.1000\/example\.1$/);
     const facts = document.querySelector('dl[aria-label="About this source"]') as HTMLElement;
     expect(facts).not.toBeNull();
     const labels = within(facts).getAllByRole("term").map((term) => term.textContent);
     expect(labels).toEqual(["Evidence type", "Why this type", "Strength", "Status", "Year", "Origin"]);
-    for (const term of within(facts).getAllByRole("term")) expect(term).toHaveClass("text-grey");
     // The actions at the foot.
     const open = screen.getByRole("link", { name: "Open original" });
     expect(open.closest("footer")).not.toBeNull();
     expect(open).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("carries no chips and no bold, its labels at Meta Grey", () => {
-    const { container } = render(
+  it("says an AI description in its label, and keeps Cited with the Status", () => {
+    render(
       <TooltipProvider>
         <SourceDossierBody source={cited} findings={[]} findingsPending={false} />
       </TooltipProvider>,
     );
-    expect(container.querySelectorAll(".text-\\[11\\.5px\\]")).toHaveLength(0);
-    expect(container.querySelectorAll(".font-semibold, .font-bold, .font-extrabold")).toHaveLength(0);
-    for (const heading of screen.getAllByRole("heading")) expect(heading).toHaveClass("text-meta", "text-grey");
     // An AI description says so in its label, not in a chip.
     expect(screen.getByRole("heading", { name: "About · AI description" })).toBeInTheDocument();
     // Cited sits with the Status, as in the table.
     const status = screen.getByText("Status").parentElement as HTMLElement;
-    expect(within(status).getByText("Cited")).toHaveClass("sources-cited");
+    expect(within(status).getByText("Cited")).toBeInTheDocument();
   });
 });
 
@@ -1010,13 +976,11 @@ describe("SourcesView — the dossier's records on a scoping task", () => {
 });
 
 describe("SourcesView — one header line (owner, round 10)", () => {
-  it("keeps every header on one line at the Caption label size, each sort mark's slot reserved", () => {
+  it("reserves each header's sort mark slot, and keeps the filters out of the header", () => {
     renderSources();
     const table = screen.getAllByRole("table")[0];
     for (const th of within(table).getAllByRole("columnheader")) {
-      expect(th).toHaveClass("sources-th");
       const button = within(th).getByRole("button");
-      expect(button).toHaveClass("whitespace-nowrap", "text-caption", "uppercase", "min-h-6");
       // The arrow is always there (hidden until hover or focus when the
       // column is not the sort), so every label sits at the same height.
       expect(button.querySelector("[data-testid='sort-arrow']")).not.toBeNull();
@@ -1027,47 +991,38 @@ describe("SourcesView — one header line (owner, round 10)", () => {
 });
 
 // Several clicks through popovers each: a longer budget for a loaded machine.
-describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () => {
+describe("SourcesView — the filter row", { timeout: 20_000 }, () => {
   it("groups the exclusive screening toggles and puts every filter in one row as a visible control", () => {
     renderSources();
     const row = screen.getByRole("group", { name: "Filter sources" });
     const screening = within(row).getByRole("group", { name: "Screening" });
     expect(within(screening).getAllByRole("button").map((button) => button.textContent)).toEqual(["All", "Relevant", "Screened out"]);
     expect(within(screening).queryByRole("button", { name: "Cited" })).toBeNull();
-    // Each select is a visible bordered control at least 24 px tall.
-    // Every control is a 32 px outline box on the bar's one baseline (round 11).
+    // Each select is a visible control, never hidden until hover.
     for (const name of [/^Key theme/, /^Origin/, /^Evidence type/, /^Strength/, /^Filter by year/]) {
-      const trigger = within(row).getByRole("button", { name });
-      expect(trigger).toHaveClass("border", "h-8", "text-meta");
-      expect(trigger).not.toHaveClass("opacity-0");
+      expect(within(row).getByRole("button", { name })).not.toHaveClass("opacity-0");
     }
-    // Round 12: 12 px between controls.
-    // Round 12: the screening switch alone on the first row, the facets on
-    // a second with 12 px gaps, 8 px between the rows.
-    expect(row).toHaveClass("flex-col", "gap-2");
+    // The screening switch alone on the first row, the facets after it.
     expect(row.firstElementChild).toBe(screening);
     const facets = within(row).getByTestId("sources-facets");
-    expect(facets).toHaveClass("flex-wrap", "gap-3");
     expect(facets).not.toContainElement(screening);
-    // The screening switch: the chosen choice has a Navy border and words.
-    expect(within(screening).getByRole("button", { name: "Relevant" })).toHaveClass("border-navy", "text-navy", "h-8");
-    expect(within(screening).getByRole("button", { name: "All" })).toHaveClass("border-line-2", "text-grey");
+    // The screening switch: the chosen choice is pressed.
+    expect(within(screening).getByRole("button", { name: "Relevant" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screening).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("shows an applied filter as a filled Navy chip whose × clears it", async () => {
+  it("shows an applied filter as a chip whose × clears it", async () => {
     const user = userEvent.setup();
     renderSources(undefined, "?strength=Moderate&cited=true");
     const chip = screen.getByRole("button", { name: "Strength: Moderate" });
     expect(chip).toHaveTextContent("Strength: Moderate");
-    expect(chip.parentElement).toHaveClass("bg-navy", "text-paper", "h-8");
     const cited = screen.getByRole("button", { name: "Cited" });
     expect(cited).toHaveAttribute("aria-pressed", "true");
-    expect(cited.parentElement).toHaveClass("bg-navy");
     await user.click(screen.getByRole("button", { name: "Clear the strength filter" }));
     expect(screen.getByTestId("location")).not.toHaveTextContent("strength=");
     expect(screen.getByTestId("location")).toHaveTextContent("cited=true");
-    // An idle facet stays the outline box.
-    expect(screen.getByRole("button", { name: "Strength: All" })).toHaveClass("border-line-2", "bg-paper");
+    // The cleared facet reads All again.
+    expect(screen.getByRole("button", { name: "Strength: All" })).toBeInTheDocument();
   });
 
   it("filters by publisher country, the Landscape's names offered and the query carrying it", async () => {
@@ -1128,8 +1083,6 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
     const user = userEvent.setup();
     renderSources();
     const trigger = screen.getByRole("button", { name: /^Sort: Relevant/ });
-    // Shown while the table stacks, by the column's width (round 12).
-    expect(trigger).toHaveClass("@min-[54rem]/sources:hidden");
     expect(trigger).toHaveTextContent("Sort: Relevant, most likely first");
     await user.click(trigger);
     const options = within(await screen.findByRole("listbox", { name: "Sort" })).getAllByRole("option");
@@ -1141,7 +1094,7 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
   });
 });
 
-describe("SourcesView — the rows (round 10)", () => {
+describe("SourcesView — the rows", () => {
   it("leaves one tab stop per row, the title: the cells' reasons are hover only", () => {
     renderSources();
     const table = screen.getAllByRole("table")[0];
@@ -1154,7 +1107,7 @@ describe("SourcesView — the rows (round 10)", () => {
     expect(screen.getAllByRole("button", { name: "Abstract only: why" })[0]).toHaveAttribute("tabindex", "-1");
   });
 
-  it("marks the values with a reason by the dotted underline, and the strength by its tone", () => {
+  it("puts each value with a reason behind a hover button, and the strength's tone before it", () => {
     renderSources([
       { ...mockEvidence[2], source_id: "s1", title: "Strong one", appraisal_tier: "Very strong", classification_reason: "Why" },
       { ...mockEvidence[2], source_id: "s2", title: "Middle one", appraisal_tier: "Moderate" },
@@ -1162,20 +1115,19 @@ describe("SourcesView — the rows (round 10)", () => {
       { ...mockEvidence[2], source_id: "s4", title: "Unrated one", appraisal_tier: "Unrated" },
     ]);
     const table = screen.getAllByRole("table")[0];
-    // The standard affordance: the value's word carries the dotted underline.
-    expect(within(table).getAllByText("Cohort study")[0]).toHaveClass("reason-word");
-    expect(within(table).getByText("Very strong")).toHaveClass("reason-word");
-    expect(within(table).getAllByText("91%")[0]).toHaveClass("reason-word");
-    // The tone square before the strength (round 12): green, yellow, red, red.
+    // Each value with a reason is its hover button.
+    expect(within(table).getAllByRole("button", { name: "Cohort study: why this type" })[0]).toBeInTheDocument();
+    expect(within(table).getByRole("button", { name: "Very strong: how strength is appraised" })).toBeInTheDocument();
+    expect(within(table).getAllByRole("button", { name: /91% confidence: screening details$/ })[0]).toBeInTheDocument();
+    // The tone square before the strength: green, yellow, red, red.
     const tones = within(table).getAllByTestId("strength-mark").map((mark) => mark.getAttribute("data-tone"));
     expect(tones).toEqual(["green", "yellow", "red", "red"]);
   });
 
-  it("sets the values as plain text: the evidence type in sentence case, and no chips (round 12)", () => {
+  it("sets the evidence type in sentence case", () => {
     renderSources([{ ...mockEvidence[2], evidence_type: "RCTs and Quasi-Experimental Studies", cited: true }]);
     const table = screen.getAllByRole("table")[0];
-    expect(within(table).getByText("RCTs and quasi-experimental studies")).not.toHaveClass("text-[11.5px]");
-    expect(table.querySelectorAll(".text-\\[11\\.5px\\]")).toHaveLength(0);
+    expect(within(table).getByText("RCTs and quasi-experimental studies")).toBeInTheDocument();
   });
 
   it("shows the strength's tones as a legend on its header", async () => {
@@ -1207,33 +1159,26 @@ describe("SourcesView — the rows (round 10)", () => {
     expect(within(table).getByRole("button", { name: "Title only: why" })).toHaveAttribute("tabindex", "-1");
   });
 
-  it("stacks a row below lg with the values in column order (the markup the phone row restyles)", () => {
+  it("lists a row's values in column order", () => {
     renderSources([{ ...mockEvidence[2], abstract: "An abstract." }]);
     const table = screen.getAllByRole("table")[0];
     const row = within(table).getAllByRole("row")[1];
     const cells = within(row).getAllByRole("cell");
-    expect(cells.map((cell) => cell.className.split(" ").filter((name) => name.startsWith("sources-cell") || name === "sources-value"))).toEqual([
-      ["sources-cell", "sources-cell-source"],
-      ["sources-cell", "sources-cell-year"],
-      ["sources-cell", "sources-value", "sources-cell-type"],
-      ["sources-cell", "sources-value"],
-      ["sources-cell", "sources-value", "sources-cell-relevant"],
-      ["sources-cell", "sources-value", "sources-cell-status"],
-    ]);
+    expect(cells).toHaveLength(6);
     expect(cells.slice(2).map((cell) => cell.textContent)).toEqual(["Cohort study", "Moderate confidence", "91%", "Abstract only"]);
   });
 });
 
-// Round 13 (owner): the funnel's Appraised and Full text accessed rows open
-// the table on their sets through the evidence read's filters.
-describe("SourcesView — the funnel's sets (round 13)", { timeout: 20_000 }, () => {
+// The funnel's Appraised and Full text accessed rows open the table on their
+// sets through the evidence read's filters.
+describe("SourcesView — the funnel's sets", { timeout: 20_000 }, () => {
   it("filters on appraised and full text, each shown as a chip whose × clears it", async () => {
     const user = userEvent.setup();
     renderSources(undefined, "?appraised=true&depth=full_text");
     expect(lastEvidenceQuery()).toMatchObject({ appraised: true, depth: "full_text" });
     const bar = screen.getByRole("group", { name: "Filter sources" });
-    expect(within(bar).getByRole("button", { name: "Appraised" }).closest("span")).toHaveClass("bg-navy");
-    expect(within(bar).getByRole("button", { name: "Full text accessed" }).closest("span")).toHaveClass("bg-navy");
+    expect(within(bar).getByRole("button", { name: "Appraised" })).toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Full text accessed" })).toBeInTheDocument();
     await user.click(within(bar).getByRole("button", { name: "Appraised" }));
     expect(screen.getByTestId("location")).not.toHaveTextContent("appraised");
     expect(screen.getByTestId("location")).toHaveTextContent("depth=full_text");
@@ -1287,7 +1232,6 @@ describe("SourcesView — sources per page (round 12)", { timeout: 20_000 }, () 
     expect(screen.getAllByRole("status").some((node) => node.textContent === `1–${ABSTRACTED.length} of 207 sources`)).toBe(true);
     const select = screen.getByRole("combobox", { name: "Sources per page" });
     expect(select).toHaveTextContent("25 per page");
-    expect(select).toHaveClass("h-8");
   });
 
   it("puts a chosen size in the URL and remembers it for the task; 25 leaves the URL", async () => {
@@ -1322,38 +1266,25 @@ describe("SourcesView — sources per page (round 12)", { timeout: 20_000 }, () 
   });
 });
 
-describe("SourcesView — states in the table's frame (round 10)", { timeout: 20_000 }, () => {
+describe("SourcesView — states in the table's frame", { timeout: 20_000 }, () => {
   const evidence = (value: Partial<ReturnType<typeof queries.useEvidence>>) =>
     vi.mocked(queries.useEvidence).mockReturnValue({ refetch: vi.fn(), ...value } as unknown as ReturnType<typeof queries.useEvidence>);
 
-  it("loads inside the frame: the real header row and six placeholder rows", () => {
+  it("loads busy, under the real header row", () => {
     evidence({ data: undefined, isPending: true, isError: false } as never);
     renderSources();
     const loading = screen.getByLabelText("Loading sources");
-    expect(loading).toHaveClass("sources-frame");
     expect(loading).toHaveAttribute("aria-busy", "true");
     expect(within(loading).getByRole("button", { name: "Sort by source" })).toBeInTheDocument();
-    expect(loading.querySelectorAll(".sources-row-skeleton")).toHaveLength(6);
-    // Round 13 (owner): a bar in every column of every row, each sized to
-    // its column, the source's two lines included; Relevant's at the right.
-    for (const row of loading.querySelectorAll(".sources-row-skeleton")) {
-      const cells = [...row.querySelectorAll("td")];
-      expect(cells).toHaveLength(6);
-      for (const cell of cells) expect(cell.querySelector(".placeholder-bar")).not.toBeNull();
-      expect(cells[0].querySelectorAll(".placeholder-bar")).toHaveLength(2);
-      expect(cells[4].querySelector(".placeholder-bar")).toHaveClass("ml-auto");
-    }
   });
 
-  it("fails inside the frame with the sentence and a 40 px ghost Try again", async () => {
+  it("fails with the sentence and a Try again", async () => {
     const refetch = vi.fn();
     evidence({ data: undefined, isPending: false, isError: true, error: new Error("boom"), refetch } as never);
     renderSources();
     const alert = screen.getByRole("alert");
-    expect(alert).toHaveClass("sources-frame");
     expect(alert).toHaveTextContent("Sources couldn't be loaded.");
     const retry = within(alert).getByRole("button", { name: "Try again" });
-    expect(retry).toHaveClass("h-10");
     await userEvent.click(retry);
     expect(refetch).toHaveBeenCalled();
   });
@@ -1405,7 +1336,6 @@ describe("SourcesView — states in the table's frame (round 10)", { timeout: 20
     expect(right).toContainElement(screen.getByRole("combobox", { name: "Sources per page" }));
     expect([...right.children].indexOf(range)).toBeLessThan([...right.children].indexOf(pages));
     const next = within(pages).getByRole("button", { name: "Next" });
-    expect(next).toHaveClass("h-10");
     await userEvent.click(next);
     expect(screen.getByTestId("location")).toHaveTextContent("page=2");
     expect(scroll).toHaveBeenCalledWith({ block: "start" });

@@ -3,7 +3,9 @@ type: Convention
 title: Reject model output at the grain of the fault — and persist the rejection reason
 description: Style/text-rule violations reject only the offending unit (group, claim), routing its inputs to the repair; only structural corruption (id integrity, unparseable envelope) rejects a whole response. Every persisted rejection/repair decision carries its reason.
 tags: [validation, repair, grouping, synthesise, flag-dont-drop, convention]
-timestamp: 2026-07-08
+generated:
+  by: process:okf-migrate
+  at: 2026-07-08
 ---
 
 # Rule

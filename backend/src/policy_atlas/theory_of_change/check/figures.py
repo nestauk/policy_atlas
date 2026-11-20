@@ -1,4 +1,4 @@
-"""The size of change behind each link: the ``toc_figures`` step (task 054, C37).
+"""The size of change behind each link: the ``toc_figures`` step.
 
 After the judge, one small call (``toc_figures_v1``, fast tier) per judgement
 that supports or refutes a link reads the same title and abstract the judge
@@ -71,7 +71,7 @@ def _trim(number: str) -> str:
 
 
 def number_in_quote(value: float | int | str, quote: str) -> bool:
-    """Whether the figure's number appears in its quote (C37).
+    """Whether the figure's number appears in its quote.
 
     Both sides are normalised (:func:`canonical_numbers`, spaces, a trailing
     ``.0``) and compared as whole numbers, without sign, so "6" does not match
@@ -204,7 +204,7 @@ def toc_figures_scope(
     context: ScopeContext,
     backend: TocBackend,
 ) -> dict[str, Any]:
-    """Find the size of change behind each judged link (C37).
+    """Find the size of change behind each judged link.
 
     Reads every judgement of a link's current wording that supports or
     refutes it and has no figures stamp yet; one call each, in parallel.

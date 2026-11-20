@@ -3,7 +3,14 @@ type: Invariant
 title: Every run-status transition needs a matching run event, or SSE desyncs from the DB
 description: SSE replay/tail and the frontend run store derive run.status purely from a curated event-type map; two shipped desyncs (continuation.claimed missing, run.finished-on-abort missing) each left a live run showing the wrong status indefinitely.
 tags: [sse, continuation, run-status, event-log, invariant]
-timestamp: 2026-07-21
+generated:
+  by: process:okf-migrate
+  at: 2026-07-21
+sources:
+  - resource: "backend/src/policy_atlas/api/routers/sse.py"
+    title: "`backend/src/policy_atlas/api/routers/sse.py` (`_frames_for_row`, the `run.status` event-type map)"
+  - resource: "backend/src/policy_atlas/api/continuation.py"
+    title: "`backend/src/policy_atlas/api/continuation.py` (`_persist_abort`, `claim_continuation`)"
 ---
 
 # Rule
@@ -35,10 +42,3 @@ path (executor crash handling, a future terminal state) needs its event added
 here in the SAME commit that changes the status column. Before trusting this
 invariant on a new code path, grep every writer of `capability_run.c.status` and
 confirm each one has a corresponding entry in the `sse.py` map.
-
-# Citations
-
-- `backend/src/policy_atlas/api/routers/sse.py` (`_frames_for_row`, the
-  `run.status` event-type map)
-- `backend/src/policy_atlas/api/continuation.py` (`_persist_abort`,
-  `claim_continuation`)

@@ -2,8 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 
 /*
- * Streamed prose, paced in the browser (task 058, owner round 7: "feels a bit
- * jittery"; recipe in research/streaming-text-smoothness.md).
+ * Streamed prose, paced in the browser.
  *
  * The store's `draft` stays the arrival target. The page shows a revealed
  * prefix of it that a frame loop grows at a steady rate, faster when the
@@ -269,8 +268,8 @@ function depthOf(element: Element): number {
 
 /**
  * Measure a box's change once every observer has heard it, the deepest box
- * first (round 14: the thread's box, created first, measured a reply's new
- * line before the reply's own box had eased it, and clipped the action line
+ * first (otherwise the thread's box, created first, measures a reply's new
+ * line before the reply's own box has eased it, and clips the action line
  * under it). All the observers hear one change in the same delivery; the
  * flush runs after it, so a nested box always absorbs its own change before
  * a box around it measures.
@@ -288,17 +287,17 @@ function scheduleMeasure(depth: number, measure: () => void): void {
 
 /**
  * Run `after` once the eased boxes have measured the DOM change being
- * delivered and started their eases: a scroll pin re-pins then (owner,
- * 2026-11-09: a turn losing its action line was laid out shorter inside
- * React's commit, before any box could ease it, and the scroll region's
- * offset was pulled back and never put right).
+ * delivered and started their eases: a scroll pin re-pins then (a turn
+ * losing its action line is laid out shorter inside
+ * React's commit, before any box can ease it, and the scroll region's
+ * offset would be pulled back and never put right).
  */
 export function afterEasedHeights(after: () => void): void {
   scheduleMeasure(-1, after);
 }
 
 /** How long a section's height takes to follow its text when repaired
- *  sentences change length (task 058, owner round 8). */
+ *  sentences change length. */
 export const EASE_HEIGHT_MS = 300;
 
 /** The strong ease-out (`--ease-out-strong`). */
@@ -306,8 +305,8 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 /**
  * Ease a box to its content's new height instead of jumping, so a sentence
- * that grows or shrinks moves the text below it smoothly (task 058, owner
- * round 8: repairs of several claims).
+ * that grows or shrinks moves the text below it smoothly (for example,
+ * repairs of several claims).
  *
  * The box eases only what it owes its content, never a fixed height: when
  * the content changes by some amount, the content's bottom margin starts at
@@ -315,26 +314,26 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
  * ease-out), with the box clipping while it runs. The box keeps its natural
  * height (the content's height less what it still owes), so content that
  * grows smoothly under it (a box inside this one easing a reply's new line)
- * shows at once, and only what just arrived is held back (owner, 2026-11-09:
- * the action line under a streaming reply dropped out of view; boxes that
- * eased to a fixed height froze while the reply's own box grew, and clipped
- * it). A change during an ease carries on from what is still owed.
+ * shows at once, and only what just arrived is held back (a box that eased
+ * to a fixed height would freeze while the reply's own box grew, clip it,
+ * and drop the action line under a streaming reply out of view). A change
+ * during an ease carries on from what is still owed.
  *
  * The content is watched with a MutationObserver, whose callback runs as a
  * microtask after the DOM changes and before the browser lays out and
  * paints. (A ResizeObserver would start the animation inside its own
  * delivery, resizing the boxes around it that other observers watch, and
- * the browser reports that as a "ResizeObserver loop"; round 9.) Boxes nest
- * (round 12: the thread around a streamed reply), and a change is measured
- * deepest box first (round 14), so a box inside this one starts its own ease
+ * the browser reports that as a "ResizeObserver loop".) Boxes nest
+ * (the thread around a streamed reply), and a change is measured
+ * deepest box first, so a box inside this one starts its own ease
  * before this one measures, and this one sees only what that one did not
  * absorb. A ResizeObserver only reads: it keeps the height to measure from
  * current while the content changes with no DOM change here.
  *
- * With `growOnly` a shrink passes straight through (the Task Agent thread,
- * task 058 round 9: a settling card eases its own height). With `opens` the
- * box opens from nothing when it mounts (a block arriving in the thread,
- * round 14). Off (`active` false) it does nothing, and the caller turns it
+ * With `growOnly` a shrink passes straight through (the Task Agent thread:
+ * a settling card eases its own height). With `opens` the
+ * box opens from nothing when it mounts (a block arriving in the thread).
+ * Off (`active` false) it does nothing, and the caller turns it
  * off under reduced motion.
  *
  * Args:
@@ -405,9 +404,8 @@ export function useEasedHeight(
       if (last >= 1) ease(last);
       // The gap under the box opens with it, even while the box is empty (a
       // confirm turn waiting for its action line), so a block arriving above
-      // another (a turn above the plan card) moves nothing under it: the gap
-      // arriving at once dropped the plan card and slid it back (owner,
-      // 2026-11-09: jitter after a decision).
+      // another (a turn above the plan card) moves nothing under it: a gap
+      // arriving at once would drop the plan card and slide it back.
       const gap = getComputedStyle(outer).marginBottom;
       if (Number.parseFloat(gap) > 0) {
         opening = outer.animate([{ marginBottom: "0px" }, { marginBottom: gap }], {

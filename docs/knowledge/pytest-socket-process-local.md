@@ -3,7 +3,14 @@ type: Testing rule
 title: pytest-socket denies only the current process and raises SocketConnectBlockedError
 description: The suite-wide socket deny patches socket in the pytest process only — multiprocessing-worker guards must stay — and a blocked connect raises SocketConnectBlockedError, which is NOT a subclass of SocketBlockedError.
 tags: [pytest-socket, testing, egress, multiprocessing]
-timestamp: 2026-07-12
+generated:
+  by: process:okf-migrate
+  at: 2026-07-12
+sources:
+  - resource: "pyproject.toml"
+    title: "`pyproject.toml` (addopts), `tests/test_socket_policy.py` (suite-wide pin)"
+  - resource: "../tasks/019-folding-pass/verification.md"
+    title: "[019 verification.md](../tasks/019-folding-pass/verification.md) (A3 phase; gate 4)"
 ---
 
 # Rule
@@ -34,8 +41,3 @@ retire — recorded so the next sweep doesn't "finish the job" and open egress h
   its own guard.
 - The DB allowlist is loopback-shaped; a containerised DB on a non-loopback host would
   need an explicit `--allow-hosts` change (an approval-gated test-infra edit).
-
-# Citations
-
-- `pyproject.toml` (addopts), `tests/test_socket_policy.py` (suite-wide pin)
-- [019 verification.md](../tasks/019-folding-pass/verification.md) (A3 phase; gate 4)

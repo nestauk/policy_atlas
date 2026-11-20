@@ -1,4 +1,4 @@
-"""Steering-event emission chassis (task 024, decision 1).
+"""Steering-event emission chassis.
 
 Every human-in-the-loop steering moment — pause, decision (user, agent or
 standing-default), rejected adjustment, refused intent, skip and the boundary
@@ -14,7 +14,7 @@ and walk-level events attach to the most-recent attempted run id. Either way the
 resolved run id MUST be non-None: **no steering event is emitted before the first
 component run exists**. :func:`emit`/:func:`emit_standalone` assert this.
 
-Transactional pairing (contract decision 1, finding m1): decision/skip/re-run
+Transactional pairing: decision/skip/re-run
 events commit on the SAME connection as their adjacent state change (the
 plan-version row insert, the abandon flip) — use :func:`emit` inside that
 transaction. Pause/refused/rejected events have no state-change partner and are
@@ -55,7 +55,7 @@ _NO_RUN_ID_INVARIANT = (
     "emitted before the first component run exists (event_log.run_id is NOT NULL)"
 )
 
-# --- Stored-actor compatibility (task 038, contract A5) --------------------
+# --- Stored-actor compatibility --------------------
 # `event_log` is append-only: decisions written before the slice still say
 # `orchestrator` where the persona is now named `agent`. Nothing rewrites the
 # stored payloads, so every projection of a stored `decided_by`/`authored_by`
@@ -70,8 +70,9 @@ def canonical_actor(value: object) -> str | None:
         value: The raw payload value, which may be any JSON scalar or absent.
 
     Returns:
-        The current actor name — a pre-038 ``orchestrator`` reads back as
-        ``agent`` — or ``None`` when the value is missing or not a string.
+        The current actor name — an ``orchestrator`` stored before that actor
+        was renamed reads back as ``agent`` — or ``None`` when the value is
+        missing or not a string.
     """
     if not isinstance(value, str):
         return None
@@ -136,8 +137,7 @@ def decision_payload(
         interpreted_action: The bounded delta / action summary, or ``None`` when
             there is no action (a plain continue).
         confirmed: Whether the decision was confirmed before applying.
-        user_text: Verbatim user prose, only when prose was given (``None`` this
-            phase — the CLI free-text surface lands in task 17).
+        user_text: Verbatim user prose, only when prose was given.
         rerun_mode: ``additive``/``replacement`` when the decision triggers a
             re-run, else ``None``.
 

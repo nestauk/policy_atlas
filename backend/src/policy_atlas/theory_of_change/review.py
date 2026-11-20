@@ -1,4 +1,4 @@
-"""The review after edits (task 054, C45): read the theory, ask the model, store a proposal.
+"""The review after edits: read the theory, ask the model, store a proposal.
 
 Runs off the request path on the walk executor, like a check: it reads the
 plan with the user's clarifications, the theory with verdicts and pathways,
@@ -36,7 +36,7 @@ from policy_atlas.theory_of_change.draft import plan_data, with_clarifications
 
 log = structlog.get_logger()
 
-#: Edits since the last review after which the Task Agent suggests one (C45).
+#: Edits since the last review after which the Task Agent suggests one.
 REVIEW_AFTER_EDITS = 5
 
 
@@ -123,7 +123,7 @@ def _theory(conn: Connection, task_id: uuid.UUID) -> dict[str, Any]:
 
 
 def latest_report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:
-    """The latest check's narrative report (C38), from its step payload, or ``None``."""
+    """The latest check's narrative report, from its step payload, or ``None``."""
     payload = conn.execute(
         select(event_log.c.payload)
         .where(event_log.c.task_id == task_id)
@@ -142,7 +142,7 @@ _READER_STEPS = (edits.USER_EDIT, "user_undo")
 
 
 def report_stale(conn: Connection, task_id: uuid.UUID) -> bool:
-    """Whether the reader changed the theory after the latest report's walk started (S9).
+    """Whether the reader changed the theory after the latest report's walk started.
 
     A content edit, an evidence decision (remove, restore, rescore, accept or
     reject new documents, keep the evidence), an accepted suggestion or an
@@ -239,7 +239,7 @@ def reviewing(conn: Connection, task_id: uuid.UUID) -> bool:
 
 
 def run_review(engine: Engine, *, task_id: uuid.UUID, backend: TocBackend) -> uuid.UUID | None:
-    """Review the theory after edits and store the proposal (C45).
+    """Review the theory after edits and store the proposal.
 
     Returns:
         The proposal's id, or ``None`` when the review proposed nothing.

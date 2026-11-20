@@ -973,7 +973,9 @@ def test_generation_failure_raises_and_harness_records_component_failed(
         if event["event_type"] == "component.failed" and event["payload"]["component"] == "acquire"
     ]
     assert len(failed) == 1
-    assert failed[0]["error"] == "generation failed"
+    # Task 064a Q3: a library exception (a plain RuntimeError here) persists
+    # only its class name; the message stays in the server log.
+    assert failed[0]["error"] == "RuntimeError"
     assert any(event["event_type"] == "run.failed" for event in log)
 
 

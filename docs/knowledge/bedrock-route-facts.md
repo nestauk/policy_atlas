@@ -3,7 +3,16 @@ type: Integration quirk
 title: Bedrock from London — which models answer, through which API, with which key variable
 description: From eu-west-2 the GPT-5.6 family (Terra, Luna, Sol) answers through Bedrock's OpenAI-compatible endpoint under global.* profiles only (gpt-5.4-mini is absent, gpt-5.5 is US-only); Claude and Cohere answer through eu.* profiles via boto3 Converse / InvokeModel; each route names its key variable (Bedrock routes read AWS_BEARER_TOKEN_BEDROCK for both clients), and a missing Bedrock variable surfaces as an AccessDeniedException naming the IAM user; Terra refuses function tools without reasoning_effort "none" but parses structured output without it.
 tags: [bedrock, openai, claude, cohere, boto3, credentials, live-probe]
-timestamp: 2026-11-05
+generated:
+  by: process:okf-migrate
+  at: 2026-11-05
+sources:
+  - resource: "../tasks/053-bedrock-local-route/contract.md"
+    title: "[053 contract \u00a7 Facts we rely on](../tasks/053-bedrock-local-route/contract.md) (model cards and probes, 2026-09-24/25)"
+  - resource: "../tasks/053-bedrock-local-route/verification.md"
+    title: "[053 verification \u00a7 Live checks and \u00a7 Review findings](../tasks/053-bedrock-local-route/verification.md) (live checks 1 to 3 and the Terra knob probe, 2026-10-14)"
+  - resource: "backend/src/policy_atlas/model_routes.toml"
+    title: "`backend/src/policy_atlas/model_routes.toml`; `core/embeddings.py` `CohereEmbeddingBackend`; `evidence_search/sourcing/search_generation.py` `ClaudeSearchGenerationBackend`; `backend/.env.example`"
 ---
 
 # Rules
@@ -52,13 +61,3 @@ timestamp: 2026-11-05
   `global.openai.gpt-6-luna` (Terra, Sol alike). A price table keyed by the OpenAI id must strip
   `global.openai.` before the lookup (`theory_of_change/cost.py`, `scripts/cost_per_run.py`), or
   every Bedrock call reports as unpriced (054 review, Codex, 2026-11-05).
-
-# Citations
-
-- [053 contract § Facts we rely on](../tasks/053-bedrock-local-route/contract.md) (model
-  cards and probes, 2026-09-24/25)
-- [053 verification § Live checks and § Review findings](../tasks/053-bedrock-local-route/verification.md)
-  (live checks 1 to 3 and the Terra knob probe, 2026-10-14)
-- `backend/src/policy_atlas/model_routes.toml`; `core/embeddings.py`
-  `CohereEmbeddingBackend`; `evidence_search/sourcing/search_generation.py`
-  `ClaudeSearchGenerationBackend`; `backend/.env.example`

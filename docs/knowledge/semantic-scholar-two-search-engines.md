@@ -3,7 +3,18 @@ type: Integration quirk
 title: Semantic Scholar has two search engines — paper/search needs every word to match, snippet/search ranks by meaning
 description: The Academic Graph API's paper/search is an all-words keyword match (a title-length query returned totals of 0, 1 and 22 for three of four review intents); the same API's snippet/search is a dense retriever over title, abstract and body passages, returns up to 1,000 snippets in one request keyed by corpusId only (map to DOIs with paper/batch, 500 ids per call), collapses to about 550 unique papers, and leans towards open-access papers because only they have body text.
 tags: [search-backends, semantic-scholar, retrieval, evaluation, rate-limits]
-timestamp: 2026-09-25
+generated:
+  by: process:okf-migrate
+  at: 2026-09-25
+sources:
+  - resource: "../tasks/046-search-baselines/contract.md"
+    title: "[046 contract \u00a7 Arms (arm 1 and 1b)](../tasks/046-search-baselines/contract.md)"
+  - resource: "../tasks/046-search-baselines/verification.md"
+    title: "[046 verification \u00a7 Phase 5 addendum and \u00a7 Review findings](../tasks/046-search-baselines/verification.md)"
+  - resource: "scripts/evals/search/measure/baseline_recall.py"
+    title: "`scripts/evals/search/measure/baseline_recall.py` `fetch_semantic_scholar`, `fetch_semantic_scholar_snippet`; `tests/test_measure.py::test_baseline_snippet_arm`"
+  - resource: "scripts/evals/search/results/history.md"
+    title: "`scripts/evals/search/results/history.md` rows dated 2026-09-25"
 ---
 
 # Rules
@@ -43,11 +54,3 @@ as one.
   first N results and then remove duplicates. Name that asymmetry with the results.
 - Every cap needs the search plus its lookups, so a per-cap request count is a fetch
   count, not a "requests to reach this cap" count.
-
-# Citations
-
-- [046 contract § Arms (arm 1 and 1b)](../tasks/046-search-baselines/contract.md)
-- [046 verification § Phase 5 addendum and § Review findings](../tasks/046-search-baselines/verification.md)
-- `scripts/evals/search/measure/baseline_recall.py` `fetch_semantic_scholar`,
-  `fetch_semantic_scholar_snippet`; `tests/test_measure.py::test_baseline_snippet_arm`
-- `scripts/evals/search/results/history.md` rows dated 2026-09-25

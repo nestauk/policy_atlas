@@ -7,20 +7,19 @@ type StageName = components["schemas"]["StageStartedFrame"]["stage"];
 
 export type StageStatus = "started" | "completed" | "failed" | "skipped";
 
-/** One step in the run timeline. Pinned shape (task 025 §4). */
+/** One step in the run timeline. Pinned shape. */
 export interface StageEntry {
   stage: StageName;
   label: string;
   status: StageStatus;
   summary?: Record<string, number | string>;
   seconds?: number | null;
-  /** The done row's counts with the server's nouns (task 058, N17). */
+  /** The done row's counts with the server's nouns. */
   counts?: { value: number; noun: string }[];
   blurb?: string;
   /** When the stage started: the `occurred_at` of its `stage.started`
    *  frame, kept through `stage.completed` / `stage.failed` so the card can
-   *  show the in-progress row's elapsed time and a merged row's span
-   *  (task 058, N5). */
+   *  show the in-progress row's elapsed time and a merged row's span.*/
   startedAt: string;
 }
 
@@ -54,7 +53,7 @@ export interface ResolvedDecision {
 interface PlanState {
   version: number;
   /** Null for an Options scoping task: its plan travels on `scoping` and the
-   *  plan document reads it from the plan query, not the stream (task 044). */
+   *  plan document reads it from the plan query, not the stream. */
   plan: PlanDraft | null;
 }
 
@@ -69,7 +68,7 @@ interface TaskSummary {
 }
 
 /** The latest tick for one stage (or the global key, for stage-less
- *  ticks) — what the model is doing now (task 058, D2). Null counts on the
+ *  ticks) — what the model is doing now. Null counts on the
  *  wire are left out here. The view decides from `occurredAt` whether the
  *  activity dot still breathes. */
 export interface StageLiveness {
@@ -101,15 +100,14 @@ export interface LiveSection {
   state: "planned" | "writing" | "filled";
   /** What the section is (`key_findings`, `case_studies`, `body` or
    *  `intro`), from the skeleton, so the page orders live sections by the
-   *  same rule as the saved report (task 058, round 7). `intro` (round 8) is
+   *  same rule as the saved report. `intro` is
    *  the paragraph the saved report shows under "Full report": after the
    *  executive summary, before the body sections, whatever its index. */
   role?: string;
   prose?: string;
   /** The prose streamed so far for a section being written, from the
    *  ephemeral `artefact.section_delta` frames. Kept apart from `prose`
-   *  (the durable record) and cleared when the section completes
-   *  (task 058, N7). */
+   *  (the durable record) and cleared when the section completes.*/
   draft?: string;
   /** Character spans of `draft` the checker failed and the writer is now
    *  revising (`artefact.section_revising`); cleared on completion. */
@@ -125,20 +123,20 @@ export interface LiveSection {
   /** The checked section's citations (`artefact.section_completed`), each a
    *  code-point span of `prose` with its report-wide reference number. Set
    *  on completion when the section has any, and kept until the committed
-   *  report replaces the live view (task 058, round 7). */
+   *  report replaces the live view. */
   citations?: LiveCitation[];
   /** The checked section's claims with the checker's verdict
-   *  (`artefact.section_completed.claims`, task 058, round 13): the verdict
+   *  (`artefact.section_completed.claims`): the verdict
    *  is the claim's, not each citation's. Set on completion when the section
    *  has any; join to `citations` by `claimId`, or by span. */
   checkedClaims?: LiveCheckedClaim[];
   /** Case-study cards as each one closes in the streamed reply
    *  (`artefact.section_card`), in order; cleared on completion and when the
-   *  draft is replaced (task 058, round 7). */
+   *  draft is replaced. */
   cards?: LiveCard[];
 }
 
-/** One checked claim on a completed live section (task 058, round 13):
+/** One checked claim on a completed live section:
  *  `[start, end)` in code points of `prose`, the checker's `tier` (null when
  *  not checked) and its `rationale`. `claimId` is the committed report's
  *  claim id, or null without a saved row. */
@@ -150,14 +148,14 @@ export interface LiveCheckedClaim {
   rationale: string | null;
 }
 
-/** One checked citation on a completed live section (task 058, round 7).
+/** One checked citation on a completed live section.
  *  `[start, end)` counts code points of the section's `prose`; `n` is the
- *  report-wide reference number (the verdict is the claim's since round 13:
+ *  report-wide reference number (the verdict is the claim's:
  *  `LiveSection.checkedClaims`).
  *  `citationId` and `claimId` are the ids the committed report's citation and
  *  claim carry (the chunk context is asked for by `citationId`), and `quote`
- *  the checked quote (round 8); the ids are null and the quote empty on a
- *  frame recorded before round 8. */
+ *  the checked quote; the ids are null and the quote empty on an older
+ *  recorded frame that carries none of them. */
 export interface LiveCitation {
   start: number;
   end: number;
@@ -167,14 +165,14 @@ export interface LiveCitation {
   citationId: string | null;
   claimId: string | null;
   /** The cited chunk, for the passage read while the report is still being
-   *  written (its citation row is not committed yet); absent on frames
-   *  recorded before 2026-11-09. */
+   *  written (its citation row is not committed yet); absent on an older
+   *  recorded frame that carries no `chunk_id`. */
   chunkId?: string | null;
   quote: string;
 }
 
-/** One most-relevant-source note as it is written (`artefact.source_note`,
- *  task 058, round 8). Display-only: the committed report brings the notes
+/** One most-relevant-source note as it is written (`artefact.source_note`).
+ *  Display-only: the committed report brings the notes
  *  it keeps. */
 export interface LiveSourceNote {
   sourceId: string;
@@ -182,8 +180,8 @@ export interface LiveSourceNote {
   note: string;
 }
 
-/** One search query as the search sends it (`search.query`, task 058,
- *  round 9): `results` is null while it is out and the records it returned
+/** One search query as the search sends it (`search.query`):
+ *  `results` is null while it is out and the records it returned
  *  once back. A topic or semantic query carries its text; a citations or
  *  lookup pass carries a short description, never ids. Display-only: the
  *  saved search record lists the queries after the stage. */
@@ -195,15 +193,15 @@ export interface LiveSearchQuery {
 }
 
 /** One theme as the characterise stage found it, before sources are
- *  assigned (`characterise.themes`, task 058, round 9). Display-only: the
+ *  assigned (`characterise.themes`). Display-only: the
  *  saved characterisation brings the themes with their document counts. */
 export interface LiveTheme {
   label: string;
   description: string | null;
 }
 
-/** The theory of change's first draft while it is written (`toc.sketch`,
- *  task 054, S12): the boxes and connections so far, keyed by the model's
+/** The theory of change's first draft while it is written (`toc.sketch`):
+ *  the boxes and connections so far, keyed by the model's
  *  draft keys (not stored ids). Display-only: the stored graph (`GET /toc`,
  *  read once the draft stage completes) replaces it. */
 export interface LiveSketch {
@@ -211,7 +209,7 @@ export interface LiveSketch {
   links: { key: string; source: string; target: string }[];
 }
 
-/** One case-study card as it closes in the streamed reply (task 058, round 7). */
+/** One case-study card as it closes in the streamed reply. */
 export interface LiveCard {
   title: string;
   prose: string;
@@ -223,7 +221,7 @@ export interface LiveSource {
   title: string;
 }
 
-/** One provisional citation in a section draft (task 058, owner 2026-11-05). */
+/** One provisional citation in a section draft. */
 export interface LiveClaim {
   start: number;
   end: number;
@@ -249,7 +247,7 @@ export interface RunStreamState {
   run: RunRef | null;
   runs: Record<string, RunStatus>;
   /** Runs first seen while another walk was running or paused — child walks
-   *  (task 045 option searches). None of them ever becomes `run`. */
+   *  (option searches). None of them ever becomes `run`. */
   childRunIds: string[];
   stages: StageEntry[];
   pendingCheckIn: CheckInOut | null;
@@ -261,36 +259,33 @@ export interface RunStreamState {
   liveSections: Record<number, LiveSection>;
   /** Transient: streamed drafts for section indices the store has no
    *  skeleton for yet. The next `artefact.skeleton` folds them into its
-   *  sections, so no streamed prose is lost (task 058, N7). */
+   *  sections, so no streamed prose is lost. */
   pendingDrafts: Record<number, string>;
   /** The run's source notes as each is written, in order, one per source
    *  (`artefact.source_note`; a reconnect's repeat replaces, never doubles).
-   *  Absent until the first note; cleared when a new run starts (task 058,
-   *  round 8). */
+   *  Absent until the first note; cleared when a new run starts.*/
   liveSourceNotes?: LiveSourceNote[];
   /** The run's search queries, in the order first sent, one row per
    *  (backend, query, kind): the frame sent when a query comes back updates
    *  its row in place, and a reconnect's repeat replaces, never doubles.
-   *  Absent until the first query; cleared when a new run starts (task 058,
-   *  round 9). */
+   *  Absent until the first query; cleared when a new run starts.*/
   liveSearchQueries?: LiveSearchQuery[];
   /** The characterise stage's themes once found, in order, before sources
    *  are assigned to them (`characterise.themes`). Absent until then;
-   *  cleared when a new run starts (task 058, round 9). */
+   *  cleared when a new run starts. */
   liveThemes?: LiveTheme[];
   /** The longlist walk's options once its clustering has found them, in
    *  order, before sources are assigned to them (`characterise.themes` with
    *  `stage: "longlist"`; the residual pass replaces the list). Absent until
-   *  then; cleared when a new run starts (task 058, round 11). */
+   *  then; cleared when a new run starts. */
   liveOptions?: LiveTheme[];
   /** The longlist walk's themes once found, in order, before options are
    *  assigned to them (`characterise.themes` with `stage: "theme"`). Absent
-   *  until then; cleared when a new run starts (task 058, round 11). */
+   *  until then; cleared when a new run starts. */
   liveOptionThemes?: LiveTheme[];
   /** The theory of change draft's sketch while it is written (`toc.sketch`):
    *  each frame replaces it, an empty one removes it (the draft is written
-   *  again). Absent until the first box; cleared when a new run starts
-   *  (task 054, S12). */
+   *  again). Absent until the first box; cleared when a new run starts.*/
   liveSketch?: LiveSketch;
   /** Transient: latest tick per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of

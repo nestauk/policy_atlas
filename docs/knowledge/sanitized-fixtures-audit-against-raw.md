@@ -3,7 +3,16 @@ type: Testing rule
 title: Audit sanitized fixtures against the raw recording, not the sanitizer's key list
 description: Key-based sanitizers silently miss fields (list items inherit the list's key; rare fields like funder_award_id appear only in some records) — the only reliable check is asserting no identifying raw string value survives into the committed fixture.
 tags: [fixtures, sanitization, public-safety, recorder, testing]
-timestamp: 2026-07-05
+generated:
+  by: process:okf-migrate
+  at: 2026-07-05
+sources:
+  - resource: "../tasks/007-acquire/verification.md"
+    title: "[007-acquire/verification.md](../tasks/007-acquire/verification.md) (\u00a7 Review findings \u2014 security lane; \u00a7 Public safety)"
+  - resource: "../../scripts/record_openalex_fixtures.py"
+    title: "[scripts/record_openalex_fixtures.py](../../scripts/record_openalex_fixtures.py) / [record_overton_fixtures.py](../../scripts/record_overton_fixtures.py) (sanitizer v2)"
+  - resource: "../tasks/007-acquire/contract.md"
+    title: "[sanitized-fixtures policy](../tasks/007-acquire/contract.md) (\u00a7 Public / private boundary)"
 ---
 
 # Rule
@@ -39,11 +48,3 @@ values in substring audits and mask genuine leaks as false positives.
   the (gitignored) raw file.
 - Raw recordings can embed the API key via echoed pagination URLs — the Overton recorder
   redacts on write; keep that invariant if the write path changes.
-
-# Citations
-
-- [007-acquire/verification.md](../tasks/007-acquire/verification.md) (§ Review findings —
-  security lane; § Public safety)
-- [scripts/record_openalex_fixtures.py](../../scripts/record_openalex_fixtures.py) /
-  [record_overton_fixtures.py](../../scripts/record_overton_fixtures.py) (sanitizer v2)
-- [sanitized-fixtures policy](../tasks/007-acquire/contract.md) (§ Public / private boundary)

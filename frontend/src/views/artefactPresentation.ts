@@ -11,9 +11,9 @@ import { formatCount } from "../lib/format";
  * label and some citations — that is all they ask for.
  */
 
-/** Typography shared across the report body (034 presentation). The part
+/** Typography shared across the report body. The part
  *  heading ("Executive summary", "Full report") is Heading, uppercase,
- *  Extrabold and tracked (lead ruling, task 058 consistency pass); a section
+ *  Extrabold and tracked; a section
  *  heading is Heading, Lead below md. Both are on the named scale. */
 export const REPORT_PART_HEADING_CLASS =
   "text-heading font-extrabold uppercase tracking-label text-navy";
@@ -144,7 +144,7 @@ export type NumberedAuthorships = {
 };
 
 /**
- * Superscript affiliation numbering (042 D5): institutions dedupe and number
+ * Superscript affiliation numbering: institutions dedupe and number
  * by first appearance; each author carries its institutions' marker numbers.
  * An author without institutions carries no markers (a corporate author is
  * the one-name/no-institution case).
@@ -191,7 +191,7 @@ export function sectionNavLabel(section: SectionLike, max = 28): string {
 }
 
 /**
- * Split a key-findings bullet on the first `: ` (task 034 S3).
+ * Split a key-findings bullet on the first `: `.
  *
  * Display-only: stored prose is unchanged. No colon, or a colon with no
  * following space, returns null so the renderer leaves the line unbolded.
@@ -257,8 +257,8 @@ export function cardEvidenceMeta(card: CardEvidenceInput): {
 
 /**
  * The cited source a case-study card's evidence type came from: the first
- * citation of that type, in the order the card's own fields were filled
- * (round 12). Its dossier holds the classifier's reasoning for the type,
+ * citation of that type, in the order the card's own fields were filled.
+ * Its dossier holds the classifier's reasoning for the type,
  * which the artefact does not carry. `null` when no citation names it.
  */
 export function cardEvidenceSourceId(card: CardEvidenceInput, design: string | null): string | null {
@@ -352,7 +352,7 @@ function markdownCaseStudyCardProse(card: MarkdownCard): string {
   return marked;
 }
 
-/** Attach grounded one-liner notes to their ranked sources (034 S5). */
+/** Attach grounded one-liner notes to their ranked sources. */
 export function mergeMostRelevantNotes(
   sources: TopSource[],
   notes?: Array<{ source_id: string; note: string }> | null,
@@ -436,7 +436,7 @@ function sectionsInReportOrder(sections: MarkdownSection[]): MarkdownSection[] {
 }
 
 /**
- * The report as a markdown file, in the page's order (rounds 10 and 11): the
+ * The report as a markdown file, in the page's order: the
  * question as the title (the generated title when there is none), the
  * executive summary (key findings, case studies, the most relevant sources),
  * the full report (its opening paragraph and body sections), then the
@@ -489,7 +489,7 @@ export function artefactMarkdown(artefact: MarkdownArtefact, question?: string |
       }
     }
   }
-  // The executive summary's last part, as on the page (owner, round 11).
+  // The executive summary's last part, as on the page.
   lines.push(
     ...markdownMostRelevantSources(
       mergeMostRelevantNotes(
@@ -561,8 +561,8 @@ export function csvCell(value: string | number | boolean | null | undefined): st
 const LIVE_SOURCE_NAME_MAX = 40;
 
 /**
- * A source's name as the live "Drawing on" line shows it (task 058, owner
- * 2026-11-05). The server sends the short form ("Smith 2023") when it has
+ * A source's name as the live "Drawing on" line shows it.
+ * The server sends the short form ("Smith 2023") when it has
  * one, else the title; a long title is cut at a word near 40 characters and
  * ends with an ellipsis.
  */

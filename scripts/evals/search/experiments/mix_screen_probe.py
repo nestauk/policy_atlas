@@ -1,7 +1,7 @@
 """Search then screen one question with the production order, and report how each
 stratum of the mix fares at screening.
 
-The paper pool is ordered by ``pool.rank_mix`` (task 052): a round-robin over three
+The paper pool is ordered by ``pool.rank_mix``: a round-robin over three
 strata, relevant (rank fusion over the query result lists and the "cites the seeds"
 order), seminal (most cited by the seed set) and novel (the last five years). This
 script runs the real search (OpenAlex only), notes which stratum placed each paper

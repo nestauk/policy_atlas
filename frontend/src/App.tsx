@@ -11,7 +11,7 @@ export const queryClient = new QueryClient();
  * Pick the public splash router or the authenticated app router from auth
  * status. Remounts on status change so `/` cannot resolve ambiguously.
  *
- * The query cache is cleared on every settled identity change (task 037),
+ * The query cache is cleared on every settled identity change,
  * inline during render rather than in an effect: an effect fires AFTER the
  * router below has already swapped and rendered, so a just-signed-out owner
  * could still see a frame of cached private data on a public Task's URL
@@ -23,7 +23,7 @@ function AppRouter() {
   const status = auth.status;
   const [lastSettled, setLastSettled] = useState<string | null>(null);
 
-  // Land on the stashed deep link after a sign-in round trip (task 038 V11).
+  // Land on the stashed deep link after a sign-in round trip.
   // `OidcAuthProvider.onSigninCallback` restores it with
   // `window.history.replaceState`, which React Router does not observe, and
   // both routers are module-level singletons created (and initialised) at
