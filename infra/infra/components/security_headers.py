@@ -23,7 +23,7 @@ def content_security_policy(
     *,
     api_origin: str,
     cognito_region: str,
-    cognito_hosted_domain: str,
+    cognito_hosted_domains: list[str],
     waf_captcha: bool,
 ) -> str:
     """Build the Content Security Policy for one environment.
@@ -31,7 +31,7 @@ def content_security_policy(
     Args:
         api_origin: The HTTPS origin of the application's API.
         cognito_region: AWS region containing the Cognito user pool.
-        cognito_hosted_domain: The HTTPS Cognito hosted sign-in domain.
+        cognito_hosted_domains: The HTTPS Cognito hosted sign-in domains.
         waf_captcha: Whether the API firewall shows AWS WAF CAPTCHA puzzles.
 
     Returns:
@@ -42,6 +42,7 @@ def content_security_policy(
     waf_script_source = " https://*.captcha-sdk.awswaf.com" if waf_captcha else ""
     waf_source = " https://*.awswaf.com" if waf_captcha else ""
     cognito_issuer = f"https://cognito-idp.{cognito_region}.amazonaws.com"
+    hosted_domains = " ".join(cognito_hosted_domains)
     return "; ".join((
         "default-src 'self'",
         f"script-src 'self'{waf_script_source}",
@@ -50,10 +51,10 @@ def content_security_policy(
         "font-src 'self'",
         (
             f"connect-src 'self' {api_origin} {cognito_issuer} "
-            f"{cognito_hosted_domain}{waf_source}"
+            f"{hosted_domains}{waf_source}"
         ),
         # 'self': the sign-in library's hidden frame ends on our own address.
-        f"frame-src 'self' {cognito_hosted_domain}",
+        f"frame-src 'self' {hosted_domains}",
         "frame-ancestors 'self'",
         "form-action 'self'",
         "object-src 'none'",
@@ -71,7 +72,7 @@ class SecurityHeaders(Construct):
             console (there is no report collector); ``"enforce"`` blocks them.
         api_origin: The HTTPS origin of the application's API.
         cognito_region: AWS region containing the Cognito user pool.
-        cognito_hosted_domain: The HTTPS Cognito hosted sign-in domain.
+        cognito_hosted_domains: The HTTPS Cognito hosted sign-in domains.
         waf_captcha: Whether the API firewall enables AWS WAF CAPTCHA.
 
     Raises:
@@ -89,7 +90,7 @@ class SecurityHeaders(Construct):
         csp_mode: str,
         api_origin: str,
         cognito_region: str,
-        cognito_hosted_domain: str,
+        cognito_hosted_domains: list[str],
         waf_captcha: bool,
     ) -> None:
         super().__init__(scope, id)
@@ -99,7 +100,7 @@ class SecurityHeaders(Construct):
         csp = content_security_policy(
             api_origin=api_origin,
             cognito_region=cognito_region,
-            cognito_hosted_domain=cognito_hosted_domain,
+            cognito_hosted_domains=cognito_hosted_domains,
             waf_captcha=waf_captcha,
         )
         if len(csp) > CSP_MAX_LENGTH:

@@ -16,6 +16,7 @@ The command tree, with every global option before the subcommand::
       user  de-enrol  (--email E | --sub SUB)
       user  deactivate (--email E | --sub SUB)
       user  reactivate (--email E | --sub SUB)
+      user  reset-app (--email E | --sub SUB)
       user  quota     (--email E | --sub SUB) --tasks-per-year N|inherit --runs N|inherit
       rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
@@ -309,6 +310,16 @@ def build_parser() -> argparse.ArgumentParser:
     reactivate_subject = user_reactivate.add_mutually_exclusive_group(required=True)
     reactivate_subject.add_argument("--email", type=_email)
     reactivate_subject.add_argument("--sub")
+    user_reset_app = user.add_parser(
+        "reset-app",
+        help=(
+            "for a lost or replaced phone: sign a person out everywhere and unlink their "
+            "authenticator app, so their next sign-in shows the QR code again"
+        ),
+    )
+    reset_app_subject = user_reset_app.add_mutually_exclusive_group(required=True)
+    reset_app_subject.add_argument("--email", type=_email)
+    reset_app_subject.add_argument("--sub")
     user_quota = user.add_parser("quota", help="set a person's quota overrides")
     user_quota_subject = user_quota.add_mutually_exclusive_group(required=True)
     user_quota_subject.add_argument("--email", type=_email)
@@ -406,6 +417,14 @@ def _run(
                 actor=verification.caller_arn,
                 action="org.quota" if args.group == "org" else "person.quota",
                 target=outcome.who,
+                outcome="ok",
+            )
+        if isinstance(outcome, commands.AppReset):
+            commands.record_action(
+                conn,
+                actor=verification.caller_arn,
+                action="person.reset_app",
+                target=outcome.user_id,
                 outcome="ok",
             )
     # Both of these are after the commit, and for the same reason: neither a
@@ -518,6 +537,10 @@ def _dispatch(
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
         if args.command == "deactivate":
             return commands.deactivate_user(
+                conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
+        if args.command == "reset-app":
+            return commands.reset_authenticator_app(
                 conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
             )
         if args.command == "reactivate":

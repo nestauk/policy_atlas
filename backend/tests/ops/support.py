@@ -219,13 +219,18 @@ def fresh_sub(label: str = "ops") -> str:
     return f"{label}-{uuid.uuid4()}"
 
 
-def expect_sub_lookup(stubber: Stubber, *, sub: str, status: str | None = None) -> None:
+def expect_sub_lookup(
+    stubber: Stubber, *, sub: str, status: str | None = None, email: str | None = None
+) -> None:
     """Queue one ``ListUsers`` by subject, answering with the account (and its status).
 
     ``Username`` is the subject, as in a pool whose sign-in alias is the email;
-    the resend addresses the account by it.
+    the resend addresses the account by it. ``email``, when given, is the
+    account's address attribute in the pool.
     """
     user: dict[str, Any] = {"Username": sub, "Attributes": [{"Name": "sub", "Value": sub}]}
+    if email is not None:
+        user["Attributes"].append({"Name": "email", "Value": email})
     if status is not None:
         user["UserStatus"] = status
     stubber.add_response(

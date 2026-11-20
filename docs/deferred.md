@@ -1202,13 +1202,30 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Work to do
 
-- **Planned** (the sign-in slice of the [security
-  programme](tasks/064-security-hardening/programme.md): MFA and threat protection) The Cognito pool
-  has no MFA (multi-factor authentication), so an admin account reads every organisation's rows
-  behind a password alone. Until then it is an accepted risk ([ADR
-  0033](adr/0033-organisation-tenancy-and-global-admin-read.md)). Email MFA needs the pool's SES
-  (Simple Email Service) sender, which now exists. Condition: before the first real organisation is
+- **Planned** (production switch-on of the sign-in change, [ADR
+  0049](adr/0049-authenticator-app-mfa-branded-sign-in-page-own-sign-in-address.md)) Staging requires
+  an authenticator-app code (MFA, multi-factor authentication) and has the branded sign-in page on
+  `auth.v3.policyatlas.uk`. Production has no `sign_in` block yet, so an admin account there still
+  reads every organisation's rows behind a password alone, an accepted risk ([ADR
+  0033](adr/0033-organisation-tenancy-and-global-admin-read.md)). Steps: `infra/DEPLOYMENT.md`
+  § Sign-in. Condition: the staging live checks pass, and before the first real organisation is
   enrolled in production.
+- **Planned** (the rest of review finding M-13) Cognito threat protection: a leaked-password block
+  and risk-based sign-in checks. It needs the Plus plan (about $0.02 per monthly active user, no
+  free tier). Condition: a separate approval; the app codes already stop a stolen password alone.
+- The sign-in page's wording is Cognito's ("Sign in to your account."): managed login cannot change
+  text. Only a sign-in page built in our app could say "Sign in to your Policy Atlas account."; it
+  would put password and code handling in our code and needs a new library. Condition: the owner
+  decides the wording matters enough.
+- Ops commands that change Cognito (`user deactivate`, `user reactivate`, `user reset-app`) act in
+  Cognito first and write their database record after; if the database write fails, the Cognito
+  change stands with no audit row. Condition: an audit requirement that every operator action is
+  recorded even on failure; then write a pending row first and update it.
+- `user reset-app` (a lost authenticator phone) is a command-line tool only; the ops pages have no
+  button for it. Condition: operators other than the engineering team handle sign-in support.
+- The `amazoncognito.com` sign-in address stays beside `auth.<domain_name>`. Condition: nothing
+  links to it any more (check the CSP and the SSM parameter `/policy_atlas_v3/auth/hosted_domain`);
+  then remove it in its own change.
 - **Planned** (the cohort follow-on task) Cohorts are built; their follow-ons are not: feature
   versions per organisation or cohort, numbers per person and cohort (with Metabase and PostHog
   links), CSV (comma-separated values) import of a pilot with cohorts, and onboarding answers. The

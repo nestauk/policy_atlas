@@ -1118,6 +1118,98 @@ HSTS subdomain setting stays in browsers that saw it (above).
 **Cost.** Nil. Response headers policies are free (20 custom policies per
 account; this is the first).
 
+### Sign-in: authenticator codes, branded page, own address (task 064d)
+
+ADR 0049. One block in `infra/pa_config.json` under `policy_atlas_config`
+turns each part on. With no block, nothing changes (production today; a test
+compares production's template with a saved copy).
+
+```json
+"sign_in": {"mfa": "app", "page": "managed", "domain": "auth.v3.policyatlas.uk"}
+```
+
+| Key | Values | What it does |
+|---|---|---|
+| `mfa` | `"app"`, `"off"` | `"app"`: everyone must type a code from an authenticator app after the password (MFA, multi-factor authentication, by TOTP, a time-based one-time password). SMS and email codes are never used. Password reset by email stays as it is. |
+| `page` | `"managed"`, `"classic"` | `"managed"`: Cognito's newer sign-in page ("managed login") with our logo and colours from `infra/branding/`. `"classic"`: the plain AWS page, named explicitly so a rollback really goes back. |
+| `domain` | `"auth.<domain_name>"` | The sign-in page on our own address. Adds a certificate in us-east-1 (cert stack), the address in Cognito, a DNS record, and the address in the CSP. The authenticator app names the entry after it. The old `amazoncognito.com` address keeps working. |
+
+**Before the first deploy in an environment.**
+
+1. DNS preflight: list what the zone already has for the name.
+   ```bash
+   aws route53 list-resource-record-sets --hosted-zone-id <zone-id> \
+     --query "ResourceRecordSets[?starts_with(Name,'auth.') || starts_with(Name,'\\052')]"
+   ```
+   An existing `auth.<domain_name>` record stops the deploy: remove or rename it
+   first. A wildcard (`*.`) record is fine; the new exact record takes priority
+   for that one name. (Staging checked 2026-11-19: none.)
+2. Send the user warning (below) at least one working day before.
+3. Deploy outside working hours. The first deploy with `domain` takes about
+   eight minutes longer than usual: Cognito sets up a CloudFront distribution
+   for the address.
+
+**User warning (send to every user of the environment).**
+
+> Policy Atlas sign-in is getting a second step. From <date>, after your
+> password you will type a six-digit code from an authenticator app on your
+> phone (for example Google Authenticator, Microsoft Authenticator or
+> 1Password). The first time, the sign-in page shows a QR code: scan it with
+> the app, then type the code it shows. The sign-in page also moves to
+> auth.<domain> and carries the Policy Atlas logo. If you are signed in when the
+> change happens, you stay signed in; the new step appears at your next sign-in.
+> Lost or changed your phone? Contact <support> and we will reset it.
+
+**After the deploy.** The change phases in: a session that was open keeps
+working until its refresh token runs out (at most 30 days). Admins and ops
+users should sign out and in again at once, so the stronger sign-in applies to
+the accounts that matter most. Then run the live checks in
+`docs/tasks/064d-mfa/contract.md` § Acceptance checks.
+
+**A lost or replaced phone.** The person cannot sign in until an operator
+clears their app link. First confirm who is asking (for example a reply from
+their known email address): the next person to sign in with that password
+links their own phone. Then run:
+
+```bash
+uv run python -m policy_atlas.ops --env staging user reset-app --email <user-email>
+# or: ... user reset-app --sub <cognito-subject>
+```
+
+It signs the person out everywhere, then removes the app link, and records the
+action with your AWS identity. At their next sign-in they get the QR setup
+again. If it fails part way, it says which step failed; running it again is
+safe. It refuses a deactivated person. What it does for a person who never
+linked an app is not yet tested (staging live check 5 covers it).
+
+**Codes that do not work.** The phone's clock must be right (codes change every
+30 seconds). After five wrong codes Cognito slows further tries down for a
+while. Waiting a few minutes and using a fresh code is the fix; a reset is only
+for a lost phone.
+
+**Rollback**, in this order, each step a config change and a deploy, each
+followed by one operator sign-in. Stop and escalate if the sign-in page does
+not load or a test user cannot sign in.
+
+1. Branding: set `page` to `"classic"`. Tested: the classic page also asks for
+   the app code. (Removing the `page` key is not a rollback: the address stays
+   on the newer page with no branding.)
+2. MFA: set `mfa` to `"off"`. Tested: one deploy, password-only sign-in. People's
+   app links stay stored; turning `mfa` back on reuses them.
+3. Address, last resort and **not tested**: remove `domain`. Cognito's
+   discovery document then names the `amazoncognito.com` address again. After
+   the deploy, reload the app, check
+   `https://cognito-idp.<region>.amazonaws.com/<pool-id>/.well-known/openid-configuration`
+   names the `amazoncognito.com` endpoints, then sign in and out.
+
+**Production prerequisites.** Staging live checks passed and recorded in
+`docs/tasks/064d-mfa/verification.md`; the DNS preflight for
+`auth.policyatlas.uk`; the warning sent to production users; then add the
+block to the `prod` section and deploy.
+
+**Cost.** Nil beyond today's Essentials plan. The certificate and the custom
+domain are free.
+
 ## 5. Env & secret map
 
 Generated from `settings.py`'s required/optional calls plus the direct
@@ -1229,8 +1321,8 @@ and tunnel automatically, reusing an already-open one), under the operator's own
 `cognito-idp:AdminSetUserPassword`, plus `cognito-idp:AdminDisableUser` and
 `cognito-idp:AdminUserGlobalSignOut` for `user deactivate` since task 064a, and
 `cognito-idp:AdminGetUser` plus `cognito-idp:AdminEnableUser` for `user reactivate`
-since task 066, nothing
-more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
+since task 066, and `cognito-idp:AdminDeleteSoftwareToken` for `user reset-app`,
+nothing more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
 task: Cognito permission belongs to the human operator, not to a task
 role, and the API task role gains no Cognito permission. Every command
 verifies the resolved AWS account and user pool against the connected

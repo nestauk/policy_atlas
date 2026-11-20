@@ -161,13 +161,15 @@ have rotated or regenerated the password since it was last copied.
 ## Security notes
 
 - **Operator IAM for the ops CLI (task 033):** the human operator running
-  `python -m policy_atlas.ops` over this tunnel needs exactly seven Cognito
+  `python -m policy_atlas.ops` over this tunnel needs exactly eight Cognito
   permissions on the environment's user pool — `cognito-idp:ListUsers`,
   `cognito-idp:AdminCreateUser`, `cognito-idp:AdminSetUserPassword` (for
   `user reissue`, which only ever sets a non-permanent password),
   `cognito-idp:AdminDisableUser` plus `cognito-idp:AdminUserGlobalSignOut` (for
   `user deactivate`, task 064a/066), and `cognito-idp:AdminGetUser` plus
-  `cognito-idp:AdminEnableUser` (for `user reactivate`, task 066) — plus STS `GetCallerIdentity` (always
+  `cognito-idp:AdminEnableUser` (for `user reactivate`, task 066), and
+  `cognito-idp:AdminDeleteSoftwareToken` (for `user reset-app`, which also uses
+  `AdminUserGlobalSignOut`) — plus STS `GetCallerIdentity` (always
   allowed) for the environment guard. Grant nothing more: the CLI has no
   delete path by design, and `AdminDeleteUser` must not be grantable
   through this role. No Cognito permission ever attaches to an ECS task

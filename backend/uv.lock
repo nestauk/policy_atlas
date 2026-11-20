@@ -183,29 +183,29 @@ wheels = [
 
 [[package]]
 name = "boto3"
-version = "1.43.79"
+version = "1.44.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore" },
     { name = "jmespath" },
     { name = "s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/1b/d5091a11b37633c987015516fb87e1330c5e97c42ab2d6527b778bdc537a/boto3-1.43.79.tar.gz", hash = "sha256:a36b4209a8170f7f8d2c19b36f350808f313b178939c9e5df0a8f683717a6d9c", size = 112682 }
+sdist = { url = "https://files.pythonhosted.org/packages/e9/43/710e43de1b424bd0b45efbfcde5bc27d96a9f8c4986428f02bd8b6eb1b3e/boto3-1.44.7.tar.gz", hash = "sha256:cc19922a2db90ac98f259b5290e08fcf7143a314eb6b2e430afec26a5d1f4e10", size = 112766 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/90/eef59b9b64442b4c966b027e8db407f59d99200b82b71316fc4466562a53/boto3-1.43.79-py3-none-any.whl", hash = "sha256:4c2381cf99abf749c82762a636337f4aba4800fda6525412fcae2bebe4f72748", size = 140025 },
+    { url = "https://files.pythonhosted.org/packages/55/39/1b35b73d9f62c9a722ece0eed6673de7a56803bfb1f89926a36445cceab9/boto3-1.44.7-py3-none-any.whl", hash = "sha256:15fac273416d37cd5e3f0c02b33fd8d7f27d3e64c5f64b911f8b953772302609", size = 140157 },
 ]
 
 [[package]]
 name = "boto3-stubs"
-version = "1.43.79"
+version = "1.44.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore-stubs" },
     { name = "types-s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/96/34ec211eb64e983349a9634eaeccd2213fb338d8a840ba18811d11ece2b6/boto3_stubs-1.43.79.tar.gz", hash = "sha256:6df750eafbbd59a92b678bfb722d052c9d9be85b400b0e4a2367bf2e0259e24e", size = 104312 }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/d9/93ea4b88bf96f3caa3d647b767fc3e5ff588e810b2f84ccbfa9497e89a30/boto3_stubs-1.44.6.tar.gz", hash = "sha256:124e027d48e5697b5d433ea5a70ba1b62c725bc08c7d878edb482c199704bf8b", size = 106586 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/73/e5678de9fe92e68ab6315b988342fb4c0aa30827160ed9626eabb06ddc55/boto3_stubs-1.43.79-py3-none-any.whl", hash = "sha256:f6d19062dc92501337be840e0766b3555811bec8603f36fe2eec1a73c8ac95f4", size = 71365 },
+    { url = "https://files.pythonhosted.org/packages/96/6f/1b1cc3c25e1d53d289e85b4fdefb34646e138172d952d994b207ce2cf14e/boto3_stubs-1.44.6-py3-none-any.whl", hash = "sha256:36e3e339baf302d431a03fc94015845bb0a84642b02cd071c11f8bc117f0080a", size = 72528 },
 ]
 
 [package.optional-dependencies]
@@ -218,25 +218,25 @@ cognito-idp = [
 
 [[package]]
 name = "botocore"
-version = "1.43.79"
+version = "1.44.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jmespath" },
     { name = "python-dateutil" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4b/90/e67b32a388f5be5fa84adb92eb4be4d9bbe51a70fd4a208222bf6d428972/botocore-1.43.79.tar.gz", hash = "sha256:dcc0a97b65affcef80e0499745d2e6a5d120253c11b8727b8227df44ab3e958f", size = 15988663 }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/b8/2140072cf06a608114614d8efde2ecd76cc24edf81d83263269412d0aa93/botocore-1.44.7.tar.gz", hash = "sha256:3cbf1d9f50b5f1f95b715e570bc03b8c7c94b86777f96dd647321134f57290b2", size = 17046633 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/d5/f34b9313ca9db131ad7d74156e3459694ced17f81233a248bd00eb6d67b1/botocore-1.43.79-py3-none-any.whl", hash = "sha256:19b2c772ea2590d0baad6ae004a0e478cf2c982e0e6a39c8e2f882d9b2981445", size = 15680587 },
+    { url = "https://files.pythonhosted.org/packages/0b/47/a6d5d012e4d6e70f80d4d0dffac7622f8f64edce635200ea23a3c531f397/botocore-1.44.7-py3-none-any.whl", hash = "sha256:56ec7cf3a7c0012c7e105c8f498c67077afa722df916dbdbe667b584fe7e5f99", size = 16741609 },
 ]
 
 [[package]]
 name = "botocore-stubs"
-version = "1.43.67"
+version = "1.43.126"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3f/45/53d662227dc4787b2c854445ee7eb4751cb5d74cfb5c686a6ecbe1f94c17/botocore_stubs-1.43.67.tar.gz", hash = "sha256:853e74014a1f557055c4ffae5fb38d7c65c7c0520e1aab366cac41d5428f419d", size = 42846 }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/7a/717e3dec2e4721f76621ddb397b4035ec1aff0c174b80f5c439512a352e9/botocore_stubs-1.43.126.tar.gz", hash = "sha256:15b14ba9066f6eec50a5861407fede151b4395e986036c8d564f4b908835f820", size = 42882 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/5e/bdbf19967898a032292da65a47d6e25b2eee55865db4e687f861d80b5602/botocore_stubs-1.43.67-py3-none-any.whl", hash = "sha256:c51262bac3341c1cda71f05fa01141fffd3990d7a92c7960e3b755c1bc830373", size = 67244 },
+    { url = "https://files.pythonhosted.org/packages/66/23/10b0f6ce12d3d85cfaf24d2e420f76e8e744970289e447d43846e51db32d/botocore_stubs-1.43.126-py3-none-any.whl", hash = "sha256:07f1b96c89d787b95ebf0cc5f22fc2b7f61c179e704c289b377505d8d61d5d49", size = 67248 },
 ]
 
 [[package]]
@@ -1361,20 +1361,20 @@ wheels = [
 
 [[package]]
 name = "mypy-boto3-bedrock-runtime"
-version = "1.43.62"
+version = "1.44.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/26/78/542f5804cf0f9e3c1ccbf30917eaa3b4b6002b91965de02d065d7441fc93/mypy_boto3_bedrock_runtime-1.43.62.tar.gz", hash = "sha256:beb70b08ef72cdfd5036bcd3270f2fbac0a2ce5e40f70dfc1d87c4f139d4d7ff", size = 31492 }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/3b/75f2d8a617be76bc1052d223ef616fec5dc4f69b663b704a96a0207bc7dc/mypy_boto3_bedrock_runtime-1.44.0.tar.gz", hash = "sha256:e0ac6448e60c3be446681b992fb38aae548ee2e4edb74bfb2bc6660b285862d1", size = 31678 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/b2/e3bff20acd290b909f1c28856d6d8d7984f7f7d5bda299d5957f64e97bb3/mypy_boto3_bedrock_runtime-1.43.62-py3-none-any.whl", hash = "sha256:603d9df54da5029fc0d0e3c09b6db33733af53182bee030c0c7af99e88ed3b39", size = 37865 },
+    { url = "https://files.pythonhosted.org/packages/f9/1c/765420a8b965f77284d9054cae07dc75c24c3e5ccf22630268e81a3b1db6/mypy_boto3_bedrock_runtime-1.44.0-py3-none-any.whl", hash = "sha256:f40c0da41a6e8e17902e5f0174dc5e68bb411197a0d12bf8a14aa4cbd8d25213", size = 37968 },
 ]
 
 [[package]]
 name = "mypy-boto3-cognito-idp"
-version = "1.43.56"
+version = "1.44.6"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9c/23/489e6ab48587f76f9dd263292b605e3490db7e9aea4a6f80363bb950ee01/mypy_boto3_cognito_idp-1.43.56.tar.gz", hash = "sha256:d6e9cb2ba284fa8d3b51da334b56ae5c559f9b5c25c0f200c64473464088c9a6", size = 55023 }
+sdist = { url = "https://files.pythonhosted.org/packages/31/17/529be73e0cd5a9cebeac8ddf5a06926c7021eda7e61943bd6f1c8a904a48/mypy_boto3_cognito_idp-1.44.6.tar.gz", hash = "sha256:de74d1109ff6fe47dc0094875b6d9db8cc6abb69112f798b64b21b575c7e2b97", size = 60286 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/3e/552d48ab267b271157d738a7703f31eaaaf8380acbb9ac03c855191c4abb/mypy_boto3_cognito_idp-1.43.56-py3-none-any.whl", hash = "sha256:0ec9a68ed61c8e2e0997c00b1ea2e7cf7bded296be72ae978d6ab346c9c4dd4d", size = 61346 },
+    { url = "https://files.pythonhosted.org/packages/0c/22/74308fbccc14e11ffae4c91a21a8e4a1c827d4bc4cc97be3e3bea7d7febb/mypy_boto3_cognito_idp-1.44.6-py3-none-any.whl", hash = "sha256:0063eb3467bad64ebe9f9f648cff7322103da5c55bbeb87396512ad0cdcc430e", size = 66857 },
 ]
 
 [[package]]
@@ -1858,7 +1858,7 @@ ops = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14" },
     { name = "awslambdaric", marker = "sys_platform == 'linux'", specifier = ">=3,<4" },
-    { name = "boto3", specifier = ">=1.43,<2" },
+    { name = "boto3", specifier = ">=1.44.6,<2" },
     { name = "cryptography", specifier = ">=50,<51" },
     { name = "fastapi", specifier = ">=0.121,<1" },
     { name = "httpcore", specifier = ">=1,<2" },
@@ -1890,7 +1890,7 @@ dev = [
     { name = "ruff", specifier = ">=0.4" },
     { name = "types-psycopg2" },
 ]
-ops = [{ name = "boto3-stubs", extras = ["cognito-idp", "bedrock-runtime"], specifier = ">=1.43,<2" }]
+ops = [{ name = "boto3-stubs", extras = ["cognito-idp", "bedrock-runtime"], specifier = ">=1.44.6,<2" }]
 
 [[package]]
 name = "prompt-toolkit"

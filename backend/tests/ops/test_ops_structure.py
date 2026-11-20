@@ -79,7 +79,7 @@ def test_the_command_tree_is_the_one_the_contract_names() -> None:
     2026-10-01), ``user deactivate`` and ``user reactivate`` (task 066, replacing
     064a's ``user offboard``), ``org delete`` (task 066), and task 065's ``ops
     grant|revoke``, ``user quota``, ``org quota`` and ``org domain`` (contract
-    B1, B12, C1), and nothing else that nobody reviewed."""
+    B1, B12, C1), ``user reset-app``, and nothing else that nobody reviewed."""
     parser = build_parser()
     groups = next(
         action
@@ -100,7 +100,7 @@ def test_the_command_tree_is_the_one_the_contract_names() -> None:
         "org": ["create", "delete", "domain", "quota"],
         "user": [
             "create", "de-enrol", "deactivate", "enrol", "quota", "reactivate", "reissue",
-            "resync",
+            "reset-app", "resync",
         ],
         "rows": ["assign"],
         "admin": ["grant", "revoke"],

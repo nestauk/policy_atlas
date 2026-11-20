@@ -38,7 +38,7 @@ ids are kept so a later reader can match the two.
 | | M-16 | 7-day backups | one number per environment (production 35) |
 | **064b WAF** | H-03, M-30 (CAPTCHA) | No firewall or rate limit; waitlist can be spammed | new web ACL on the load balancer, frontend token on the waitlist form |
 | **064c CSP** | M-03 | No Content Security Policy | custom CloudFront response headers policy, built from config |
-| **064d sign-in** | M-13 (rest) | No MFA, no threat protection | after SES exists (ops-portal step 1), so email MFA works |
+| **064d sign-in** | M-13 (MFA part) | No MFA; plain AWS sign-in page | as built: authenticator-app codes, branded page, own sign-in address (ADR 0049); threat protection left for later |
 | **later, own tasks** | H-07, H-08, M-14 | Privacy notice, erasure, data export | Data Protection Officer work after the ops portal |
 | | M-25, M-27, M-19, M-26, M-29 | SSE polling, missing indexes, transactions held open during model calls, pages that load the whole task, chat stream thread pool | performance slices |
 | | M-28 | Cannot scale past one server | after the performance slices; needs locks in the database |
@@ -243,12 +243,16 @@ ADR 0047. The sketch below is kept to the contract's shape.
 
 ### 064d MFA and threat protection
 
-- Depends on the SES slice of the ops-portal work (branded email from the pool's own SES
-  identity, one per account, production access requested for both accounts).
-- Email MFA for all users (every user has a verified address, no app to install). TOTP is
-  the fallback if SES slips. CDK trap: when MFA is turned on, the default second factor is
-  SMS, which can never be removed from a pool afterwards. The setting must name the factor.
-- Threat protection needs the Plus tier (about $2 a month at this user count): leaked
-  password block, risk-based sign-in checks.
-- Staging first with one real sign-in; warn production users before their next sign-in asks
-  for a code.
+As built (task 064d, ADR 0049, 2026-11-19); the plan below this line changed after live
+tests on throwaway pools:
+
+- **Authenticator-app codes (TOTP), not email codes.** Email codes and self-service password
+  reset cannot live together for people with no phone number (AWS refuses email-only
+  recovery with email MFA; "email, then SMS" breaks reset). App codes keep email reset.
+- A lost phone: `user reset-app` (sign-out everywhere, then unlink the app). boto3 1.44.6+.
+- Managed login with our branding, on our own address `auth.<domain_name>`, which also names
+  the entry in the authenticator app.
+- No forced sign-out at switch-on; the code phases in over at most 30 days.
+- Threat protection (Plus plan) is not in 064d; it stays a later item. Review finding M-13 is
+  closed for the MFA part only.
+- Staging first; production waits for the staging live checks.

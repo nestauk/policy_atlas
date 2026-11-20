@@ -805,3 +805,11 @@ its proof when the code goes" into [assert-on-row-not-summary](assert-on-row-not
 [testing-database](testing-database.md) and AGENTS.md § Landmines. Declined: nothing; the
 build's five candidates were all durable. The build's unreproducible green-gate claim went
 to `docs/agentic-ops/failure-log.md`, not here.
+
+## 2026-11-20 — task 064d (sign-in: authenticator MFA, managed login, own address), the review stack before the PR
+
+Authored [cognito-mfa-managed-login-custom-domain-facts](cognito-mfa-managed-login-custom-domain-facts.md)
+from the live P0 tests on throwaway pools. Folded: `cdk.json` feature flags do not reach a
+test's `cdk.App()` into [cdk-synth-tests-lookups-and-hidden-lambdas](cdk-synth-tests-lookups-and-hidden-lambdas.md)
+(the contract verifier's finding: the tests asserted a helper Lambda the deploy never makes).
+Declined: nothing; the slice's other lessons are in ADR 0049 and `infra/DEPLOYMENT.md` § Sign-in.
