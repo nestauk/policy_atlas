@@ -3,7 +3,8 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted 2026-11-20. Contract approved (before planning): _pending_ ·
+> **Status:** revision 2, 2026-11-20: the owner's rulings of that day are folded in
+> (§ Owner items). Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: due at step 4 (the model
 > interface changes) · Branch: `task/063-responses-api`.
 >
@@ -55,7 +56,7 @@ starts.
 | Id | Change |
 |---|---|
 | **M1** | The shared helpers in `core/openai_client.py` (`openai_kwargs`, `parse_structured`, `traced_parse`, `require_parsed`) call Responses. This moves 62 of the 74 route steps in one place. |
-| **M2** | The 12 steps that call the provider directly move too: the 10 `synthesise_*` steps, `judge_grounding` and `chat`, plus the task agent's streamed turn and the Theory of change streamed draft and report. |
+| **M2** | The 12 steps that call the provider directly move too: the 10 `synthesise_*` steps, `judge_grounding` and `chat`, plus the task agent's streamed turn and the Theory of change streamed draft and report. They stop building and sending requests themselves: they call the shared module (M12). |
 | **M3** | One shared reader turns a Responses stream into text pieces and final usage. The seven hand-written chunk loops use it. The three JSON stream decoders stay as they are; they read text pieces. |
 | **M4** | The tool loop (section writer, repair, chat tool turn) uses the Responses tool layout: flat tool definitions, `function_call` items and `function_call_output` items. The two copies of the tool-call reader and tool-history builder become one. Tool order and the cached prompt start do not change. |
 | **M5** | `core/usage.py` reads the Responses usage fields (input, output, cached, cache-write, reasoning tokens). Cost reports and Langfuse traces show the same numbers as before for the same call. |
@@ -64,14 +65,16 @@ starts.
 | **M8** | The chat prose stream counts its tokens. Today it never asks for usage, so those tokens are missing from cost reports. (Owner item O5.) |
 | **M9** | Tests: the fakes that copy the Chat Completions shape (about 100 tests in 20 files) move to the Responses shape. The golden request fixture is captured again and now covers all 74 steps (it misses 17 today). |
 | **M10** | Scripts under `scripts/` that call the SDK move too. Two feasibility scripts that already fail on today's helpers are left alone and listed in `docs/deferred.md`. |
-| **M11** | No Chat Completions call is left in `backend/src` or `scripts/`. There is no switch between the two endpoints (owner item O2). Rolling back is reverting the pull request. |
+| **M11** | No Chat Completions call is left in `backend/src` or `scripts/`. There is no switch between the two endpoints. Rolling back is reverting the pull request. |
+| **M12** | **One way in.** `core/openai_client.py` is the only module in `backend/src` that calls the SDK. It offers three calls: a structured answer, a streamed answer, and a tool turn. Each takes the route step name and reads the model, effort and timeout from the route file; each sets `store=false` and the cache fields, traces the attempt, applies the step's retries, records the request id and reads usage. A call site keeps what is its own: what to do with each piece of streamed text, whether a streamed call may be retried (a retry would repeat text the user has seen), and its fallback. One test fails if any other module calls the SDK. (Owner ruling 2026-11-20; § One way in.) |
+| **M13** | The Theory of change components spec says Responses is "a new call path beside the existing wrapper". It is corrected to say Responses is the only path (spec change 1, accepted by the owner 2026-11-20), with a line in the specs `log.md`. |
 
 ### Part 2: reasoning with tools
 
 | Id | Change |
 |---|---|
 | **E1** | A step's route-file line can set any effort the model accepts, with tools attached. When effort is above `none` in a tool loop, the encrypted reasoning from one turn is passed back on the next turn, in memory only, never stored. |
-| **E2** | The `none` steps that use tools go to `low` (owner ruling 2026-11-20; table in § Efforts): `synthesise_section_turn` and the chat tool turn, which becomes its own route step. Each gets a higher output-token limit (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Latency and cost are measured before and after. Every other step keeps its effort. |
+| **E2** | Ten steps that send `none` today get reasoning (owner rulings 2026-11-20; table in § Efforts). Each gets a higher output-token limit (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Latency and cost are measured before and after for each. Every other step keeps its effort. |
 | **E3** | A live tool loop on Sol passes (the section writer's tool turn with the route overlay naming `frontier`). No default route changes. This unblocks the 054 follow-up and task 059. |
 
 ### Part 3: diagnosis
@@ -89,31 +92,70 @@ tuning, or an AWS support case. The deployed apps show no fault to remedy.
 | Id | Change |
 |---|---|
 | **D1** | On Responses, Bedrock stores the input and output of a call for 30 days unless the call says `store=false`. With a `global.` profile the stored copy sits in the Region that served the call. Chat Completions has no such default. So M6 is a data-protection control, not a style choice. |
-| **D2** | AWS says `store=false` alone "does not guarantee zero data retention" and offers an account setting (retention mode `none`) for each Region. Whether to set it on the production account is an owner and DevOps decision (owner item O7). Not a code change. |
+| **D2** | AWS says `store=false` alone "does not guarantee zero data retention" and offers an account setting (retention mode `none`) for each Region. Owner ruling 2026-11-20: the production account is set to zero data retention, in every Region that can serve our calls, **before** the Responses code is deployed to staging or production. A person with that access makes the change (DevOps), not this task's code. The setting is read back and recorded in `verification.md`. |
 | **D3** | The owner updates the DPIA (Data Protection Impact Assessment) notes with: the Responses endpoint; the Regions that served our calls in the last 14 days (Luna in us-west-2, Terra and Sol in us-east-1, all 112,264 calls); and that traffic flagged by the provider's abuse checks can be kept for up to 30 days. |
 
 ## Efforts (E2): the 21 steps that send `none` today
 
-Owner ruling, 2026-11-20: **every `none` step that uses tools goes to `low`.** "Uses tools"
-means the model chooses which tool to call. Two call sites carry tools without choosing
-(noted below); they stay at `none`.
+Owner rulings, 2026-11-20:
 
-| Step | Tools | Effort after | Why |
+1. Every `none` step that uses tools goes to `low`. "Uses tools" means the model chooses
+   which tool to call.
+2. Key findings need reasoning: the model should weigh the whole report before it picks them.
+3. The scoping planning conversation should reason a little.
+4. Some of the options scoping judgement steps should be raised.
+
+| Step | What it does | Effort after | Why |
 |---|---|---|---|
-| `synthesise_section_turn` | yes: the writer's gather turns (6 tools) and the repair turn | **`low`** | Owner ruling. The writer picks evidence without reasoning today (`docs/deferred.md`, synthesis). |
-| `chat`, tool turn only | yes: 3 read tools | **`low`** | Owner ruling. The `chat` step covers three call sites today (tool turn, streamed prose, final parse). The tool turn becomes its own route step, `chat_tool_turn`, so the streamed prose keeps `none` and its first words are not delayed. This also follows the rule of one route step for each call site. |
-| `chat`, streamed prose and final parse | no | `none` | No tool. |
-| `synthesise_section_emit` | carried, never called | `none` | It sends the tool list with `tool_choice="none"` only so the cached prompt start matches the gather turns. Streamed prose. |
-| `synthesise_write_key_findings` | one forced tool, fallback path only | `none` | The tool is an output format, not a choice. The main path is streamed with no tool. |
-| `synthesise_write_case_studies`, `synthesise_propose_sections`, `synthesise_write_block_summary`, `synthesise_write_artefact_summary`, `synthesise_judge_summary` | no | `none` | No tool. Revisit in synthesis refinement. |
-| `task_agent_scoping_turn` | no | `none` | A structured reply, no tool. |
-| `longlist_constrain`, `longlist_distinct`, `longlist_authority`, `option_profile_line`, `option_profile_potential_impact`, `option_profile_ambition` | no | `none` | No tool. Set to `none` by the owner on 2026-11-02 (task 056); task 059 reworks this area. |
-| `task_agent_toc`, `toc_discover`, `toc_judge`, `toc_summarise`, `toc_sense_check` | no | `none` | No tool. Theory of change is a colleague's capability (owner item O9). |
+| `synthesise_section_turn` | The section writer's gather turns (6 tools) and its repair turn. | **`low`** | Ruling 1. The writer picks evidence without reasoning today. |
+| `chat`, tool turn | Chooses among 3 read tools. Becomes its own route step, `chat_tool_turn`. | **`low`** | Ruling 1. The streamed reply stays at `none` so its first words are not delayed. |
+| `synthesise_write_key_findings` | One call. It receives the run's whole ledger of checked claims with their evidence and writes the key findings directly. No turn comes before it. | **`low` or `medium`: the owner picks** | Ruling 2. The build writes key findings at `none`, `low` and `medium` for three stored runs; the owner reads them side by side. Its first words arrive a few seconds later; the sections are already on the page by then. |
+| `task_agent_scoping_turn` | The planning conversation for options scoping. A streamed, structured reply. | **`low`** | Ruling 3. The Evidence search planning turn (`task_agent_turn`) already runs at `medium`. |
+| `longlist_constrain` | For each option: a judgement against the plan's requirements, two default screens, and a reasoned guess for each preference. | **`low`** | Ruling 4. A judgement. |
+| `longlist_distinct` | One call over the whole list: which options are the same action under two names. | **`low`** | Ruling 4. A comparison across the list. |
+| `longlist_authority` | One call over the whole list: who holds the authority to act. | **`low`** | Ruling 4. A judgement. |
+| `option_profile_potential_impact`, `option_profile_ambition` | A judgement for each option. | **`low`** | Ruling 4. |
+| `option_profile_line` | One descriptive line for each option. | `none` | Writing, not judgement. |
+| `chat`, streamed reply and final parse | The reply the user reads. | `none` | No tool; reasoning would delay the first words. |
+| `synthesise_section_emit` | Streamed section prose. It carries the tool list with `tool_choice="none"` only so the cached prompt start matches the gather turns. | `none` | The gather turns before it now reason. Revisit in synthesis refinement. |
+| `synthesise_write_case_studies`, `synthesise_propose_sections`, `synthesise_write_block_summary`, `synthesise_write_artefact_summary`, `synthesise_judge_summary` | Writing and summary steps. | `none` | Not ruled. Revisit in synthesis refinement. |
+| `task_agent_toc`, `toc_discover`, `toc_judge`, `toc_summarise`, `toc_sense_check` | Theory of change. | `none` | A colleague's capability (O9). |
 
-For the two raised call sites the build records median latency, cost for each call and the
-cached-token share, before and after, and raises the output-token limit so reasoning tokens
-do not cut answers short. A cost or latency rise that the owner would not expect from
-`low` (more than a few seconds for each turn) is flagged before the change stays.
+The five options scoping steps were set to `none` by the owner on 2026-11-02 after reading
+replays (task 056), on Chat Completions. So for those five the build reruns the same
+replays at `low` and the owner reads the difference before the change stays. Task 059
+reworks this area and may change them again.
+
+For every raised step the build records median latency, cost for each call and the
+cached-token share, before and after. A rise the owner would not expect from `low` (more
+than a few seconds for each call) is flagged before the change stays.
+
+No prompt text changes. If a step needs different wording to use its reasoning well, that
+is flagged, not done here.
+
+## One way in (M12)
+
+Today the route file is the one place that says which model, effort and timeout each step
+uses. But the code that sends the request is in two shapes: 62 steps go through one shared
+helper, and 12 steps build and send their own requests, each with its own stream loop,
+tracing and retry wiring. The owner asked whether everything should go through one place.
+
+Yes, and this task is the cheap moment, because every one of those 12 sites is rewritten
+for the new endpoint in any case.
+
+| | One way in | Today's two shapes |
+|---|---|---|
+| `store=false` on every call | Set once; cannot be forgotten | Must be right in 13 places, guarded by a test |
+| Request id, usage, retries, timeouts | One implementation | Repeated, with small differences (the chat reply does not count its tokens today) |
+| Next change of endpoint or SDK | One file | 6 files |
+| Risk in this task | More of `synthesis_backend.py` changes in a move that must keep results the same | Less code moves |
+
+The risk is held by the golden request fixture: it pins what each of the 74 steps sends, so
+a request that changes shape fails a test.
+
+What "one way in" is not: it is not a layer that hides which provider is used, and the
+Claude and Cohere paths stay where they are. A call site keeps its own behaviour around
+the call (M12). The plan fixes the three signatures.
 
 ## Stalls: what the checks showed
 
@@ -210,8 +252,9 @@ parsers.
 - **Runtime egress (gate, hit).** Project data goes to the same provider and host, on a new
   endpoint path with a different storage default. Approval of this contract approves the
   endpoint with `store=false` on every call (M6).
-- **Production config (gate, hit only if O7 is yes).** The account retention mode is an AWS
-  setting, changed by a person with that access, not by this task's code.
+- **Production config (gate, hit; approved by owner ruling O7).** The account retention mode
+  is an AWS setting, changed by a person with that access, not by this task's code. The
+  Responses code is not deployed until it is set.
 - **Prompt hashes.** At least 3 pinned files change code and need a re-pin
   (`section_prompt.py`, `import_prompt.py`, `grounding_judge.py`); 4 more if
   `parse_structured`'s signature changes. The `ChatCompletionMessageParam` annotation on
@@ -223,11 +266,8 @@ parsers.
 - **No schema, auth, CI, public interface or scaffold change.** If the build finds it needs
   one, it stops.
 - **Stored extraction records** made through Chat Completions are reused after the move:
-  same prompts, same models, same efforts (owner item O6).
-- **Spec note.** [theory-of-change/components.md](../../specs/capabilities/theory-of-change/components.md)
-  describes Responses as "a new call path beside the existing wrapper". After this task it
-  is the only path. Proposed spec change 1, for the owner and the colleague to accept; not
-  edited until then.
+  same prompts, same models, and no extraction step changes effort (owner item O6).
+- **Spec change 1** (accepted, O12): see M13.
 
 ## Public / private boundary
 
@@ -245,22 +285,27 @@ each with its measure.
 
 ## Owner items
 
-| Id | Decision | Lean |
+All ruled on 2026-11-20 unless marked open.
+
+| Id | Decision | Ruling |
 |---|---|---|
 | **O1** | One task in three parts, or three tasks? | One task. If the E2 measures run long, E2 splits off; Parts 1 and 3 do not wait for it. |
 | **O2** | Keep a switch back to Chat Completions? | No. Replace and delete; roll back by reverting. |
-| **O3** | The legacy `openai-direct` route. | Keep it passing unit tests; no live measure. |
-| **O4** | Which of the 21 `none` steps to raise. | **Ruled 2026-11-20:** all tool-using `none` steps to `low`. That is two call sites (§ Efforts). Open: confirm the chat tool turn becomes its own route step. |
-| **O5** | Fix the two defects found on the way (M7, M8)? | Yes; the lines are rewritten in any case. |
+| **O3** | The legacy `openai-direct` route. | It keeps passing unit tests; no live measure. |
+| **O4** | Which `none` steps to raise. | § Efforts. **Open:** `low` or `medium` for key findings, after the owner reads the samples. |
+| **O5** | Fix the two defects found on the way (M7, M8)? | Yes. |
 | **O6** | Reuse stored extraction records made through Chat Completions? | Yes. |
-| **O7** | Set the account retention mode `none` (D2), and update the DPIA notes (D3). | Yes to both; needs DevOps. |
-| **O8** | Build no stall remedy and send no AWS support case, given § Stalls. | Agree. The fault is not shown on AWS's side or in the deployed apps. |
-| **O9** | Theory of change: tell the colleague about the endpoint move and the efforts they may now set. | Owner tells the colleague before the build. |
-| **O10** | Find why laptop connections stall (for example, rerun 100 probe calls on another network, or with any VPN off). Outside this task; it affects only local runs. | Worth 15 minutes of the owner's time, since local measures feed design decisions. |
+| **O7** | Data retention. | The account is set to zero data retention, and every call sends `store=false` as well (D1, D2). The owner updates the DPIA notes (D3). |
+| **O8** | Build no stall remedy and send no AWS support case, given § Stalls. | Treated as settled by the evidence; the owner did not object. |
+| **O9** | Theory of change: the endpoint moves; nothing else of the colleague's changes. | Agreed. The owner tells the colleague before the build. |
+| **O10** | Find why laptop connections stall. Outside this task. | Optional. |
+| **O11** | Should every model call go through one place? | Yes (M12; § One way in). |
+| **O12** | Spec change 1 (Theory of change components spec). | Accepted (M13). |
 
 ## Disciplines binding this slice
 
-- **Same results first.** Part 1 changes the endpoint and nothing else. No effort, model,
+- **Same results first.** Part 1 changes the endpoint and how calls are sent (M12), and nothing
+  a model sees. No effort, model,
   prompt or limit changes in Part 1, so a before-and-after difference has one cause.
 - **Compute, do not estimate.** Every figure in `verification.md` is read from a saved
   result file by a script.
@@ -294,8 +339,11 @@ Halt and escalate when:
     reports;
   - one options scoping run to the shortlist; one Theory of change draft and report (smoke
     only); one chat turn that uses a tool; one task agent turn.
-- **E2:** for the two raised call sites: median latency, cost for each call and cached-token
-  share, before and after.
+- **E2:** for each raised step: median latency, cost for each call and cached-token share,
+  before and after; the key-findings samples at three efforts and the owner's pick; the
+  options scoping replays at `low` and the owner's read.
+- **M12:** one test fails if a module other than `core/openai_client.py` calls the SDK.
+- **D2:** the account retention setting, read back for each Region, before the first deploy.
 - **E3:** the Sol tool-loop smoke passes.
 - **S1:** a traced attempt in Langfuse shows the request id, and that id finds the call in
   AWS's audit log.

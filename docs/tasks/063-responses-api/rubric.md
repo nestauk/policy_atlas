@@ -30,8 +30,9 @@ Slice-specific:
         before run beyond run-to-run noise, with both figures shown.
 14. [ ] **M7:** an answer cut at the output limit and a refusal each raise a named error;
         one test for each.
-15. [ ] **E2:** `synthesise_section_turn` and the chat tool turn send `low`, each with its
-        before-and-after measure; every other step's effort is unchanged.
+15. [ ] **E2:** each step in the contract's § Efforts sends the effort ruled there, with its
+        before-and-after measure; the owner's pick for key findings and read of the options
+        scoping replays are recorded; every other step's effort is unchanged.
 16. [ ] **E3:** the Sol tool-loop smoke passed on the `bedrock` route.
 17. [ ] **S1:** traced attempts carry the request id, and one id is shown to find its call in
         AWS's audit log.
@@ -40,3 +41,9 @@ Slice-specific:
 19. [ ] No stall remedy was built (O8), and no timeout changed.
 20. [ ] **Theory of change:** only the endpoint changed for its steps, unless the colleague
         asked for more (O9), with that request recorded.
+21. [ ] **M12:** `core/openai_client.py` is the only module in `backend/src` that calls the
+        SDK, proven by a test; each call site kept its own stream handling, retry rule and
+        fallback.
+22. [ ] **D2:** the account's zero-data-retention setting was read back for each Region
+        before the first deploy of the Responses code, and the reading is recorded.
+23. [ ] **M13:** spec change 1 is applied, with its line in the specs `log.md`.
