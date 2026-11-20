@@ -3,7 +3,9 @@ type: Runbook
 title: PowerUserAccess runs day-to-day CDK deploys but not bootstrap or ecs run-task
 description: CDK bootstrap creates IAM roles and ecs run-task needs iam:PassRole — both exceed PowerUserAccess; ordinary cdk deploy works because CloudFormation executes through the bootstrap roles. Scope PassRole to the stack's role prefix plus iam:PassedToService.
 tags: [deployment, aws, iam, cdk, runbook]
-timestamp: 2026-07-28
+generated:
+  by: process:okf-migrate
+  at: 2026-07-28
 ---
 
 # Rule

@@ -3,7 +3,9 @@ type: Integration quirk
 title: SSRF-safe IP pinning belongs in the NetworkBackend, not a rewritten URL
 description: httpcore pools connections by URL origin and derives SNI/Host from that origin, not the dial target — so pinning a validated IP means overriding connect_tcp, not swapping the host in the URL.
 tags: [httpcore, ssrf, fetch_live, integration-quirk, "016", security]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule
@@ -27,5 +29,5 @@ that produced the address being checked, it closes the classic
 check-then-re-resolve (TOCTOU) window — there is no second DNS lookup between
 validation and dial for an attacker to race.
 
-See also [[ip-refusal-allowlist-not-denylist]] — the classifier this backend
-pins against.
+The address classifier this backend pins against is pinned by
+`test_refused_ip_classes_block` (`backend/tests/evidence_search/sourcing/test_fetch_live.py`).

@@ -3,7 +3,9 @@ type: Testing rule
 title: Timing/politeness properties are asserted on an injected clock, not live logs
 description: Live log timestamps only corroborate timing behaviour; thread-scheduling jitter can make individual sub-interval gaps appear in a live run even when the enforced spacing is correct.
 tags: [testing, timing, fetch_live, politeness, "016"]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

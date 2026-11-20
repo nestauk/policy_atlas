@@ -3,7 +3,9 @@ type: Live behaviour
 title: Omitting reasoning_effort equals medium; the GPT-6 request shapes each route accepts
 description: On gpt-5.6 and gpt-6 models, both routes, an omitted reasoning_effort behaves as medium (16 paired comparisons, no consistent direction); gpt-6-luna refuses function tools at medium (400), gpt-6.1-sol refuses none; the cache-breakpoint content part needs the explicit-mode body as well.
 tags: [models, gpt-6, bedrock, openai, reasoning-effort, caching, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Measured (2026-11-02, 236 probe calls, both routes)

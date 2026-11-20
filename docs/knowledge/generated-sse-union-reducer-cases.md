@@ -3,7 +3,9 @@ type: Convention
 title: The generated SSE frame union forces reducer coverage at regen time — land no-op cases in the schema phase
 description: Because the frontend reducer switches exhaustively over the generated frame union, regenerating the client after adding SSE event types fails the typecheck until the reducer names the new cases; the B-phase regen left explicit no-op cases for D.1 to fill — additive SSE work gets a compile-time to-do list instead of silently dropped frames.
 tags: [sse, codegen, reducer, typescript, exhaustiveness]
-timestamp: 2026-07-29
+generated:
+  by: process:okf-migrate
+  at: 2026-07-29
 ---
 
 # Rule

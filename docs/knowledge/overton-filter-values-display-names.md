@@ -3,7 +3,14 @@ type: Integration quirk
 title: Overton source_country takes display names and silently returns zero on anything else
 description: Overton's source_country filter matches its own display-name vocabulary ("UK", "USA", "Canada"); ISO codes and full official names ("United Kingdom") return zero results with no error — live-probe filter VALUES, not just keys, before a prompt promises them.
 tags: [search-backends, overton, openalex, scope-filters, live-probe, fail-closed]
-timestamp: 2026-07-11
+generated:
+  by: process:okf-migrate
+  at: 2026-07-11
+sources:
+  - resource: "../tasks/018-dress-rehearsal/verification.md"
+    title: "[018 verification.md \u00a7 B2](../tasks/018-dress-rehearsal/verification.md) (A6 live probes; 017 open item closed)"
+  - resource: "src/policy_atlas/task_agent_prompt.py"
+    title: "`publisher_country` capability line in `src/policy_atlas/task_agent_prompt.py`; `filters[\"overton\"]` mapping in `src/policy_atlas/search_loop.py`"
 ---
 
 # Rule
@@ -49,10 +56,3 @@ given) and misdiagnosable as thin coverage.
   repeated param, array param) fails silently — comma/pipe/array return zero, repeated
   params last-value-win (019 plan-time probes). Multi-country filtering on Overton is
   post-filter territory, never a wire param.
-
-# Citations
-
-- [018 verification.md § B2](../tasks/018-dress-rehearsal/verification.md) (A6 live
-  probes; 017 open item closed)
-- `publisher_country` capability line in `src/policy_atlas/task_agent_prompt.py`;
-  `filters["overton"]` mapping in `src/policy_atlas/search_loop.py`

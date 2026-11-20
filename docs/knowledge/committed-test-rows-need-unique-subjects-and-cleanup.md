@@ -3,7 +3,9 @@ type: Testing rule
 title: Tests that commit fixed subjects or addresses collide on a kept database and on a shared worker
 description: Tests that commit rows with fixed subjects or email addresses collide with leftovers on a kept database and with other tests on the same worker. Suffix them with a UUID. A module that reads a whole table gets its own listed domain and an autouse cleanup.
 tags: [testing, database, isolation, xdist, "065"]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
 ---
 
 # Rule

@@ -3,7 +3,9 @@ type: Testing rule
 title: Migration-roundtrip tests pin explicit revision targets and never hold seed rows across DDL
 description: A relative "-1" downgrade target means "one below head" only while your migration is head; and seed rows left in an open transaction on a second connection deadlock any later migration whose DDL touches the seeded tables — observed as a 14-minute silent hang.
 tags: [alembic, migrations, testing, deadlock, postgres]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

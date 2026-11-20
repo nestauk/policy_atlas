@@ -3,7 +3,9 @@ type: Review lens
 title: Tested-in-isolation is not wired — integration claims need a runtime call-site check
 description: A reader/aggregator can carry a full green test suite and still be dead code — its tests exercise the function, not the runner reaching it. Task 024's trigger floor shipped 35 green trigger tests while two of its classes had zero runtime call sites and a third was blind to its input. Review rule — for every "X is wired" claim, grep the call sites and check what the caller actually passes.
 tags: [review, verification, integration, dead-code, trigger-floor, task-024]
-timestamp: 2026-07-17
+generated:
+  by: process:okf-migrate
+  at: 2026-07-17
 ---
 
 # The lens

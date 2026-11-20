@@ -1,9 +1,11 @@
 ---
 type: Integration
 title: Facet partitioning has a hard value-list scale limit on the current prompt/model
-description: group_facet_v1 on gpt-5.4-mini reliably emits duplicate value ids at ~184 distinct facet values (4/4 live attempts including repairs, persisted rejection_reasons "partition: duplicate id"), degrading honestly to the all-ungrouped residual; kind-spanning membership doubles the value list, so Slice C's facet redesign must treat value-list scale as a first-class constraint (batching or id-scheme change), not a retry problem.
+description: 'group_facet_v1 on gpt-5.4-mini reliably emits duplicate value ids at ~184 distinct facet values (4/4 live attempts including repairs, persisted rejection_reasons "partition: duplicate id"), degrading honestly to the all-ungrouped residual; kind-spanning membership doubles the value list, so Slice C''s facet redesign must treat value-list scale as a first-class constraint (batching or id-scheme change), not a retry problem.'
 tags: [group, facet-grouping, model-capacity, gpt-5-mini, slice-c, scale]
-timestamp: 2026-07-13
+generated:
+  by: process:okf-migrate
+  at: 2026-07-13
 ---
 
 # Rule
@@ -41,7 +43,7 @@ banned; the constraint now lives structurally in the engine.
 # Watch out
 
 - The degradation path is working as designed
-  ([facet-grouping-exhaustive-partition](facet-grouping-exhaustive-partition.md));
+  (`assert_grouping_invariants`);
   the residual still carries per-kind member counts, so downstream synthesise
   runs remain honest — but grouped-run envelope carriage at this scale is only
   stub-pinned, not live-evidenced.

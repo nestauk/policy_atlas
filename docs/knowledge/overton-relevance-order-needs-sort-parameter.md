@@ -3,7 +3,16 @@ type: Integration quirk
 title: Overton documents.php returns date order with no scores unless sort=relevance is sent
 description: Overton's search endpoint orders results by date by default and omits the es_score field; only sort=relevance returns relevance order and scores, so the production client sends sort=relevance on every search and protects the parameter from plan wire params, and a landmark fetched by id (policy_document_id) is accepted only when the reply echoes the requested id.
 tags: [overton, search, ordering, egress]
-timestamp: 2026-10-09
+generated:
+  by: process:okf-migrate
+  at: 2026-10-09
+sources:
+  - resource: "../tasks/051-improve-production-search-screen/contract.md"
+    title: "[051 contract D8](../tasks/051-improve-production-search-screen/contract.md)"
+  - resource: "../tasks/049-improve-overton-search/notes.md"
+    title: "[049 notes](../tasks/049-improve-overton-search/notes.md)"
+  - resource: "backend/src/policy_atlas/evidence_search/sourcing/search_live.py"
+    title: "`backend/src/policy_atlas/evidence_search/sourcing/search_live.py` (`OvertonLiveBackend._search`, `fetch_by_id`, `_PROTECTED_OVERTON_PARAMS`)"
 ---
 
 # Rules
@@ -26,9 +35,3 @@ timestamp: 2026-10-09
 The task 049 replay showed the date-ordered first page missing the documents the
 relevance order puts first; the single-pass policy pool (400 relevance-ordered documents
 over three texts, title dedup, landmarks, specificity cut) depends on the order.
-
-# Citations
-
-- [051 contract D8](../tasks/051-improve-production-search-screen/contract.md)
-- [049 notes](../tasks/049-improve-overton-search/notes.md)
-- `backend/src/policy_atlas/evidence_search/sourcing/search_live.py` (`OvertonLiveBackend._search`, `fetch_by_id`, `_PROTECTED_OVERTON_PARAMS`)

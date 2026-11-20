@@ -1,9 +1,18 @@
 ---
 type: Convention
 title: A two-step rename whose second step produces the first step's source word needs a per-checkout ledger, anchored never-map patterns and a fresh-clone guard
-description: `portfolio→project` after `project→task` makes a swept tree indistinguishable from an unswept one by tokenising alone. The sweep tool keeps a gitignored hash ledger and refuses a tree that already looks swept; its never-map exemptions must be anchored (`[project]` matched a list literal, `--project` matched the ops CLI flag and caused a mid-sweep collision); its collision check counts prose and sees symbols, not senses — never re-run `--apply` on an edited post-sweep tree.
+description: '`portfolio→project` after `project→task` makes a swept tree indistinguishable from an unswept one by tokenising alone. The sweep tool keeps a gitignored hash ledger and refuses a tree that already looks swept; its never-map exemptions must be anchored (`[project]` matched a list literal, `--project` matched the ops CLI flag and caused a mid-sweep collision); its collision check counts prose and sees symbols, not senses — never re-run `--apply` on an edited post-sweep tree.'
 tags: [rename, sweep, tooling, idempotence, task-038]
-timestamp: 2026-10-21
+generated:
+  by: process:okf-migrate
+  at: 2026-10-21
+sources:
+  - resource: "scripts/rename_038.py"
+    title: "`scripts/rename_038.py` (module docstring; `NEVER_MAPPED_CONTEXTS`), `backend/tests/scripts/test_rename_038.py`"
+  - resource: "../tasks/038-vocabulary-alignment/verification.md"
+    title: "[038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (\u00a7 Phase 2, \u00a7 Phase 3 \"Sweep misses\", \"Unpredicted collision\", \u00a7 Review findings R15)"
+  - resource: "../tasks/038-vocabulary-alignment/plan.md"
+    title: "[038-vocabulary-alignment/plan.md](../tasks/038-vocabulary-alignment/plan.md) (D2\u2013D4)"
 ---
 
 # Rule
@@ -56,9 +65,3 @@ and every unanchored pattern on 038 bit once.
   path for rebasing an open PR (`docs/deferred.md` § Vocabulary).
 - Same family: [rename-sweep-inverts-screen-sense-words](rename-sweep-inverts-screen-sense-words.md),
   [stored-json-keys-are-vocabulary-too](stored-json-keys-are-vocabulary-too.md).
-
-# Citations
-
-- `scripts/rename_038.py` (module docstring; `NEVER_MAPPED_CONTEXTS`), `backend/tests/scripts/test_rename_038.py`
-- [038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (§ Phase 2, § Phase 3 "Sweep misses", "Unpredicted collision", § Review findings R15)
-- [038-vocabulary-alignment/plan.md](../tasks/038-vocabulary-alignment/plan.md) (D2–D4)

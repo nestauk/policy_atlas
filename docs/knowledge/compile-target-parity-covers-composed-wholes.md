@@ -3,7 +3,9 @@ type: Invariant
 title: Compile-target parity is checked on the composed whole, with the real composer
 description: Per-field caps are not parity — a plan whose fields all validate can still compose past a downstream cap and silently truncate (screen criteria vanished while provenance claimed they applied); and round-trip checks against a canonicalising composer must use containment, not byte equality.
 tags: [plan, compile, fail-closed, parity, steering, agent]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule
@@ -35,8 +37,7 @@ All three are the same failure class: the plan model and its compile target
 each individually valid, with the mismatch living only in the composition —
 where nothing errors. 017 paid for the per-field version live (a >200-char
 criterion failed mid-run) and the review stack found the composed-whole,
-containment, and registry variants within the same slice. Extends
-[plan→config compile fails closed](plan-compile-fails-closed.md): fail-closed
+containment, and registry variants within the same slice. Fail-closed
 at construction is only as strong as what construction actually checks.
 
 # Watch out

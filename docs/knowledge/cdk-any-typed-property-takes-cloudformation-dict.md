@@ -3,7 +3,18 @@ type: Integration quirk
 title: A CDK L1 property typed `Any` takes a plain dict with CloudFormation's key names, not a typed Property
 description: In aws-cdk-lib 2.261 `CfnLoggingConfiguration.logging_filter` is typed `Any`; a typed `LoggingFilterProperty` passed to it serialises with camelCase keys that CloudFormation rejects, and synth does not notice. Write such values as dicts with the PascalCase names from the CloudFormation reference, and assert the rendered keys in the synth test.
 tags: [cdk, cloudformation, wafv2, l1-constructs, synth, integration-quirk]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
+sources:
+  - resource: "../tasks/064b-waf-captcha/verification.md"
+    title: "[task 064b verification](../tasks/064b-waf-captcha/verification.md) \u00a7 Review findings (contract verifier F1)."
+  - resource: "infra/infra/components/waf.py"
+    title: "`infra/infra/components/waf.py` (`logging_filter=`) and `infra/tests/unit/test_waf.py::test_w8_\u2026`."
+  - resource: "CloudFormation: `AWS::WAFv2::LoggingConfiguration LoggingFilter`, `AWS::WAFv2::WebACL FieldToMatch SingleHeader`."
+    title: "CloudFormation: `AWS::WAFv2::LoggingConfiguration LoggingFilter`, `AWS::WAFv2::WebACL FieldToMatch SingleHeader`."
+  - resource: "infra/DEPLOYMENT.md"
+    title: "`infra/DEPLOYMENT.md` \u00a7 4 \"The firewall\", Capacity and the dry run."
 ---
 
 # Rule
@@ -34,13 +45,3 @@ on the synthesised `Rules` list (search strings base64-encoded) rejected it in o
 and is the dry run to run before any first deploy or rule change. The synth test now walks
 every key in the web ACL and fails on a lower-case one; do the same for any new L1 resource
 with `Any`-typed fields.
-
-# Citations
-
-- [task 064b verification](../tasks/064b-waf-captcha/verification.md) § Review findings
-  (contract verifier F1).
-- `infra/infra/components/waf.py` (`logging_filter=`) and
-  `infra/tests/unit/test_waf.py::test_w8_…`.
-- CloudFormation: `AWS::WAFv2::LoggingConfiguration LoggingFilter`,
-  `AWS::WAFv2::WebACL FieldToMatch SingleHeader`.
-- `infra/DEPLOYMENT.md` § 4 "The firewall", Capacity and the dry run.

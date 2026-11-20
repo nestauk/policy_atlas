@@ -3,7 +3,16 @@ type: Invariant
 title: An attacker-chosen cache key cannot bound outbound fetches; bound the fetch itself
 description: A per-key negative cache on the JWKS lookup bounded nothing, because the key id comes from an unauthenticated token header and a fresh one defeats it every time. The bound has to sit on the fetch, one per interval under a lock claimed before the network call, whatever key asked for it (064a Q16, review findings H-01 and M-20).
 tags: [auth, jwks, cache, rate-bound, invariant, security]
-timestamp: 2026-11-16
+generated:
+  by: process:okf-migrate
+  at: 2026-11-16
+sources:
+  - resource: "backend/src/policy_atlas/api/auth.py"
+    title: "`backend/src/policy_atlas/api/auth.py` \u2014 `JwksProvider.get_key`, `refresh`."
+  - resource: "backend/tests/api/test_jwks_provider.py"
+    title: "`backend/tests/api/test_jwks_provider.py` \u2014 forty threads, one read; failed refresh keeps keys; no usable key keeps keys; a failed first fetch does not hold the window."
+  - resource: "../adr/0045-per-user-run-cap-task-quota-offboarding.md"
+    title: "[ADR 0045](../adr/0045-per-user-run-cap-task-quota-offboarding.md) \u00a7 As built 6; [task 064a contract](../tasks/064a-security-quick-wins/contract.md) Q16."
 ---
 
 # Rule
@@ -35,12 +44,4 @@ Three edges the review stack settled the same day:
 The two auth dependencies became plain `def` so FastAPI runs them on the worker pool and
 the fetch never blocks the event loop. The cost is that requests for a known key wait on
 the lock while one fetch runs (up to the client's 5-second timeout), once per window at
-most — a deferred seam in `docs/deferred.md` § Security quick wins.
-
-# Citations
-
-- `backend/src/policy_atlas/api/auth.py` — `JwksProvider.get_key`, `refresh`.
-- `backend/tests/api/test_jwks_provider.py` — forty threads, one read; failed refresh keeps
-  keys; no usable key keeps keys; a failed first fetch does not hold the window.
-- [ADR 0045](../adr/0045-per-user-run-cap-task-quota-offboarding.md) § As built 6;
-  [task 064a contract](../tasks/064a-security-quick-wins/contract.md) Q16.
+most — a deferred seam in `docs/deferred.md` § Accounts, organisations and administration (Limits in the code).

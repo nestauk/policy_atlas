@@ -1,9 +1,16 @@
 ---
 type: Integration quirk
 title: Repo-root scripts/*.py are outside the typecheck gate
-description: `make typecheck` runs `mypy src tests` from `backend/` (`backend/pyproject.toml` `files = ["src", "tests"]`), so nothing under the repo-root `scripts/` — including the destructive operator script `scripts/ops_remove_scoping_tasks.py` and the rename tooling — is ever typechecked. They are tested (`backend/tests/scripts/`), not typed.
+description: '`make typecheck` runs `mypy src tests` from `backend/` (`backend/pyproject.toml` `files = ["src", "tests"]`), so nothing under the repo-root `scripts/` — including the destructive operator script `scripts/ops_remove_scoping_tasks.py` and the rename tooling — is ever typechecked. They are tested (`backend/tests/scripts/`), not typed.'
 tags: [tooling, mypy, scripts, make-verify, task-044]
-timestamp: 2026-09-17
+generated:
+  by: process:okf-migrate
+  at: 2026-09-17
+sources:
+  - resource: "backend/pyproject.toml"
+    title: "`backend/pyproject.toml` `[tool.mypy] files`, `backend/Makefile` `typecheck`"
+  - resource: "scripts/ops_remove_scoping_tasks.py"
+    title: "`scripts/ops_remove_scoping_tasks.py`, `backend/tests/scripts/test_ops_remove_scoping_tasks.py`"
 ---
 
 # Rule
@@ -19,8 +26,3 @@ Found at the 044 review stack by two lanes independently while checking the roll
 (`ops_remove_scoping_tasks.py` — list-only by default, `--apply` guarded, FK order tested end to
 end at `tests/scripts/test_ops_remove_scoping_tasks.py`). Adding `scripts/` to the mypy files is
 deferred (`docs/deferred.md` § Codebase health).
-
-# Citations
-
-- `backend/pyproject.toml` `[tool.mypy] files`, `backend/Makefile` `typecheck`
-- `scripts/ops_remove_scoping_tasks.py`, `backend/tests/scripts/test_ops_remove_scoping_tasks.py`

@@ -3,7 +3,9 @@ type: Security rule
 title: A guard keyed on accumulated state is weakest on day zero — test it against the deploy-day state
 description: 033's ops-CLI environment guard proved database identity by resolving recent app_user subs against the Cognito pool; an empty table degraded to a confirmation a --yes flag could script away. The migration itself ships an empty app_user — the guard's weakest state WAS the state every fresh deploy is in, and a wrong write then poisons the guard's own evidence.
 tags: [ops, guards, deployment, security, "033"]
-timestamp: 2026-08-25
+generated:
+  by: process:okf-migrate
+  at: 2026-08-25
 ---
 
 # Rule

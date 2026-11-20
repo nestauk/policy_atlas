@@ -3,7 +3,16 @@ type: Convention
 title: An eval cost figure names what it counts — computed or spent, pages or cap, api or llm
 description: A dollar figure in an eval table is honest only with its unit attached — whether it was computed from a price table or actually spent, whether it prices the provider pages a cached fetch used or a request sized to the cap, and whether it is search-service (api) or language-model (llm) money; sub-cent amounts print at four decimals or they read as free; and a fetch-once cache must check the request it was made for, not just the entity id, before it serves results.
 tags: [evaluation, cost, langfuse, cache, honesty]
-timestamp: 2026-09-25
+generated:
+  by: process:okf-migrate
+  at: 2026-09-25
+sources:
+  - resource: "../tasks/046-search-baselines/contract.md"
+    title: "[046 contract D4 and D9](../tasks/046-search-baselines/contract.md)"
+  - resource: "../tasks/046-search-baselines/verification.md"
+    title: "[046 verification \u00a7 Review findings 1 and 3](../tasks/046-search-baselines/verification.md)"
+  - resource: "scripts/evals/search/history.py"
+    title: "`scripts/evals/search/history.py` `usd`, `fetch_runs`; `scripts/evals/search/measure/baseline_recall.py` `cost_usd`, `pages_for_cap`, `read_cache`; `scripts/evals/search/README.md` \u00a7 The variable cost column"
 ---
 
 # Rules
@@ -44,11 +53,3 @@ timestamp: 2026-09-25
 stack found three ways it could mislead without being wrong: the page-priced Consensus
 figure under a "cap on its own" label, OpenAlex at $0.00, and a cache that would have
 served old results for an edited review.
-
-# Citations
-
-- [046 contract D4 and D9](../tasks/046-search-baselines/contract.md)
-- [046 verification § Review findings 1 and 3](../tasks/046-search-baselines/verification.md)
-- `scripts/evals/search/history.py` `usd`, `fetch_runs`;
-  `scripts/evals/search/measure/baseline_recall.py` `cost_usd`, `pages_for_cap`, `read_cache`;
-  `scripts/evals/search/README.md` § The variable cost column

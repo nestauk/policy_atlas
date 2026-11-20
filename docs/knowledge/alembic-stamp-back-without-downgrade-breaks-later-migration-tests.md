@@ -3,7 +3,9 @@ type: Testing rule
 title: A test that stamps Alembic back without downgrading must step down to that revision first, or later migration tests on the worker break
 description: A migration test that uses command.stamp to move the recorded revision back leaves the schema at head. Once a newer revision exists, every later migration test on that worker fails. Downgrade to the revision first; stamp only afterwards.
 tags: [testing, alembic, migrations, pitfall, "065"]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
 ---
 
 # Rule

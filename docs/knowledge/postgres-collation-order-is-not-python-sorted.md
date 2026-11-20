@@ -3,7 +3,9 @@ type: Testing rule
 title: Postgres collation ignores spaces at the first level, so ORDER BY is not Python's sorted
 description: A test that expects ORDER BY display_name to equal sorted(names) fails on names with spaces, because the database collation compares letters first and spaces later. Compute the expected order from the database, not sorted().
 tags: [testing, postgres, collation, ordering, "065"]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
 ---
 
 # Rule

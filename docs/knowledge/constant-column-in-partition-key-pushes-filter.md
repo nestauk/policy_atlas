@@ -3,7 +3,20 @@ type: Invariant
 title: A column constant within a window partition can lead the partition key at no cost, and lets PostgreSQL push a caller's filter below the window
 description: effective_screen_rows partitioned by scope and snapshot; every caller filtered by task, but the planner cannot push a filter on a column the window does not partition by, so every task's rows were ranked on every call. task_id is constant within a scope (fk_ssr_scope_task), so adding it first to partition_by changes no ranking and lets the task filter reach the scan, with an index to match (37 ms to 2 ms on 40,000 rows; 064a Q9).
 tags: [postgres, window-function, query-plan, index, screening, invariant]
-timestamp: 2026-11-16
+generated:
+  by: process:okf-migrate
+  at: 2026-11-16
+sources:
+  - resource: "backend/src/policy_atlas/evidence_search/assess/screen.py"
+    title: "`backend/src/policy_atlas/evidence_search/assess/screen.py` \u2014 `effective_screen_rows`."
+  - resource: "backend/alembic/versions/b1e7c3a9d5f2_ssr_task_scope_snapshot_index.py"
+    title: "`backend/alembic/versions/b1e7c3a9d5f2_ssr_task_scope_snapshot_index.py` \u2014 built `CONCURRENTLY` with invalid-index recovery."
+  - resource: "backend/tests/evidence_search/assess/test_screen_partition_parity.py"
+    title: "`backend/tests/evidence_search/assess/test_screen_partition_parity.py`; `backend/tests/core/test_migration_064a_ssr_index.py`."
+  - resource: "../tasks/064a-security-quick-wins/verification.md"
+    title: "[task 064a verification](../tasks/064a-security-quick-wins/verification.md) \u2014 the `EXPLAIN ANALYZE` pair."
+  - resource: "effective-screen-row-read-rule.md"
+    title: "Related: [effective-screen-row-read-rule](effective-screen-row-read-rule.md)."
 ---
 
 # Rule
@@ -32,14 +45,3 @@ unchanged on a two-task, two-scope, two-generation, both-stages fixture with fai
 The general check before adding a column this way: find the constraint that makes it
 constant per partition (here a foreign key from the partition's entity to the column's),
 and keep a parity test, because the planner benefit is invisible to a correctness test.
-
-# Citations
-
-- `backend/src/policy_atlas/evidence_search/assess/screen.py` — `effective_screen_rows`.
-- `backend/alembic/versions/b1e7c3a9d5f2_ssr_task_scope_snapshot_index.py` — built
-  `CONCURRENTLY` with invalid-index recovery.
-- `backend/tests/evidence_search/assess/test_screen_partition_parity.py`;
-  `backend/tests/core/test_migration_064a_ssr_index.py`.
-- [task 064a verification](../tasks/064a-security-quick-wins/verification.md) — the
-  `EXPLAIN ANALYZE` pair.
-- Related: [effective-screen-row-read-rule](effective-screen-row-read-rule.md).

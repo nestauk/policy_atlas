@@ -3,7 +3,9 @@ type: Testing rule
 title: Widening an auth boundary needs sweeps for BOTH caller classes — anonymous and signed-in outsider — per route
 description: A route's 401 dependency can mask a widened row grade beneath it. 037 moved eleven routes to optional auth; the one route meant to stay graded (decisions) kept its 401 for anonymous callers but silently gained the public leg for signed-in ones, and the conformance sweep that would have caught it had pruned exactly those routes from its signed-in cross-owner class. Derived test-case lists shrink silently — assert their size or membership.
 tags: [auth, conformance, tenancy, testing, task-037]
-timestamp: 2026-09-04
+generated:
+  by: process:okf-migrate
+  at: 2026-09-04
 ---
 
 # Rule

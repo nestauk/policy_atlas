@@ -3,7 +3,9 @@ type: Convention
 title: Wire-model field additions break every construction site at import — stage nulls first
 description: Extraction wire models are all-fields-required (OpenAI strict structured output forbids defaults), so ANY field addition breaks every construction site — including the few-shot example, whose import-time pre-flight fails the whole module. The keep-green pattern is mechanical nulls at the schema phase, real values authored at the prompt phase (task 020 phases A/B).
 tags: [wire-models, structured-output, pydantic, extraction, build-sequencing]
-timestamp: 2026-09-24
+generated:
+  by: process:okf-migrate
+  at: 2026-09-24
 ---
 
 # Rule

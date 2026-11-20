@@ -3,7 +3,16 @@ type: Prompting
 title: An earlier prompt honesty rule can silently defeat a new capability line
 description: A capability line teaching a new filter vocabulary was routed around by an EARLIER honesty rule (study-geography ≠ source-geography reasoning) until the prompt said which reading selects which surface; only replay rounds catch this class — unit tests can't.
 tags: [prompting, planner, capability-line, replay, country-filters]
-timestamp: 2026-07-12
+generated:
+  by: process:okf-migrate
+  at: 2026-07-12
+sources:
+  - resource: "../tasks/019-folding-pass/verification.md"
+    title: "[019 verification.md \u00a7 Planner replay](../tasks/019-folding-pass/verification.md) (two rounds, 15 probes; round-1 routing conflict, round-2 clean)"
+  - resource: "src/policy_atlas/task_agent_prompt.py"
+    title: "`src/policy_atlas/task_agent_prompt.py` (planner_v3 setting-vs-origin routing text)"
+  - resource: "../specs/system/prompting.md"
+    title: "[prompting.md](../specs/system/prompting.md) (refine-replay loop method)"
 ---
 
 # Rule
@@ -35,10 +44,3 @@ interact as a system; a new rule's failure mode is usually an old rule's success
   capability's happy path — include phrasings the OLD rule should win on.
 - If the model applies a rule "inconsistently", first ask whether two rules overlap on
   those inputs; inconsistency is often unstated precedence.
-
-# Citations
-
-- [019 verification.md § Planner replay](../tasks/019-folding-pass/verification.md)
-  (two rounds, 15 probes; round-1 routing conflict, round-2 clean)
-- `src/policy_atlas/task_agent_prompt.py` (planner_v3 setting-vs-origin routing text)
-- [prompting.md](../specs/system/prompting.md) (refine-replay loop method)

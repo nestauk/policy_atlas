@@ -3,7 +3,14 @@ type: Runbook
 title: Per-run $ cost is recoverable from Langfuse by summing trace totalCost over the run's time window
 description: No run-id key is needed — sum trace `totalCost` over the run's start/end window via the public API; 022's cost protocol used this for all three arms and it is the same source as the historical $15.45 baseline, keeping before/after comparisons like-for-like even when the price vector isn't checked in.
 tags: [langfuse, cost, tracing, runbook, evaluation]
-timestamp: 2026-07-14
+generated:
+  by: process:okf-migrate
+  at: 2026-07-14
+sources:
+  - resource: "../tasks/022-synthesis-refinement/verification.md"
+    title: "[022 verification.md \u00a7 Cost measurement](../tasks/022-synthesis-refinement/verification.md)"
+  - resource: "live_check_022_synthesise.py"
+    title: "022 cost protocol harness (session scratchpad `live_check_022_synthesise.py`, retained locally)"
 ---
 
 # Rule
@@ -29,8 +36,3 @@ Langfuse-window vs Langfuse-window.
   ids) or a checked-in price vector.
 - Overlapping concurrent runs poison the window method; serialize cost-protocol
   arms or fall back to trace-level filtering.
-
-# Citations
-
-- [022 verification.md § Cost measurement](../tasks/022-synthesis-refinement/verification.md)
-- 022 cost protocol harness (session scratchpad `live_check_022_synthesise.py`, retained locally)

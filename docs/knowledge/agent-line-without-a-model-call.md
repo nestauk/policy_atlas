@@ -3,7 +3,16 @@ type: Convention
 title: A Task Agent line the code posts without a model call is a completed transcript row with an empty user message
 description: Code-authored chat lines (the draft landed, the check is done) are stored as completed task_agent_transcript rows with user_message empty; the plan-stale fence in create_run skips theory tasks that already have a graph, and the frontend hides the empty user bubble — both had to learn about the shape.
 tags: [task-agent, chat, runtime, theory-of-change, task-054]
-timestamp: 2026-11-05
+generated:
+  by: process:okf-migrate
+  at: 2026-11-05
+sources:
+  - resource: "backend/src/policy_atlas/api/toc_start.py"
+    title: "`backend/src/policy_atlas/api/toc_start.py` (`post_agent_message`, `DRAFT_LANDED_MESSAGE`)"
+  - resource: "backend/src/policy_atlas/api/routers/runs.py"
+    title: "`backend/src/policy_atlas/api/routers/runs.py` (the fence skips theory tasks with a graph)"
+  - resource: "frontend/src/views/workspace/TaskAgentPane.tsx"
+    title: "`frontend/src/views/workspace/TaskAgentPane.tsx`"
 ---
 
 # Rule
@@ -20,9 +29,3 @@ timestamp: 2026-11-05
 
 Task 054's J3, J5 and J7 lines had no precedent. The first build blocked restarts (the fence saw
 a newer row) and showed an empty bubble, so both readers were taught the shape.
-
-# Citations
-
-- `backend/src/policy_atlas/api/toc_start.py` (`post_agent_message`, `DRAFT_LANDED_MESSAGE`)
-- `backend/src/policy_atlas/api/routers/runs.py` (the fence skips theory tasks with a graph)
-- `frontend/src/views/workspace/TaskAgentPane.tsx`

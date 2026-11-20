@@ -3,7 +3,16 @@ type: Testing rule
 title: A protocol change or an approved gate change must be swept through every test fake and every structural pin before the gate runs
 description: When a Protocol method gains an argument, grep the tests for every fake that implements it (grep -rn "def embed_texts(" tests) and extend them before a targeted run, or the full gate finds the one you missed; when a contract approves a gate that overturns a premise (a dependency moving into the image), grep the tests for pins of the old premise and repoint them at what is still true rather than deleting them.
 tags: [testing, protocols, fakes, dependency-gates, review]
-timestamp: 2026-10-14
+generated:
+  by: process:okf-migrate
+  at: 2026-10-14
+sources:
+  - resource: "../tasks/053-bedrock-local-route/verification.md"
+    title: "[053 verification \u00a7 Test changes and \u00a7 Review findings](../tasks/053-bedrock-local-route/verification.md)"
+  - resource: "backend/tests/core/test_image_hygiene.py"
+    title: "`backend/tests/core/test_image_hygiene.py`; `backend/tests/evidence_search/synthesis/test_synthesis_tools.py` `FakeEmbedder`"
+  - resource: "wire-field-additions-break-all-construction-sites.md"
+    title: "Related: [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)"
 ---
 
 # Rules
@@ -24,9 +33,3 @@ timestamp: 2026-10-14
 - **A repointed structural guard must keep its original reach.** The first repoint
   scanned `api/` and `core/` only, while the new `boto3` call sites sat in
   `evidence_search/`; the review widened it to every package except `ops/`.
-
-# Citations
-
-- [053 verification § Test changes and § Review findings](../tasks/053-bedrock-local-route/verification.md)
-- `backend/tests/core/test_image_hygiene.py`; `backend/tests/evidence_search/synthesis/test_synthesis_tools.py` `FakeEmbedder`
-- Related: [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)

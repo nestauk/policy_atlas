@@ -3,7 +3,9 @@ type: Live behaviour
 title: The run executor's capacity check counts running walks in the database, not in the process
 description: Two API servers on one database share one RUN_EXECUTOR_MAX, so a second server (another route, a live worktree) steals the first server's slots and its launches get HTTP 409; a 409'd task keeps its approved plan and can be re-posted; a live worktree server shares the dev database and needs alembic upgrade head after a schema slice.
 tags: [runtime, executor, live-check, worktree, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Behaviour

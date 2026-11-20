@@ -1,9 +1,11 @@
 ---
 type: Convention
 title: Define the cost-per-run basis before setting a target; the traced figure is a floor
-description: "Cost per run" is the session total (every model call, embeddings and the Task Agent's planning turns included) at list prices from token counts; it is a floor because a request that completes after the client timeout is billed but never traced; small levers are judged per call name, whole runs judge a switch.
+description: '"Cost per run" is the session total (every model call, embeddings and the Task Agent''s planning turns included) at list prices from token counts; it is a floor because a request that completes after the client timeout is billed but never traced; small levers are judged per call name, whole runs judge a switch.'
 tags: [cost, langfuse, measurement, embeddings, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Rule

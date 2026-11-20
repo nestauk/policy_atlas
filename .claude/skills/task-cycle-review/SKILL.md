@@ -148,7 +148,7 @@ Write the durable records against the final code, in this PR:
   system each entry concerns: add the seams this slice left open and the step-5c findings
   that are worth doing; remove every entry this slice built. Each entry says what is not
   built, why, and the condition that would make someone build it. No task numbers or dates.
-- Verified learning → `docs/knowledge/` (OKF concept + index + log lines, not a diary),
+- Verified learning → `docs/knowledge/` (OKF concept + index line, not a diary),
   from **both** the knowledge candidates in § Review handoff **and** this stack's findings:
   findings alone lose the build's lessons. Adjudicate each candidate: author, fold into an
   existing concept, or decline with a reason. An empty list on a non-trivial slice is a

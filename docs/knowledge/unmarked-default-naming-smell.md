@@ -3,7 +3,14 @@ type: Review lens
 title: The unmarked-default naming smell — the first-built variant hoards the generic names
 description: When a second variant of a thing lands, the first one keeps the generic module/symbol names (extraction_records, extract_prompt) and only the newcomer gets marked names (implementation_context_*) — making the pair read as "the real one and the add-on" instead of two peers. Repeatable review lens; the IOF/ICF rename set (023) was the instance.
 tags: [naming, review-lens, refactoring]
-timestamp: 2026-07-14
+generated:
+  by: process:okf-migrate
+  at: 2026-07-14
+sources:
+  - resource: "docs/tasks/023-codebase-health/review-findings.md \u00a7 \"The unmarked-default family\""
+    title: "docs/tasks/023-codebase-health/review-findings.md \u00a7 \"The unmarked-default family\""
+  - resource: "../../src/policy_atlas/evidence_search/extract/"
+    title: "[src/policy_atlas/evidence_search/extract/](../../src/policy_atlas/evidence_search/extract/) \u2014 the symmetric result (`iof_records.py`/`icf_records.py`, `iof_prompt.py`/`icf_prompt.py`)"
 ---
 
 # Rule
@@ -32,8 +39,3 @@ Renames of this class are cheap **before** anything external pins the import pat
 (trace shapes, eval baselines, published APIs) and expensive after — sequence them
 early, as 023 did (its rationale: "renames/moves are cheap now and expensive after eval
 baselines pin trace shapes").
-
-# Citations
-
-- docs/tasks/023-codebase-health/review-findings.md § "The unmarked-default family"
-- [src/policy_atlas/evidence_search/extract/](../../src/policy_atlas/evidence_search/extract/) — the symmetric result (`iof_records.py`/`icf_records.py`, `iof_prompt.py`/`icf_prompt.py`)

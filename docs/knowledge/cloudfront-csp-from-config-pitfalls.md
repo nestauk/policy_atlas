@@ -3,7 +3,18 @@ type: Integration quirk
 title: A CloudFront CSP built from config — redirects, tokens, override flags and the CAPTCHA host
 description: Four traps found building the CloudFront security headers policy (064c) — frame-src is checked again on every redirect, so a sign-in frame that returns to our own address needs 'self'; the CSP needs plain strings, not CDK tokens; the managed SECURITY_HEADERS override flags are not uniform; the WAF CAPTCHA script host is <id>.<region>.captcha-sdk.awswaf.com.
 tags: [infra, cloudfront, csp, security-headers, cdk, cognito, waf]
-timestamp: 2026-11-19
+generated:
+  by: process:okf-migrate
+  at: 2026-11-19
+sources:
+  - resource: "infra/infra/components/security_headers.py"
+    title: "`infra/infra/components/security_headers.py`; `infra/infra/policy_atlas_stack.py` (the `SecurityHeaders` call)."
+  - resource: "infra/tests/unit/test_security_headers.py"
+    title: "`infra/tests/unit/test_security_headers.py` (literal CSP strings, override flags, coupling test)."
+  - resource: "docs/adr/0048-content-security-policy-and-security-headers-on-cloudfront.md"
+    title: "`docs/adr/0048-content-security-policy-and-security-headers-on-cloudfront.md` \u00a7 As built."
+  - resource: "docs/tasks/064c-csp/verification.md"
+    title: "`docs/tasks/064c-csp/verification.md` \u00a7 Plan-time AWS reads, \u00a7 Review findings."
 ---
 
 # Rule
@@ -45,12 +56,3 @@ synth accepts tokens, and a wrong override flag still produces a valid policy.
   deliberate violation to prove the console reports at all.
 - A console edit of the policy is not undone by a deploy that leaves the policy unchanged;
   see [noop-deploys-dont-reassert-template-pins](noop-deploys-dont-reassert-template-pins.md).
-
-# Citations
-
-- `infra/infra/components/security_headers.py`; `infra/infra/policy_atlas_stack.py`
-  (the `SecurityHeaders` call).
-- `infra/tests/unit/test_security_headers.py` (literal CSP strings, override flags,
-  coupling test).
-- `docs/adr/0048-content-security-policy-and-security-headers-on-cloudfront.md` § As built.
-- `docs/tasks/064c-csp/verification.md` § Plan-time AWS reads, § Review findings.

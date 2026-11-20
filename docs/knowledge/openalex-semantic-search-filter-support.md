@@ -3,7 +3,16 @@ type: Integration quirk
 title: OpenAlex search.semantic rejects the date, SDG, paratext, open-access and country filters — fence by publication_year and check the rest locally
 description: The OpenAlex semantic endpoint (search.semantic) returns HTTP 400 for from/to_publication_date, sustainable_development_goals, is_paratext, oa_status and authorships.countries, and accepts type, language, is_retracted and publication_year (including <, > and ranges); a directive that carries a rejected filter is sent as a publication_year fence where one exists and the exact rule is applied locally to the semantic results, recorded on the coverage record as semantic_local_filters, and the local predicate must span every variant of a split filter, not the first.
 tags: [openalex, search, filters, egress, probe]
-timestamp: 2026-10-09
+generated:
+  by: process:okf-migrate
+  at: 2026-10-09
+sources:
+  - resource: "../tasks/051-improve-production-search-screen/contract.md"
+    title: "[051 contract D13 and its status-line amendment](../tasks/051-improve-production-search-screen/contract.md)"
+  - resource: "../tasks/051-improve-production-search-screen/verification.md"
+    title: "[051 verification \u00a7 Probes, \u00a7 Owner decision on D13, \u00a7 Review findings](../tasks/051-improve-production-search-screen/verification.md)"
+  - resource: "backend/src/policy_atlas/evidence_search/sourcing/search_loop.py"
+    title: "`backend/src/policy_atlas/evidence_search/sourcing/search_loop.py` (`_semantic_filter_parts`, `_semantic_record_passes`, `_openalex_leg`)"
 ---
 
 # Rules
@@ -34,9 +43,3 @@ Every ground-truth review carries a cutoff date, so a fail-closed skip of the se
 leg on any rejected filter would have removed the semantic seeds from every dated plan
 (about 4 recall points in the design experiments). The amendment keeps the seeds and
 keeps the directive exact.
-
-# Citations
-
-- [051 contract D13 and its status-line amendment](../tasks/051-improve-production-search-screen/contract.md)
-- [051 verification § Probes, § Owner decision on D13, § Review findings](../tasks/051-improve-production-search-screen/verification.md)
-- `backend/src/policy_atlas/evidence_search/sourcing/search_loop.py` (`_semantic_filter_parts`, `_semantic_record_passes`, `_openalex_leg`)

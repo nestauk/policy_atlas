@@ -3,7 +3,14 @@ type: Convention
 title: structlog is the only logger
 description: All application logging goes through structlog from the first slice; no print or stdlib logging.
 tags: [logging, observability, convention]
-timestamp: 2026-06-24
+generated:
+  by: process:okf-migrate
+  at: 2026-06-24
+sources:
+  - resource: "../agentic-ops/harness.md"
+    title: "[harness.md](../agentic-ops/harness.md) \u00a7 Observability"
+  - resource: "../../AGENTS.md"
+    title: "[AGENTS.md](../../AGENTS.md)"
 ---
 
 # Rule
@@ -37,8 +44,3 @@ review): FastAPI runs a sync dependency in a worker thread whose context is
 a *copy*, so the bind lands where no later code can read it. The dependency
 that binds the route template must be `async`; the middleware half
 (request id, method) is safe either way.
-
-# Citations
-
-- [harness.md](../agentic-ops/harness.md) § Observability
-- [AGENTS.md](../../AGENTS.md)

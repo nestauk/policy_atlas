@@ -3,7 +3,9 @@ type: Runbook
 title: Agent is the one check vehicle — the stub smoke is automated in the suite; the manual command is for ad-hoc and live checks
 description: Skeleton is retired (023). The zero-egress full-chain check is test_full_stub_end_to_end_mints_artefact (in make verify, self-cleaning); the manual agent command exists for ad-hoc demos and the live-check form only — it commits rows, so ad-hoc runs against a shared DB need a reset afterwards.
 tags: [smoke, agent, stub, testing, zero-egress, runbook]
-timestamp: 2026-07-14
+generated:
+  by: process:okf-migrate
+  at: 2026-07-14
 ---
 
 # Runbook

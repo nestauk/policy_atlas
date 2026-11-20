@@ -3,7 +3,9 @@ type: Invariant
 title: A run id read from a success-only map is stale at a failure boundary
 description: successful_runs is written only when a component succeeds, but the runner still presents that component's steer point when it fails — so a bundle built from successful_runs renders the *previous* round's numbers under the failed round's label. Gate the display on the boundary's own run id.
 tags: [runner, steering, multi-round, honest-absence, read-models, invariant]
-timestamp: 2026-08-13
+generated:
+  by: process:okf-migrate
+  at: 2026-08-13
 ---
 
 # Rule
@@ -50,5 +52,4 @@ is to tell the user that the search went badly.
   behaviour, read *which path* it walked before treating the question as closed.
 - Same family:
   [read-the-producing-components-summary](read-the-producing-components-summary.md)
-  (where the number comes from),
-  [two-phase-retry-terminal-status](two-phase-retry-terminal-status.md).
+  (where the number comes from).

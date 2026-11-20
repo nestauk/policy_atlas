@@ -3,7 +3,9 @@ type: Integration quirk
 title: Cognito invitation and verification templates render only when the pool sends through SES
 description: In CDK, UserInvitationConfig and UserVerificationConfig take effect only with the SES sender. With the default Cognito sender, CDK keeps its built-in verification template, so a custom email never appears.
 tags: [cognito, cdk, ses, email, integration-quirk, "065"]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
 ---
 
 # Rule
@@ -18,5 +20,4 @@ So the template code and the SES wiring go together. Test the synthesised templa
 
 - `infra/infra/cognito_auth.py`: `cognito.UserInvitationConfig(email_subject=..., email_body=...)` sits beside `ses_region` and `ses_verified_domain`.
 - Both environments have an SES identity with production access (see the deferred entry on application-sent email in `docs/deferred.md`).
-- Related: [cdk-synth-tests-lookups-and-hidden-lambdas](cdk-synth-tests-lookups-and-hidden-lambdas.md).
 

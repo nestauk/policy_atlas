@@ -3,7 +3,9 @@ type: Integration quirk
 title: docker save layout depends on the daemon's image store — OCI blobs vs legacy layer.tar
 description: Under Docker Desktop's containerd store, docker save emits OCI layout (blobs/sha256/*); the legacy store emits */layer.tar. Layer-scanning tooling must handle both or it silently scans nothing.
 tags: [docker, tooling, image-hygiene, security]
-timestamp: 2026-07-28
+generated:
+  by: process:okf-migrate
+  at: 2026-07-28
 ---
 
 # Rule

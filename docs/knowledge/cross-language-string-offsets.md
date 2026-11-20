@@ -3,7 +3,9 @@ type: Invariant (verified)
 title: String offsets crossing the Python→JS boundary are code-point indices — slice by code points client-side
 description: Python str indexing counts Unicode code points; JS string indexing counts UTF-16 code units, so any astral character (emoji, some CJK) before a server-computed span shifts it client-side. AnnotatedProse slices Array.from(prose) (code points), unit-tested with an astral fixture.
 tags: [unicode, offsets, annotations, frontend, python, javascript]
-timestamp: 2026-07-29
+generated:
+  by: process:okf-migrate
+  at: 2026-07-29
 ---
 
 # Rule

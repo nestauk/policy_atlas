@@ -3,7 +3,9 @@ type: Testing rule
 title: Assert contract-required keys on the written row, not the component summary
 description: A component's completed-event summary and its persisted roll-up row are built separately and can drift; tests that assert a contracted key on the summary can stay green while the row a downstream reader consumes lacks it. Anchor the assertion on the row.
 tags: [testing, rollup, summary, drift, review-lesson, group]
-timestamp: 2026-07-07
+generated:
+  by: process:okf-migrate
+  at: 2026-07-07
 ---
 
 # Rule
@@ -37,6 +39,6 @@ too, the test stayed green while proving nothing. When a slice removes or change
 error code, grep the tests for assertions that used that code as evidence of state, and
 re-anchor them on the row.
 
-Related: [facet-grouping-exhaustive-partition](facet-grouping-exhaustive-partition.md)
+Related: `assert_grouping_invariants` in the group stage
 (the invariant the fix extended), [event-log-sequence](event-log-sequence.md) (events are
 an append-only trail, not the read surface).

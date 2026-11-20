@@ -3,7 +3,9 @@ type: Invariant
 title: Every ES run terminates in synthesise; every other component is a plan choice
 description: Synthesise mints the capability's artefact, so no valid run shape ends before it; characterise and the rest of the composition run at the agent/sub-agent's discretion per intent.
 tags: [architecture, run-shape, orchestration, synthesise, invariant]
-timestamp: 2026-07-09
+generated:
+  by: process:okf-migrate
+  at: 2026-07-09
 ---
 
 # Rule

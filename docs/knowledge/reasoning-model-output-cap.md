@@ -3,7 +3,16 @@ type: Integration quirk
 title: On reasoning models, max_completion_tokens covers reasoning + output — size caps for both
 description: gpt-5-mini spends the completion budget on hidden reasoning tokens before emitting output; a cap tuned for a non-reasoning model's output truncates real answers (LengthFinishReasonError). Keep the cap explicit and fingerprinted, but size it for reasoning + output.
 tags: [llm, openai, reasoning-models, token-caps, extraction, model-choice]
-timestamp: 2026-07-07
+generated:
+  by: process:okf-migrate
+  at: 2026-07-07
+sources:
+  - resource: "../tasks/011-extract/verification.md"
+    title: "[011-extract/verification.md](../tasks/011-extract/verification.md) (\u00a7 Live-run evidence, run 1; \u00a7 Diff summary deviation 2)"
+  - resource: "src/policy_atlas/evidence_search/extract/iof_prompt.py"
+    title: "`EXTRACT_MAX_OUTPUT_TOKENS` in `src/policy_atlas/evidence_search/extract/iof_prompt.py`; fingerprint component `max_output_tokens` in `src/policy_atlas/extract.py`"
+  - resource: "../tasks/018-dress-rehearsal/verification.md"
+    title: "[018 verification.md \u00a7 B4](../tasks/018-dress-rehearsal/verification.md) (classify@xhigh FAILED validation; xhigh-uncapped experiment \u2014 keep high, on quality); `CLASSIFY_REASONING_EFFORT` in `src/policy_atlas/classify_prompt.py`"
 ---
 
 # Rule
@@ -41,13 +50,3 @@ run as "mostly worked".
   demotion miss, at ~10–30× output volume. Validate effort level and completion cap
   **together, per surface, with a live A/B** before pinning (a direct-backend A/B
   driver with no DB writes keeps the pinned substrate uncontaminated).
-
-# Citations
-
-- [011-extract/verification.md](../tasks/011-extract/verification.md) (§ Live-run evidence,
-  run 1; § Diff summary deviation 2)
-- `EXTRACT_MAX_OUTPUT_TOKENS` in `src/policy_atlas/evidence_search/extract/iof_prompt.py`;
-  fingerprint component `max_output_tokens` in `src/policy_atlas/extract.py`
-- [018 verification.md § B4](../tasks/018-dress-rehearsal/verification.md)
-  (classify@xhigh FAILED validation; xhigh-uncapped experiment — keep high, on quality);
-  `CLASSIFY_REASONING_EFFORT` in `src/policy_atlas/classify_prompt.py`
