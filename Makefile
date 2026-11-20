@@ -57,7 +57,7 @@ setup:
 ops-require = $(foreach v,$(1),$(if $($(v)),,$(error $(v)=... is required for this target)))
 OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 
-.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke
+.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke ops-grant ops-revoke
 
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
@@ -77,6 +77,10 @@ admin-grant:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 admin-revoke:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin revoke $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+ops-grant:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) ops grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+ops-revoke:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) ops revoke $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 
 # Run the whole app locally: API on :8000 + Vite on :5173, one Ctrl-C stops
 # both. Self-contained auth: initialises the dev issuer on first run

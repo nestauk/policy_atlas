@@ -77,6 +77,8 @@ def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
         ),
         "admin-grant": dict(ENV="staging", EMAIL="a@b.org"),
         "admin-revoke": dict(ENV="prod", SUB="sub-1234"),
+        "ops-grant": dict(ENV="staging", EMAIL="a@b.org"),
+        "ops-revoke": dict(ENV="prod", SUB="sub-1234"),
     }
     for target, variables in cases.items():
         argv = _dry_run(target, **variables)
@@ -143,7 +145,7 @@ def test_no_wrapper_carries_a_credential_shaped_variable() -> None:
     wrapper_block = makefile[makefile.index("ops-require =") :]
     wrapper_block = wrapper_block[: wrapper_block.index("\ndev:")]
     recipe_lines = [line for line in wrapper_block.splitlines() if line.startswith("\t")]
-    assert len(recipe_lines) == 9  # one forwarding line per wrapper, nothing else
+    assert len(recipe_lines) == 11  # one forwarding line per wrapper, nothing else
     for line in recipe_lines:
         for word in ("PASSWORD", "SECRET", "TOKEN", "DATABASE_URL", "database-url"):
             assert word not in line

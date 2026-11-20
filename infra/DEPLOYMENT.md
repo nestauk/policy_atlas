@@ -503,7 +503,7 @@ database role.
 3. Grant the first ops role from your machine:
 
    ```bash
-   uv run python -m policy_atlas.ops --env staging ops grant --email <email>
+   make ops-grant ENV=staging EMAIL=<email>
    ```
 
    Only the CLI can grant `is_ops`; no web page can.
