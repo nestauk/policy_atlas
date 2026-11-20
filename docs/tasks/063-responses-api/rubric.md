@@ -33,10 +33,10 @@ Slice-specific:
 15. [ ] **E2:** each changed effort has its measure and an owner ruling; every other step's
         effort is unchanged.
 16. [ ] **E3:** the Sol tool-loop smoke passed on the `bedrock` route.
-17. [ ] **S1:** traced attempts carry the request id, on a forced timeout of a streamed call
-        too.
-18. [ ] **S2:** each re-sized timeout is shown against 14 days of Bedrock latency.
-19. [ ] **S3:** the owner's ruling is recorded, and what was built matches it.
+17. [ ] **S1:** traced attempts carry the request id, and one id is shown to find its call in
+        AWS's audit log.
+18. [ ] **S2:** the stall findings are in `docs/knowledge/`, and the stale stall entries in
+        `docs/deferred.md` are corrected.
+19. [ ] No stall remedy was built (O8), and no timeout changed.
 20. [ ] **Theory of change:** only the endpoint changed for its steps, unless the colleague
         asked for more (O9), with that request recorded.
-21. [ ] The stall probe was rerun after the build and its result is recorded with its limit.

@@ -19,7 +19,9 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
    Completions endpoint (`/v1/chat/completions`). Results stay the same.
 2. Let a step use reasoning and tools together. Chat Completions forbids this on the
    current models; Responses allows it.
-3. Cut what stalls cost, and record what causes them.
+3. Record enough on each call to diagnose a stall. The checks for this task showed that the
+   deployed apps do not stall; the stalls are seen from laptops only (§ Stalls: what the
+   checks showed).
 
 ## Why now
 
@@ -38,9 +40,10 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 | Does reasoning effort `none` mean no reasoning? | Yes. 0 reasoning tokens and about 1 s, against 190 to 630 tokens and 3 to 4 s at `low`. The endpoint echoes `none`; it does not substitute a default. |
 | Which efforts does each model accept? | Luna and Terra: `none` to `high`, with and without a tool. Sol: `low` to `max`; it refuses `none`. No Sol step sends `none` today. |
 | Does Responses lower the stall rate? | No difference found: 6 of 300 calls stalled on Chat Completions, 7 of 300 on Responses, 4 of 300 on Responses streamed. 300 calls for each arm can only show a gap of about 3 percentage points or more. |
-| Where is a stalled call stuck? | Not at the model. AWS's audit log shows Bedrock had finished every stalled probe call 2 to 8 s after it started. The client then waited 53 to 148 s for an answer that already existed. Shown for a laptop probe; a check on the deployed apps is running (S3). |
-| Do stalls hit calls at random? | No. They come in bursts of a few seconds that hit every open connection at once (5 of 6 calls in flight, then 6 of 7). |
-| Are all slow calls stalls? | No. In 14 days, 36 Sol calls and 15 Terra calls genuinely ran over 60 s at Bedrock (5,000 to 9,600 output tokens at normal speed). Seven Sol steps have a timeout of 45 to 90 s, so the app cuts these and retries. |
+| Where is a stalled call stuck? | Not at the model. AWS's audit log shows Bedrock had finished every stalled laptop call 2 to 8 s after it started. The laptop then waited 53 to 148 s for an answer that already existed. |
+| Do stalls hit calls at random? | No. They come in bursts of a few seconds that hit every open connection from the laptop at once (5 of 6 calls in flight, then 6 of 7). |
+| Do the deployed apps stall? | No. In 14 days production had 0 timeouts in 7,919 calls and staging had 2 in 10,367. No answer arrived late: the longest gap between Bedrock finishing and the app receiving was 1.0 s in production and 2.3 s in staging. Production made 797 calls in the same minutes as the laptop's stalls and none was delayed. |
+| Are all slow calls stalls? | No. Staging's 2 timeouts were one `extract_interventions` call whose answer (about 7,100 output tokens) genuinely needed longer than its 35 s limit. From laptops, 36 Sol calls and 15 Terra calls genuinely ran over 60 s at Bedrock in 14 days. |
 
 ## Deliverable
 
@@ -71,14 +74,15 @@ starts.
 | **E2** | The efforts of the 21 steps that send `none` today are reviewed one by one (table in § Efforts). Each change is one route-file line, plus a higher output-token limit for that step (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Each change is measured (latency, cost, a quality read by the owner) and ruled by the owner. A step with no ruling keeps `none`. |
 | **E3** | A live tool loop on Sol passes (the section writer's tool turn with the route overlay naming `frontier`). No default route changes. This unblocks the 054 follow-up and task 059. |
 
-### Part 3: stalls
+### Part 3: diagnosis
 
 | Id | Change |
 |---|---|
-| **S1** | Every traced attempt records the response's request id and the time the response headers arrived. Takes in the `docs/deferred.md` "Now" entry on request ids. |
-| **S2** | The timeouts of the seven Sol steps that cut genuinely long answers are re-sized from 14 days of Bedrock's own latency records. |
-| **S3** | The remedy for the delivery delay. Decided by the owner once the check on the deployed apps reports (§ Open until the production check reports). |
-| **S4** | A draft AWS support case with request ids, UTC (Coordinated Universal Time) timestamps, Region, model ids and the delivery-delay evidence. The owner sends it. |
+| **S1** | Every traced attempt records the response's request id. With it, any slow call can be matched to AWS's audit log in one step; the production check for this task had to match by time and token counts. Takes in the `docs/deferred.md` "Now" entry on request ids. |
+| **S2** | The findings in § Stalls go into `docs/knowledge/` (`bedrock-route-facts`) and the stale stall entries in `docs/deferred.md` are corrected, so later work does not size timeouts or design remedies from laptop stall rates. |
+
+Not built, on the evidence (owner item O8): a streaming watchdog, hedged requests, connection
+tuning, or an AWS support case. The deployed apps show no fault to remedy.
 
 ### Data handling
 
@@ -102,20 +106,39 @@ starts.
 | `longlist_constrain`, `longlist_distinct`, `longlist_authority`, `option_profile_line`, `option_profile_potential_impact`, `option_profile_ambition` | no | keep `none` | The owner set these to `none` on 2026-11-02 after reading replays (task 056). Task 059 reworks this area. |
 | `task_agent_toc`, `toc_discover`, `toc_judge`, `toc_summarise`, `toc_sense_check` | some | not ours to change | Theory of change is a colleague's capability. Their endpoint moves (shared code); their efforts and timeouts change only if the colleague asks (owner item O9). |
 
-## Open until the production check reports (S3)
+## Stalls: what the checks showed
 
-A read-only check is joining the deployed apps' own call timings (Langfuse) to AWS's audit
-log. It answers: do production stalls show the same pattern (finished at Bedrock, delayed
-in delivery)?
+The 4 to 6% stall rate was measured on runs from laptops (task 057's probes and build
+rounds, and this task's probe). The checks for this task compared three sources: a 900-call
+laptop probe, AWS's audit log (CloudTrail), and the deployed apps' own traces (Langfuse).
 
-| If the check shows | Then the lean for S3 is |
-|---|---|
-| The same delivery delay in production | Stream the calls of steps that write text at once, and cut a call when no event arrives for a set time (far shorter than the step timeout). The probe showed a stalled stream goes silent while a healthy one sends events without a gap. A feasibility check in the build sizes the silence limit for each step. Steps with long reasoning keep today's timeout and retry. |
-| No delivery delay in production (a laptop effect) | No new remedy. S1, S2 and S4 stand; today's timeouts and retries stay. |
-| Mixed or unclear | S1 lands first so the next two weeks of production traces answer it; the remedy becomes its own follow-up. |
+- **The endpoint is not the cause.** Chat Completions and Responses stalled at the same rate.
+- **The model and Bedrock are not the cause.** Bedrock finished every stalled laptop call in
+  2 to 8 s. No queue, no throttle, no slow generation.
+- **The deployed apps are not affected.** 0 timeouts in 7,919 production calls and 2 in
+  10,367 staging calls over 14 days, and those 2 were one genuinely long answer.
+  Production ran in the same minutes as the laptop's stalls, on the same model and Region,
+  with no delay.
+- **So the delay sits on the laptop's side of the path**: the laptop, its network, or the
+  route from it to AWS. Which of these is not shown. The pattern (every open connection
+  hit at once, new connections fine, delays near 51 s and 102 s) fits connections that go
+  dead and recover, but that mechanism is an inference, not a finding.
 
-What is not known, whatever the check shows: where the delay sits (AWS's front end, the
-network path, or the client host). The support case (S4) is the route to that answer.
+Limits of this evidence: production runs the version of 2026-11-03, which does not trace
+retries (they were checked through the audit log instead, and none was found); staging's
+156 streamed calls could not be matched for delay, though all completed; production was
+active on 7 of the 14 days.
+
+What follows from it:
+
+- No stall remedy is built in this task.
+- Laptop runs overstate latency and stall rates. A measure that decides a timeout or a
+  design should come from staging, or be checked against the audit log.
+- The step timeouts and the three attempts for each step (ADR 0043) stay. They cost the
+  deployed apps nothing and protect laptop runs.
+- One timeout is worth a look outside this task: `extract_interventions` (35 s) cut a
+  7,100-token answer on staging twice. Whether the answer should be that long is an
+  extraction question, so it goes to `docs/deferred.md`.
 
 ## Terms
 
@@ -160,7 +183,8 @@ parsers.
   `evidence_search/synthesis/` (`synthesis_backend.py`, `section_prompt.py`,
   `grounding_judge.py`, `cache_modes.py` if a field name moves), `runtime/chat_backend_openai.py`,
   `runtime/task_agent.py`, `theory_of_change/backend.py` and `import_prompt.py` (endpoint
-  only), `model_routes.toml` (E2, S2), their tests and fakes, the SDK-calling scripts.
+  only), `model_routes.toml` (E2), their tests and fakes, the SDK-calling scripts,
+  `docs/knowledge/bedrock-route-facts.md` and `docs/deferred.md` (S2).
 - **Out:**
   - Prompt wording. No prompt text changes. Hash re-pins are for code edits in pinned
     files only, and the diff of each is recorded.
@@ -207,8 +231,8 @@ parsers.
 ## Model route
 
 `bedrock` only, the default route. Models and tiers unchanged. Prompt-bearing work stays
-with the lead; this slice changes no prompt text. Route-file edits: efforts under E2 and
-timeouts under S2, each with its measure.
+with the lead; this slice changes no prompt text. Route-file edits: efforts under E2 only,
+each with its measure.
 
 ## Owner items
 
@@ -221,9 +245,9 @@ timeouts under S2, each with its measure.
 | **O5** | Fix the two defects found on the way (M7, M8)? | Yes; the lines are rewritten in any case. |
 | **O6** | Reuse stored extraction records made through Chat Completions? | Yes. |
 | **O7** | Set the account retention mode `none` (D2), and update the DPIA notes (D3). | Yes to both; needs DevOps. |
-| **O8** | The stall remedy (S3), after the production check. | See § Open until the production check reports. |
-| **O9** | Theory of change: tell the colleague about the endpoint move, the short Sol timeouts (S2 touches `toc_merge`, `toc_choose`, `toc_review`, `toc_import`, `toc_verdict`) and the efforts they may now set. | Owner tells the colleague before the build. |
-| **O10** | Send the AWS support case (S4). | Owner sends once S1 gives production request ids, or at once with the probe's ids. |
+| **O8** | Build no stall remedy and send no AWS support case, given § Stalls. | Agree. The fault is not shown on AWS's side or in the deployed apps. |
+| **O9** | Theory of change: tell the colleague about the endpoint move and the efforts they may now set. | Owner tells the colleague before the build. |
+| **O10** | Find why laptop connections stall (for example, rerun 100 probe calls on another network, or with any VPN off). Outside this task; it affects only local runs. | Worth 15 minutes of the owner's time, since local measures feed design decisions. |
 
 ## Disciplines binding this slice
 
@@ -264,18 +288,17 @@ Halt and escalate when:
 - **E2:** for each step whose effort changes: median latency, cost for each call and the
   owner's quality ruling, before and after.
 - **E3:** the Sol tool-loop smoke passes.
-- **S1:** a traced attempt in Langfuse shows the request id; a forced timeout on a streamed
-  call still shows one.
-- **S2:** for each re-sized step, the new timeout against the 14-day p99 and maximum.
-- **Stall rate, before and after:** the same probe (300 calls for each arm) rerun after the
-  build, with its interval. Stated limit: it cannot show a change smaller than about 3
-  percentage points, and the rate moves with the hour.
+- **S1:** a traced attempt in Langfuse shows the request id, and that id finds the call in
+  AWS's audit log.
+- **S2:** the knowledge entry and the corrected `docs/deferred.md` entries are in the diff.
+- **After deploy to staging:** one week of staging traces joined to the audit log by
+  request id shows no timeout that is not a genuinely long answer.
 
 ## Verification evidence expected
 
 In [verification.md](verification.md): the command results above; the before-and-after
-tables; each prompt-hash diff; the list of fakes moved; the stall probe rerun; the
-production check's result and the S3 ruling; public-safety confirmation; known gaps.
+tables; each prompt-hash diff; the list of fakes moved; the staging join after deploy;
+public-safety confirmation; known gaps.
 
 ## Evidence (gitignored `research/`)
 
@@ -285,7 +308,7 @@ production check's result and the S3 ruling; public-safety confirmation; known g
 | `probe/` | The capability check (`capability.md`) and the 900-call stall comparison (`analysis.md`). |
 | `effort-none/` | The check that `none` means no reasoning. |
 | `cloudwatch/` | 14 days of Bedrock metrics and audit-log events, and the join that showed the delivery delay (`delivery_lag.txt`). |
-| `prod-join/` | The check on the deployed apps (running at the time of drafting). |
+| `prod-join/` | The check on the deployed apps: 14 days of their traces joined to the audit log (`results.txt`). |
 | `openai-responses-notes.md`, `bedrock-responses-notes.md`, `aws-throughput-guidance-notes.md` | Sourced research, read 2026-11-20. |
 
 ## Risk tier & review focus
