@@ -107,6 +107,7 @@ if stage == "all":
         app,
         "PaV3CertStack",
         network_config=network_config,
+        auth_domain=pa_config["policy_atlas_config"].get("sign_in", {}).get("domain"),
         env=cert_env,
         cross_region_references=True,
     )
@@ -135,6 +136,7 @@ if stage == "all":
         "PaV3AppStack",
         pa_config=pa_config,
         certificate=cert_stack.certificate,
+        auth_certificate=cert_stack.auth_certificate,
         env=pa_env,
         env_name=env_name,
         ops_allowlist_size=ops_allowlist_size,

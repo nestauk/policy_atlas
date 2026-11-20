@@ -49,7 +49,9 @@ INGEST_MODES = ("in_process", "queued")
 class PolicyAtlasStack(Stack):
     def __init__(self, scope: Stack, id: str, pa_config: dict,
                  certificate: acm.ICertificate, env_name: str,
-                 ops_allowlist_size: int = 1, **kwargs) -> None:
+                 ops_allowlist_size: int = 1,
+                 auth_certificate: acm.ICertificate | None = None,
+                 **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         pa_app_config = pa_config["policy_atlas_config"]
@@ -57,6 +59,8 @@ class PolicyAtlasStack(Stack):
         be_config = pa_app_config["backend"]
         ops_config = pa_app_config["ops"]
         self_signup_config = pa_app_config["self_signup"]
+        sign_in_config = pa_app_config.get("sign_in")
+        auth_domain = (sign_in_config or {}).get("domain")
 
         if type(ops_allowlist_size) is not int or not 1 <= ops_allowlist_size <= 8:
             raise ValueError("ops_allowlist_size must be an integer from 1 to 8")
@@ -179,6 +183,9 @@ class PolicyAtlasStack(Stack):
             domain_prefix=pa_app_config["cognito_domain_prefix"],
             email=pa_app_config.get("email"),
             extra_domains=[ops_domain],
+            sign_in=sign_in_config,
+            auth_certificate=auth_certificate,
+            hosted_zone=hosted_zone,
         )
         # One image build for three consumers: the API task, the migration
         # task and the ingest function (which starts it with another command).
@@ -410,6 +417,7 @@ class PolicyAtlasStack(Stack):
                 "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
                 "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
                 "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
+                "cognito-idp:AdminDeleteSoftwareToken",
             ],
             resources=[auth.user_pool.user_pool_arn],
         ))
@@ -495,16 +503,20 @@ class PolicyAtlasStack(Stack):
             frontend_bucket,
         )
         # Task 064c / ADR 0048: application security headers on every response.
+        cognito_hosted_domains = [
+            f"https://{pa_app_config['cognito_domain_prefix']}.auth."
+            f"{self.region}.amazoncognito.com"
+        ]
+        if auth_domain:
+            # ADR 0049: our own sign-in address, beside the prefix address.
+            cognito_hosted_domains.append(f"https://{auth_domain}")
         security_headers = SecurityHeaders(
             self,
             "SecurityHeaders",
             csp_mode=pa_app_config.get("csp_mode"),
             api_origin=f"https://{be_domain}",
             cognito_region=self.region,
-            cognito_hosted_domain=(
-                f"https://{pa_app_config['cognito_domain_prefix']}.auth."
-                f"{self.region}.amazoncognito.com"
-            ),
+            cognito_hosted_domains=cognito_hosted_domains,
             waf_captcha=be_config["waf"]["captcha"],
         ).policy
         # www is a courtesy alias only: 301 to the apex so Cognito callback

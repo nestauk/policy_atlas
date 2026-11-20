@@ -1,10 +1,32 @@
-"""Rendered-template checks for task 064d's sign-in settings (ADR 0049)."""
+"""Rendered-template checks for the sign-in settings (ADR 0049)."""
+import base64
 import json
 import os
+from unittest.mock import patch
 
-from tests.unit.test_synth import INFRA_ROOT, PROD_APP_TEMPLATE, TEMPLATES, _resources
+import aws_cdk as cdk
+import pytest
+from aws_cdk.assertions import Template
+
+from infra.cert_stack import PaV3CertStack
+from infra.cognito_auth import CognitoAuth
+from infra.policy_atlas_stack import PolicyAtlasStack
+from tests.unit.test_synth import (
+    CERT_ENV,
+    DUMMY_IMAGE,
+    ENV,
+    ENV_NAME,
+    INFRA_ROOT,
+    NETWORK_CONFIG,
+    PA_CONFIG,
+    PROD_APP_TEMPLATE,
+    TEMPLATES,
+    _resources,
+    _stub_backend_image_asset,
+)
 
 BASELINE = INFRA_ROOT / "tests" / "unit" / "fixtures" / "sign_in_all_off.json"
+BRANDING = INFRA_ROOT / "branding"
 SIGN_IN_TYPES = (
     "AWS::Cognito::UserPool",
     "AWS::Cognito::UserPoolClient",
@@ -35,3 +57,176 @@ def test_m6_production_sign_in_resources_equal_baseline():
         BASELINE.parent.mkdir(exist_ok=True)
         BASELINE.write_text(json.dumps(rendered, indent=1, sort_keys=True) + "\n")
     assert rendered == json.loads(BASELINE.read_text())
+
+
+def _synth(sign_in: dict) -> tuple[dict, dict]:
+    """Synthesize the staging app and cert stacks with the given ``sign_in`` block."""
+    config = json.loads(json.dumps(PA_CONFIG))
+    config["policy_atlas_config"]["sign_in"] = sign_in
+    with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE), patch(
+        "aws_cdk.aws_ecr_assets.DockerImageAsset", side_effect=_stub_backend_image_asset
+    ):
+        app = cdk.App(context={"aws:cdk:bundling-stacks": []})
+        cert_stack = PaV3CertStack(
+            app,
+            "PaV3CertStack",
+            network_config=NETWORK_CONFIG,
+            auth_domain=sign_in.get("domain"),
+            env=CERT_ENV,
+            cross_region_references=True,
+        )
+        app_stack = PolicyAtlasStack(
+            app,
+            "PaV3AppStack",
+            pa_config=config,
+            certificate=cert_stack.certificate,
+            auth_certificate=cert_stack.auth_certificate,
+            env=ENV,
+            env_name=ENV_NAME,
+            cross_region_references=True,
+        )
+    return Template.from_stack(app_stack).to_json(), Template.from_stack(cert_stack).to_json()
+
+
+AUTH_DOMAIN = "auth.v3.policyatlas.uk"
+SYNTHS = {
+    "app-managed-domain": _synth({"mfa": "app", "page": "managed", "domain": AUTH_DOMAIN}),
+    "app-classic": _synth({"mfa": "app", "page": "classic"}),
+    "off-classic": _synth({"mfa": "off", "page": "classic"}),
+}
+
+
+def _user_pool(template: dict) -> dict:
+    [(_, pool)] = _resources(template, "AWS::Cognito::UserPool")
+    return pool["Properties"]
+
+
+def _domains(template: dict) -> list[dict]:
+    return [domain["Properties"] for _, domain in _resources(template, "AWS::Cognito::UserPoolDomain")]
+
+
+def _csp_directives(template: dict) -> dict[str, str]:
+    [(_, policy)] = _resources(template, "AWS::CloudFront::ResponseHeadersPolicy")
+    headers = policy["Properties"]["ResponseHeadersPolicyConfig"]["CustomHeadersConfig"]["Items"]
+    [csp] = [h["Value"] for h in headers if h["Header"] == "Content-Security-Policy-Report-Only"]
+    return dict(directive.split(" ", 1) for directive in csp.split("; "))
+
+
+@pytest.mark.parametrize("name", ["app-managed-domain", "app-classic"])
+def test_m1_app_mode_requires_only_authenticator_app_codes(name):
+    pool = _user_pool(SYNTHS[name][0])
+    assert pool["MfaConfiguration"] == "ON"
+    assert pool["EnabledMfas"] == ["SOFTWARE_TOKEN_MFA"]
+    assert pool["AccountRecoverySetting"] == {
+        "RecoveryMechanisms": [{"Name": "verified_email", "Priority": 1}]
+    }
+
+
+def test_m1_off_mode_names_mfa_off():
+    pool = _user_pool(SYNTHS["off-classic"][0])
+    assert pool["MfaConfiguration"] == "OFF"
+    assert "EnabledMfas" not in pool
+
+
+def test_m1_no_template_enables_sms_or_email_codes_or_a_feature_plan():
+    templates = [
+        *TEMPLATES.values(),
+        PROD_APP_TEMPLATE,
+        *(template for pair in SYNTHS.values() for template in pair),
+    ]
+    for template in templates:
+        rendered = json.dumps(template)
+        for forbidden in ("SmsConfiguration", "SMS_MFA", "EMAIL_OTP", "UserPoolTier"):
+            assert forbidden not in rendered
+        # An SMS role is a role Cognito itself assumes.
+        assert '"cognito-idp.amazonaws.com"' not in rendered
+
+
+def test_m4_managed_page_brands_every_domain_from_the_committed_files():
+    template = SYNTHS["app-managed-domain"][0]
+    domains = _domains(template)
+    assert len(domains) == 2
+    assert all(domain["ManagedLoginVersion"] == 2 for domain in domains)
+    [(_, branding)] = _resources(template, "AWS::Cognito::ManagedLoginBranding")
+    properties = branding["Properties"]
+    [(client_id, _)] = _resources(template, "AWS::Cognito::UserPoolClient")
+    assert properties["ClientId"] == {"Ref": client_id}
+    assert properties["Settings"] == json.loads((BRANDING / "settings.json").read_text())
+    assert properties["Assets"] == [
+        {
+            "Category": asset["category"],
+            "ColorMode": asset["color_mode"],
+            "Extension": asset["extension"],
+            "Bytes": base64.b64encode((BRANDING / asset["file"]).read_bytes()).decode(),
+        }
+        for asset in json.loads((BRANDING / "assets.json").read_text())
+    ]
+
+
+@pytest.mark.parametrize("name", ["app-classic", "off-classic"])
+def test_m4_classic_page_names_version_1_on_every_domain_and_has_no_branding(name):
+    template = SYNTHS[name][0]
+    assert [domain["ManagedLoginVersion"] for domain in _domains(template)] == [1]
+    assert not _resources(template, "AWS::Cognito::ManagedLoginBranding")
+
+
+def test_m4_m7_domain_adds_custom_domain_certificate_alias_record_and_csp_sources():
+    app_template, cert_template = SYNTHS["app-managed-domain"]
+    [(certificate_id, certificate)] = [
+        (logical_id, resource)
+        for logical_id, resource in _resources(cert_template, "AWS::CertificateManager::Certificate")
+        if resource["Properties"]["DomainName"] == AUTH_DOMAIN
+    ]
+    assert certificate["Properties"]["ValidationMethod"] == "DNS"
+    [custom] = [domain for domain in _domains(app_template) if "CustomDomainConfig" in domain]
+    assert custom["Domain"] == AUTH_DOMAIN
+    assert certificate_id in json.dumps(custom["CustomDomainConfig"]["CertificateArn"])
+    [record] = [
+        resource["Properties"]
+        for _, resource in _resources(app_template, "AWS::Route53::RecordSet")
+        if resource["Properties"]["Name"] == f"{AUTH_DOMAIN}."
+    ]
+    assert record["Type"] == "A"
+    assert "DomainDescription.CloudFrontDistribution" in json.dumps(record["AliasTarget"])
+    directives = _csp_directives(app_template)
+    prefix = "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com"
+    for directive in ("connect-src", "frame-src"):
+        sources = directives[directive].split()
+        assert prefix in sources and f"https://{AUTH_DOMAIN}" in sources
+
+
+def test_m4_m7_no_domain_adds_no_custom_domain_certificate_record_or_csp_source():
+    app_template, cert_template = SYNTHS["app-classic"]
+    assert all("CustomDomainConfig" not in domain for domain in _domains(app_template))
+    assert len(_resources(cert_template, "AWS::CertificateManager::Certificate")) == 1
+    assert AUTH_DOMAIN not in json.dumps(app_template)
+
+
+@pytest.mark.parametrize("sign_in", [
+    {"sms": "off"},
+    {"mfa": "email"},
+    {"mfa": "App"},
+    {"page": "custom"},
+    {"domain": "login.v3.policyatlas.uk"},
+    {"domain": "auth.policyatlas.uk"},
+])
+def test_m6_unknown_key_value_or_domain_fails_synth(sign_in):
+    with pytest.raises(ValueError, match="sign_in"):
+        CognitoAuth(
+            cdk.Stack(cdk.App(), "SignInStack"),
+            "CognitoAuth",
+            domain_name="v3.policyatlas.uk",
+            domain_prefix="policy-atlas-v3",
+            sign_in=sign_in,
+        )
+
+
+def test_m6_domain_without_certificate_fails_synth():
+    with pytest.raises(ValueError, match="auth_certificate"):
+        CognitoAuth(
+            cdk.Stack(cdk.App(), "SignInStack"),
+            "CognitoAuth",
+            domain_name="v3.policyatlas.uk",
+            domain_prefix="policy-atlas-v3",
+            sign_in={"domain": AUTH_DOMAIN},
+        )

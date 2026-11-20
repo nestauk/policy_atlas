@@ -38,7 +38,8 @@
             "self_signup": {
                 "enabled": false,
                 "max_per_hour": 100
-            }
+            },
+            "sign_in": {"mfa": "app", "page": "managed", "domain": "auth.v3.policyatlas.uk"}
         },
         "deploy_analytics": true
     },

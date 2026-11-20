@@ -35,8 +35,10 @@ STAGING_CSP = (
     "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
     "connect-src 'self' https://api.v3.policyatlas.uk "
     "https://cognito-idp.eu-west-2.amazonaws.com "
-    "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com https://*.awswaf.com; "
-    "frame-src 'self' https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com; "
+    "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com https://auth.v3.policyatlas.uk "
+    "https://*.awswaf.com; "
+    "frame-src 'self' https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com "
+    "https://auth.v3.policyatlas.uk; "
     "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'"
 )
 PROD_CSP = (
@@ -68,9 +70,9 @@ def _synth(
         csp_mode=csp_mode,
         api_origin=api_origin,
         cognito_region="eu-west-2",
-        cognito_hosted_domain=(
+        cognito_hosted_domains=[
             f"https://{prefix}.auth.eu-west-2.amazoncognito.com"
-        ),
+        ],
         waf_captcha=waf_captcha,
     )
     return Template.from_stack(stack).to_json()
@@ -173,6 +175,7 @@ def test_s3_whole_stack_rejects_missing_or_unknown_mode_from_config(mode):
             app,
             "PaV3CertStack",
             network_config=NETWORK_CONFIG,
+            auth_domain=config["policy_atlas_config"]["sign_in"]["domain"],
             env=CERT_ENV,
             cross_region_references=True,
         )
@@ -181,6 +184,7 @@ def test_s3_whole_stack_rejects_missing_or_unknown_mode_from_config(mode):
             "PaV3AppStack",
             pa_config=config,
             certificate=cert_stack.certificate,
+            auth_certificate=cert_stack.auth_certificate,
             env=ENV,
             env_name=ENV_NAME,
             cross_region_references=True,
@@ -196,7 +200,7 @@ def test_s2_function_adds_waf_source_only_when_captcha_is_enabled():
     common = {
         "api_origin": "https://api.example.test",
         "cognito_region": "eu-west-2",
-        "cognito_hosted_domain": "https://sign-in.example.test",
+        "cognito_hosted_domains": ["https://sign-in.example.test"],
     }
     assert "https://*.awswaf.com" in content_security_policy(**common, waf_captcha=True)
     assert "awswaf.com" not in content_security_policy(**common, waf_captcha=False)

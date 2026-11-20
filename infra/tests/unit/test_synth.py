@@ -122,6 +122,16 @@ CERT_STACK = PaV3CertStack(
     env=CERT_ENV,
     cross_region_references=True,
 )
+# The staging config names our own sign-in address (ADR 0049), which needs its
+# certificate; CERT_STACK stays without one so its template matches production's.
+AUTH_CERT_STACK = PaV3CertStack(
+    APP,
+    "PaV3CertStackAuth",
+    network_config=NETWORK_CONFIG,
+    auth_domain=PA_CONFIG["policy_atlas_config"]["sign_in"]["domain"],
+    env=CERT_ENV,
+    cross_region_references=True,
+)
 DUMMY_IMAGE = ecs.ContainerImage.from_registry(
     "public.ecr.aws/docker/library/nginx:stable"
 )
@@ -148,6 +158,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStack",
         pa_config=PA_CONFIG,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -166,6 +177,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
             stack_id,
             pa_config=route_config,
             certificate=CERT_STACK.certificate,
+            auth_certificate=AUTH_CERT_STACK.auth_certificate,
             env=ENV,
             env_name=ENV_NAME,
             ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -180,6 +192,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackInProcess",
         pa_config=in_process_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -192,6 +205,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackEmail",
         pa_config=email_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -206,6 +220,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackNoEmail",
         pa_config=no_email_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -218,6 +233,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackEnforce",
         pa_config=enforce_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -230,6 +246,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackCspCoupling",
         pa_config=coupling_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
