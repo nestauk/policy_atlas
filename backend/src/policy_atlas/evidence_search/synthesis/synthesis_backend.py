@@ -54,8 +54,10 @@ from policy_atlas.core.liveness import (
 )
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    AnswerCutOff,
     JsonArrayObjectDecoder,
     JsonStringFieldDecoder,
+    ModelRefusal,
     ModelTurn,
     ToolCall,
     openai_kwargs,
@@ -928,6 +930,22 @@ def _first_theme_reference(
     return None
 
 
+def _emission_turn(client: Any, *, usage_event: str, **request: Any) -> ModelTurn:
+    """Send one tool turn; a cut-off or refused answer is a malformed emission.
+
+    Its tool-call arguments would be unfinished JSON, so the turn takes the
+    malformed-emission path (not tried again); the tokens it used are still logged.
+
+    Raises:
+        MalformedEmissionError: If the answer was cut off or refused.
+    """
+    try:
+        return send_turn(client, **request)
+    except (AnswerCutOff, ModelRefusal) as exc:
+        log_usage(usage_event, exc.usage)
+        raise MalformedEmissionError(str(exc)) from exc
+
+
 def _first_named_tool_call(
     turn: ModelTurn, *, name: str, label: str
 ) -> tuple[ToolCall, list[str]]:
@@ -1212,8 +1230,9 @@ class OpenAISynthesisBackend:
         # differs (allowed_tools over the four section tools, or emit_section
         # by name on the forced final turn). ``tools`` defaults to the full
         # lookup vocabulary when a caller has no seed to derive it from.
-        response = send_turn(
+        response = _emission_turn(
             self._client,
+            usage_event="synthesis.section_turn.usage",
             label="synthesis section turn",
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
@@ -1467,11 +1486,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:section_emit",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:section_emit",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(
@@ -1500,8 +1522,9 @@ class OpenAISynthesisBackend:
         # The same five tools and parallel tool calls as the
         # section turns, so the repair reads the section's cached prefix;
         # emit_repairs is forced by name.
-        response = send_turn(
+        response = _emission_turn(
             self._client,
+            usage_event="synthesis.repair.usage",
             label="synthesis repair",
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
@@ -1576,14 +1599,19 @@ class OpenAISynthesisBackend:
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[SectionProseWire]:
-        response = send_turn(
-            self._client,
-            label="synthesis key findings",
-            **_step_kwargs("synthesise_write_key_findings"),
-            messages=_cache_messages("synthesise_write_key_findings", messages),
-            tools=[EMIT_SECTION_TOOL_SCHEMA],
-            tool_choice={"type": "function", "function": {"name": "emit_section"}},
-        )
+        try:
+            response = send_turn(
+                self._client,
+                label="synthesis key findings",
+                **_step_kwargs("synthesise_write_key_findings"),
+                messages=_cache_messages("synthesise_write_key_findings", messages),
+                tools=[EMIT_SECTION_TOOL_SCHEMA],
+                tool_choice={"type": "function", "function": {"name": "emit_section"}},
+            )
+        except (AnswerCutOff, ModelRefusal) as exc:
+            # A malformed emission, so the absence path below (empty emission).
+            log_usage("synthesis.key_findings.usage", exc.usage)
+            return SectionProseWire(prose="", claims=[]), exc.usage
         log_usage("synthesis.key_findings.usage", response.usage)
         function = require_single_tool_call(response, label="synthesis key findings")
         if function.name != "emit_section":
@@ -1729,11 +1757,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:write_key_findings",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:write_key_findings",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(
@@ -1869,11 +1900,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:write_case_studies",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:write_case_studies",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(
@@ -2083,11 +2117,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:write_intro",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:write_intro",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(

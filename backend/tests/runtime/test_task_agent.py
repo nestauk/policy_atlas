@@ -520,8 +520,10 @@ def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
     assert turn.reply == "Who should change?"
     assert langfuse.names == ["task_agent_scoping:turn"]
     # Task 057 D12: the attempt is stamped before the request, then the result is recorded.
-    # traced_parse's ``before`` hook records the input as its own update.
-    pre_call, _input, update = langfuse.updates
+    # traced_parse's ``before`` hook records the input as its own update, and the
+    # attempt's request id (here its start time: the fake answer carries no id) follows.
+    pre_call, _input, request_id, update = langfuse.updates
+    assert set(request_id["metadata"]) == {"started_at"}
     assert pre_call["metadata"]["step"] == "task_agent_scoping_turn"
     assert pre_call["metadata"]["attempt"] == 1
     assert update["usage_details"] == {

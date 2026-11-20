@@ -3,21 +3,33 @@
 from __future__ import annotations
 
 import json
+import time
+import uuid
 from collections.abc import Callable
 from typing import Any
 
+import structlog
 from langfuse import Langfuse
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    AnswerCutOff,
+    ModelRefusal,
     openai_kwargs,
     parse_structured,
     resolve_openai_client,
     send_turn,
     stream_turn,
 )
-from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
+from policy_atlas.core.usage import (
+    TokenUsage,
+    UsageResult,
+    add_token_usage,
+    log_usage,
+    usage_details,
+    usage_metadata,
+)
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.evidence_search.synthesis.section_prompt import (
     LOOKUP_TOOL_SCHEMA,
@@ -27,6 +39,8 @@ from policy_atlas.evidence_search.synthesis.section_prompt import (
 from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
 from policy_atlas.runtime.chat_backend import ChatBackend, ChatTurn
 from policy_atlas.runtime.chat_prompt import CHAT_MODEL, ChatAnswerWire
+
+log = structlog.get_logger()
 
 _CHAT_READ_TOOL_SCHEMAS = [
     SEARCH_CHUNKS_TOOL_SCHEMA,
@@ -63,11 +77,12 @@ class OpenAIChatBackend(ChatBackend):
         Args:
             api_key: Optional key; absent uses the route's key variable.
             langfuse_client: Optional Langfuse client. The tool turn and the
-                final structured parse run under ``traced_attempts`` (one
-                traced retry, each attempt its own generation, nested under
-                the caller's ``chat:call`` span). The prose stream is not
-                wrapped: it sends text to the user as it arrives, so a retry
-                would repeat it. Without a client the same retries run untraced.
+                final structured parse run under ``traced_attempts`` (traced
+                retries, each attempt its own generation, nested under the
+                caller's ``chat:call`` span). The prose stream sends text to the
+                user as it arrives, so it is tried again only before its first
+                text piece (:meth:`_stream_reply`); each of its attempts is its own
+                generation too. Without a client the same retries run untraced.
         """
         self._client = resolve_openai_client(api_key, backend_name="OpenAIChatBackend")
         self._langfuse_client = langfuse_client
@@ -176,19 +191,9 @@ class OpenAIChatBackend(ChatBackend):
                 ),
             },
         ]
-        stream = stream_turn(
-            self._client,
-            label="chat reply",
-            **_chat_kwargs(),
-            messages=prose_messages,
-            max_completion_tokens=max_output_tokens,
+        prose, reply_usage = self._stream_reply(
+            prose_messages, max_output_tokens=max_output_tokens, on_delta=on_delta
         )
-        prose_parts: list[str] = []
-        for text in stream:
-            prose_parts.append(text)
-            if on_delta is not None:
-                on_delta(text)
-        prose = "".join(prose_parts)
         structured_messages = [
             *messages,
             {"role": "assistant", "content": prose},
@@ -226,7 +231,121 @@ class OpenAIChatBackend(ChatBackend):
                 )
             return {"answer": answer, "tool_calls": []}, usage
 
-        return self._attempts(_parse_once, messages=structured_messages)
+        turn, parse_usage = self._attempts(_parse_once, messages=structured_messages)
+        # The answer's tokens are the reply's and the parse's together.
+        return turn, add_token_usage(reply_usage, parse_usage)
+
+    def _stream_reply(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        max_output_tokens: int | None,
+        on_delta: Callable[[str], None] | None,
+    ) -> tuple[str, TokenUsage | None]:
+        """Stream the reply prose, trying once more only if no text has arrived yet.
+
+        In plain terms: the reply reaches the user piece by piece, so a failure
+        after the first piece fails the answer (sending again would show the
+        user the same words twice). A passing failure before the first piece
+        has shown nothing, so the request is sent once more, as its own traced
+        attempt. "Passing" and the wait before the retry are the rule every
+        other model call uses (:func:`tracing._retryable`,
+        :func:`tracing._retry_wait_s`), as in the task agent's streamed turn.
+
+        Returns:
+            The reply prose and its token usage.
+        """
+        logical_call_id = uuid.uuid4().hex[:12]
+        for attempt in (1, 2):
+            started: list[bool] = []
+            try:
+                return self._reply_attempt(
+                    messages,
+                    max_output_tokens=max_output_tokens,
+                    on_delta=on_delta,
+                    started=started,
+                    metadata={
+                        "step": "chat",
+                        "attempt": attempt,
+                        "logical_call_id": logical_call_id,
+                    },
+                )
+            except Exception as exc:
+                if attempt == 2 or started or not tracing._retryable(exc):
+                    raise
+                wait_s = tracing._retry_wait_s(exc)
+                log.warning(
+                    "chat.reply.pre_token_retry",
+                    attempt=attempt,
+                    logical_call_id=logical_call_id,
+                    error=type(exc).__name__,
+                    wait_s=wait_s,
+                )
+                time.sleep(wait_s)
+        raise AssertionError("unreachable: the second attempt returns or raises")
+
+    def _reply_attempt(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        max_output_tokens: int | None,
+        on_delta: Callable[[str], None] | None,
+        started: list[bool],
+        metadata: dict[str, Any],
+    ) -> tuple[str, TokenUsage | None]:
+        """Send the reply stream once, under its own Langfuse generation.
+
+        ``started`` gains an entry once the first text piece has arrived. A reply
+        cut off at the output-token limit keeps the text already shown (the
+        generation is marked as a warning); a refusal keeps it too, and raises
+        only when no text came.
+        """
+
+        def _call(span: Any | None) -> tuple[str, TokenUsage | None]:
+            stream = stream_turn(
+                self._client,
+                label="chat reply",
+                **_chat_kwargs(),
+                messages=messages,
+                max_completion_tokens=max_output_tokens,
+            )
+            parts: list[str] = []
+            try:
+                for text in stream:
+                    parts.append(text)
+                    started.append(True)
+                    if on_delta is not None:
+                        on_delta(text)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                if isinstance(exc, ModelRefusal) and not parts:
+                    raise
+                if span is not None:
+                    span.update(level="WARNING", status_message=f"{type(exc).__name__}: {exc}")
+            prose = "".join(parts)
+            usage = stream.usage
+            log_usage("chat.reply.usage", usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=prose,
+                    metadata=usage_metadata(usage),
+                )
+            return prose, usage
+
+        if self._langfuse_client is None:
+            return _call(None)
+        with (
+            tracing._observation(
+                self._langfuse_client, name="chat:reply", as_type="generation"
+            ) as span,
+            tracing.request_id_scope(span),
+        ):
+            span.update(input={"messages": messages}, model=CHAT_MODEL, metadata=metadata)
+            try:
+                return _call(span)
+            except Exception as exc:
+                span.update(level="ERROR", status_message=f"{type(exc).__name__}: {exc}")
+                raise
 
 
 def _chat_messages(

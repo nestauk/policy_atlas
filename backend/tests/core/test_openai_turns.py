@@ -14,9 +14,12 @@ import httpx
 import openai
 import pytest
 from pydantic import BaseModel
+from structlog.testing import capture_logs
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import (
+    AnswerCutOff,
+    ModelRefusal,
     ModelTurn,
     ToolCall,
     parse_structured,
@@ -25,6 +28,9 @@ from policy_atlas.core.openai_client import (
 )
 from policy_atlas.core.usage import TokenUsage
 from tests.helpers import (
+    cut_off_response,
+    refusal_response,
+    refusal_stream_events,
     response_usage,
     structured_response,
     text_response,
@@ -226,11 +232,77 @@ def test_a_completed_stream_yields_text_pieces_in_order_and_usage_after_the_loop
     assert "stream_options" not in sent[0]
 
 
-def test_an_incomplete_stream_keeps_its_text_and_records_usage() -> None:
+def test_a_stream_cut_off_hands_out_its_text_then_raises_answer_cut_off() -> None:
     stream = _stream(text_stream_events(["cut ", "off"], ending="incomplete", usage=_USAGE))
+    pieces: list[str] = []
 
-    assert list(stream) == ["cut ", "off"]
+    with pytest.raises(AnswerCutOff) as caught:
+        pieces.extend(stream)
+    assert pieces == ["cut ", "off"]
     assert stream.usage == _TOKENS
+    assert (caught.value.label, caught.value.usage) == ("test stream", _TOKENS)
+    assert not tracing._retryable(caught.value)
+
+
+def test_a_refused_stream_raises_model_refusal_when_the_loop_ends() -> None:
+    stream = _stream(refusal_stream_events())
+
+    with pytest.raises(ModelRefusal) as caught:
+        list(stream)
+    assert caught.value.label == "test stream"
+    assert not tracing._retryable(caught.value)
+
+
+def _parse(client: openai.OpenAI) -> Any:
+    return parse_structured(
+        client,
+        messages=[{"role": "user", "content": "say hi"}],
+        response_format=_Answer,
+        usage_event="test.usage",
+        label="test parse",
+        model="gpt-test",
+        reasoning_effort="none",
+        prompt_cache="auto",
+        timeout_s=20,
+    )
+
+
+def test_parse_structured_cut_off_raises_answer_cut_off_and_logs_usage() -> None:
+    client, _sent = _client(
+        lambda: httpx.Response(200, json=cut_off_response('{"text": "h', usage=_USAGE).to_dict())
+    )
+
+    with capture_logs() as logs, pytest.raises(AnswerCutOff) as caught:
+        _parse(client)
+    assert (caught.value.label, caught.value.usage) == ("test parse", _TOKENS)
+    assert [entry["event"] for entry in logs] == ["test.usage"]
+    assert not tracing._retryable(caught.value)
+
+
+def test_parse_structured_refusal_raises_model_refusal() -> None:
+    client, _sent = _client(lambda: httpx.Response(200, json=refusal_response().to_dict()))
+
+    with pytest.raises(ModelRefusal) as caught:
+        _parse(client)
+    assert caught.value.label == "test parse"
+
+
+def test_send_turn_cut_off_raises_answer_cut_off() -> None:
+    client, _sent = _client(
+        lambda: httpx.Response(200, json=cut_off_response("half", usage=_USAGE).to_dict())
+    )
+
+    with pytest.raises(AnswerCutOff) as caught:
+        send_turn(client, label="test turn", model="gpt-test", messages=[])
+    assert (caught.value.label, caught.value.usage) == ("test turn", _TOKENS)
+
+
+def test_send_turn_refusal_raises_model_refusal() -> None:
+    client, _sent = _client(lambda: httpx.Response(200, json=refusal_response().to_dict()))
+
+    with pytest.raises(ModelRefusal) as caught:
+        send_turn(client, label="test turn", model="gpt-test", messages=[])
+    assert caught.value.label == "test turn"
 
 
 @pytest.mark.parametrize(

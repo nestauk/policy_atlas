@@ -201,6 +201,50 @@ def structured_response(value: Any, *, usage: dict[str, Any] | None = None) -> R
     return text_response(text, usage=usage)
 
 
+def cut_off_response(text: str, *, usage: dict[str, Any] | None = None) -> Response:
+    """A non-streamed answer stopped at the output-token limit, holding ``text`` so far."""
+    return _response(
+        [_message(text)],
+        usage if usage is not None else response_usage(),
+        "incomplete",
+        incomplete_details={"reason": "max_output_tokens"},
+    )
+
+
+def _refusal_message(refusal: str) -> dict[str, Any]:
+    return {
+        "type": "message",
+        "id": "msg_test",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "refusal", "refusal": refusal}],
+    }
+
+
+def refusal_response(refusal: str = "I can't help with that.") -> Response:
+    """A non-streamed answer in which the model refuses."""
+    return _response([_refusal_message(refusal)], response_usage())
+
+
+def refusal_stream_events(refusal: str = "I can't help with that.") -> list[ResponseStreamEvent]:
+    """The events of a streamed answer in which the model refuses (no text pieces)."""
+    events: list[dict[str, Any]] = [
+        {"type": "response.created", "response": _response([], None, "in_progress").to_dict()},
+        {"type": "response.refusal.delta", "item_id": "msg_test", "output_index": 0,
+         "content_index": 0, "delta": refusal},
+        {"type": "response.refusal.done", "item_id": "msg_test", "output_index": 0,
+         "content_index": 0, "refusal": refusal},
+        {"type": "response.completed",
+         "response": _response([_refusal_message(refusal)], response_usage()).to_dict()},
+    ]
+    return [
+        cast(ResponseStreamEvent, construct_type(
+            type_=ResponseStreamEvent, value={**event, "sequence_number": number}
+        ))
+        for number, event in enumerate(events)
+    ]
+
+
 def tool_call_response(
     *calls: tuple[str, Any], text: str = "", usage: dict[str, Any] | None = None
 ) -> Response:

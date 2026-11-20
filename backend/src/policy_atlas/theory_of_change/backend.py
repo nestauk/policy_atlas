@@ -773,6 +773,7 @@ class OpenAITocBackend:
                 name=f"toc:{step.removeprefix('toc_')}",
                 as_type="generation",
             ) as span,
+            tracing.request_id_scope(span),
         ):
             return run(span)
 

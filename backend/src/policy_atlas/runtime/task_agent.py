@@ -430,6 +430,7 @@ class OpenAITaskAgentBackend:
             tracing._observation(
                 self._langfuse_client, name=profile.trace_name, as_type="generation"
             ) as span,
+            tracing.request_id_scope(span),
         ):
             span.update(
                 input={"messages": messages},

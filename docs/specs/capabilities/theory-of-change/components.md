@@ -84,9 +84,9 @@ single judge, a verified quote and a fixed grade rule replace.
 
 ✅ OpenAI's own web search tool (owner, S7). 🟡 Design:
 
-- **Call path.** The tool needs the OpenAI Responses API, a new call path beside the existing
-  `chat.completions.parse` wrapper in `core/openai_client.py`, with the same tracing and usage
-  records. About $10 per 1,000 tool calls plus tokens (research § 3); up to 80 calls per check.
+- **Call path.** The tool is a new call in `core/openai_client.py`, the one module that sends
+  model requests; every request already goes to the OpenAI Responses API. It gets the same tracing
+  and usage records. About $10 per 1,000 tool calls plus tokens (research § 3); up to 80 calls per check.
 - **Route.** On the OpenAI route, the call goes to OpenAI as usual. Bedrock's global routing does
   not offer the tool: only the `bedrock-mantle` endpoint has hosted web search, in us-east-1 and
   us-east-2 only. ✅ On the Bedrock route, web search calls alone go to `bedrock-mantle` in
@@ -163,7 +163,7 @@ source type is needed.
 | `runtime/task_agent_toc.py`, `task_agent_toc_prompt.py` (new) | Task Agent profile and prompt. |
 | `runtime/harness.py` | ToC steps registered as data, like `_SCOPING_STEPS`, and their edges. |
 | `runtime/inherit.py` | The option direction. |
-| `core/openai_client.py` | A Responses API call for the web search tool. |
+| `core/openai_client.py` | A call for the web search tool (the module already sends every request to the Responses API). |
 | `model_routes.toml`, `core/model_routes.py` | A `web_search` table per route (address and model); on `bedrock-local`, Mantle in us-east-1. |
 | `evidence_search/sourcing/web_pages.py` (new) | Freezes cited web pages (contract C7). |
 | `theory_of_change/` (new package) | As built (tidied 2026-11-06): `graph.py`, `store.py`, `backend.py` (the model seam), `cost.py`; the draft (`draft.py`, `sense_check.py`, `importing.py`), the user's edits (`edits.py`, `proposals.py`, `review.py`), the report (`report.py`) and `seminal.py` as flat modules; `check/` holds one module per check step (`selecting`, `discover`, `merge`, `judge`, `figures`, `choose`, `summarise`) with `shared.py` and `grade.py`. Prompts sit beside their step as `*_prompt.py`. |
@@ -186,7 +186,7 @@ review stack (contract C18) and ADR 0042.
 |---|---|---|
 | 1. Core, then iteration | Registry entry, revision 1, `TocPlan`, Task Agent, draft, the check (OpenAlex, Overton), grades, sentences, read-only Result page | E1, E2, E6 during iteration; E2b only with the owner's cost approval |
 | 2. Editing and changes | Canvas editing, *check pending* with Keep and Check again, Task Agent edits, change list with Undo, Keep mine, Restore, plan-change choice | E1 on edited graphs |
-| 3. Web search | Responses call, web pages, Mantle on the Bedrock route | spot checks |
+| 3. Web search | Web search call, web pages, Mantle on the Bedrock route | spot checks |
 | 4. Stress test and discuss | `stress_test` chat kind; discuss with ToC context | spot checks |
 | 5. Bring your own theory | Revision 2, uploads bucket, text, image and PDF import | E3, E4 later |
 | 6. Export | PDF report, PNG, SVG, CSV, JSON, draw.io (PowerPoint parked) | manual import checks |

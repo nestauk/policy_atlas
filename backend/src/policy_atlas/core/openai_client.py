@@ -68,6 +68,110 @@ from policy_atlas.core.usage import (
 #: ``evidence_search`` when it loads).
 PromptCache = Literal["auto", "off", "breakpoint"]
 
+
+class AnswerCutOff(RuntimeError):
+    """The answer stopped at the output-token limit before it was finished.
+
+    Raised by :func:`parse_structured`, :func:`send_turn` and :class:`TextStream`.
+    It is not tried again (the same request would stop at the same limit).
+
+    Attributes:
+        label: The call's human-readable label.
+        usage: Token counts the provider sent for the cut-off answer (they are
+            billed all the same), or ``None`` when it sent none.
+    """
+
+    def __init__(self, label: str, usage: TokenUsage | None = None) -> None:
+        super().__init__(f"OpenAI {label} answer was cut off at the output-token limit.")
+        self.label = label
+        self.usage = usage
+
+
+class ModelRefusal(RuntimeError):
+    """The model declined to answer (a refusal), or the provider's content filter stopped it.
+
+    Raised by :func:`parse_structured`, :func:`send_turn` and :class:`TextStream`.
+    It is not tried again.
+
+    Attributes:
+        label: The call's human-readable label.
+        usage: Token counts the provider sent, or ``None`` when it sent none.
+    """
+
+    def __init__(
+        self, label: str, usage: TokenUsage | None = None, *, why: str = "refused"
+    ) -> None:
+        super().__init__(f"OpenAI {label} answer was {why}.")
+        self.label = label
+        self.usage = usage
+
+
+def _check_finished(response: Any, *, label: str, usage: TokenUsage | None) -> None:
+    """Raise the named error for a refused or unfinished answer; do nothing otherwise.
+
+    A refusal content part, or an answer the provider stopped for any reason other
+    than the output-token limit (``content_filter`` today), is a
+    :class:`ModelRefusal`; an answer stopped at the output-token limit is an
+    :class:`AnswerCutOff`.
+    """
+    if _has_refusal(response):
+        raise ModelRefusal(label, usage)
+    if getattr(response, "status", None) != "incomplete":
+        return
+    reason = getattr(getattr(response, "incomplete_details", None), "reason", None)
+    if reason == "max_output_tokens":
+        raise AnswerCutOff(label, usage)
+    raise ModelRefusal(label, usage, why=f"stopped by the provider ({reason or 'no reason given'})")
+
+
+def _has_refusal(response: Any) -> bool:
+    return any(
+        getattr(part, "type", None) == "refusal"
+        for item in getattr(response, "output", None) or ()
+        if getattr(item, "type", None) == "message"
+        for part in getattr(item, "content", None) or ()
+    )
+
+
+def _note_request_id(request_id: str | None) -> None:
+    # Local import: tracing imports this module (through core.embeddings).
+    from policy_atlas.core import tracing
+
+    tracing.note_request_id(request_id)
+
+
+def _header_request_id(http_response: Any) -> str | None:
+    """The provider's request id from raw response headers (``None`` when absent).
+
+    Bedrock sends the same value as ``x-request-id`` and ``x-amzn-requestid``; it is
+    the ``requestID`` of AWS's audit log (CloudTrail).
+    """
+    headers = getattr(http_response, "headers", None)
+    if headers is None:
+        return None
+    found = headers.get("x-request-id") or headers.get("x-amzn-requestid")
+    return found if isinstance(found, str) else None
+
+
+def _create(client: Any, **kwargs: Any) -> Any:
+    """Send one request to ``client.responses.create``, noting the provider's request id.
+
+    The id goes into the current :func:`policy_atlas.core.tracing.request_id_scope`
+    (if one is open): from the answer (the SDK's ``_request_id``), from a stream's
+    response headers, or from an HTTP error status.
+    """
+    try:
+        response = client.responses.create(**kwargs)
+    except openai.APIStatusError as exc:
+        _note_request_id(exc.request_id or _header_request_id(exc.response))
+        raise
+    _note_request_id(
+        getattr(response, "_request_id", None)
+        or _header_request_id(getattr(response, "response", None))
+    )
+    return response
+
+
 @dataclass
 class CallBudget:
     """Pre-run call ceiling; every call (initial or retry) reserves one slot.
@@ -235,12 +339,16 @@ def parse_structured[T: BaseModel](
         The parsed structured output plus provider-neutral token usage.
 
     Raises:
+        AnswerCutOff: If the answer stopped at the output-token limit (usage is
+            still logged).
+        ModelRefusal: If the model refused, or the provider stopped the answer
+            for another reason.
         RuntimeError: If the response holds no output at all, or no answer
-            text to parse (a refusal, or an answer cut off before any text).
-        pydantic.ValidationError: If the answer text does not fit the class
-            (for example JSON cut off at the output-token limit).
+            text to parse.
+        pydantic.ValidationError: If the answer text does not fit the class.
     """
-    response = client.responses.create(
+    response = _create(
+        client,
         **_responses_request(
             messages=with_system_breakpoint(messages) if prompt_cache == "breakpoint" else messages,
             response_format=type_to_response_format_param(response_format),
@@ -255,11 +363,11 @@ def parse_structured[T: BaseModel](
     )
     usage = token_usage_from_provider(getattr(response, "usage", None))
     log_usage(usage_event, usage)
+    _check_finished(response, label=label, usage=usage)
     if not getattr(response, "output", None):
         raise RuntimeError(f"OpenAI {label} response had no choices.")
     text = _output_text(response)
     if not text:
-        # A refusal, or an answer cut off before any text: nothing to parse.
         raise RuntimeError(f"OpenAI {label} response was not parsed.")
     return response_format.model_validate_json(text), usage
 
@@ -576,8 +684,12 @@ class TextStream:
     How a stream ends:
 
     - ``response.completed``: the loop ends normally, with usage.
-    - ``response.incomplete`` (the answer was cut off, usually at the output-token
-      limit): usage is recorded and the loop ends normally, keeping the text so far.
+    - ``response.incomplete`` at the output-token limit: usage is recorded and,
+      once the loop ends, :class:`AnswerCutOff` is raised (the text pieces already
+      handed out stay handed out). Stopped for another reason (the content filter):
+      :class:`ModelRefusal` instead.
+    - a refusal (refusal events, or a refusal part in the final answer): usage is
+      recorded and :class:`ModelRefusal` is raised once the loop ends.
     - ``response.failed`` or an ``error`` event: raises :class:`openai.APIError`
       (a provider error that is not tried again, as a mid-stream error is not).
     - no final event before the stream stops: raises
@@ -599,18 +711,18 @@ class TextStream:
 
     def __iter__(self) -> Iterator[str]:
         ended = False
+        refused = False
+        final: Any = None
         for event in self._stream:
             kind = getattr(event, "type", None)
             if kind == "response.output_text.delta":
                 if event.delta:
                     yield event.delta
-            elif kind == "response.completed":
-                self.usage = token_usage_from_provider(getattr(event.response, "usage", None))
-                ended = True
-            elif kind == "response.incomplete":
-                # Cut off (usually at the output-token limit): the text so far is kept
-                # for now. The named cut-off error is to be raised here.
-                self.usage = token_usage_from_provider(getattr(event.response, "usage", None))
+            elif kind in ("response.refusal.delta", "response.refusal.done"):
+                refused = True
+            elif kind in ("response.completed", "response.incomplete"):
+                final = event.response
+                self.usage = token_usage_from_provider(getattr(final, "usage", None))
                 ended = True
             elif kind == "response.failed":
                 error = getattr(event.response, "error", None)
@@ -618,11 +730,17 @@ class TextStream:
                 raise self._provider_error(getattr(error, "message", None), error)
             elif kind == "error":
                 raise self._provider_error(getattr(event, "message", None), event)
-        if not ended and not self._closed:
+        if not ended:
+            if self._closed:
+                return
             raise openai.APIConnectionError(
                 message=f"OpenAI {self.label} stream stopped before its final event.",
                 request=self._request(),
             )
+        if refused:
+            raise ModelRefusal(self.label, self.usage)
+        if final is not None:
+            _check_finished(final, label=self.label, usage=self.usage)
 
     def _provider_error(self, message: Any, body: Any) -> openai.APIError:
         text = message if isinstance(message, str) and message else "the provider failed the answer"
@@ -658,14 +776,18 @@ def send_turn(client: Any, *, label: str, **request: Any) -> ModelTurn:
             ``max_completion_tokens``, ``stream_options``).
 
     Returns:
-        The answer's text, tool calls and token usage. An answer cut off at the
-        output-token limit comes back as far as it got.
+        The answer's text, tool calls and token usage.
 
     Raises:
         TypeError: If the request holds a key outside the list above.
+        AnswerCutOff: If the answer stopped at the output-token limit.
+        ModelRefusal: If the model refused, or the provider stopped the answer
+            for another reason.
         RuntimeError: If the response holds no output at all.
     """
-    response = client.responses.create(**_responses_request(**request))
+    response = _create(client, **_responses_request(**request))
+    usage = token_usage_from_provider(getattr(response, "usage", None))
+    _check_finished(response, label=label, usage=usage)
     output = getattr(response, "output", None)
     if not output:
         raise RuntimeError(f"OpenAI {label} response had no choices.")
@@ -674,11 +796,7 @@ def send_turn(client: Any, *, label: str, **request: Any) -> ModelTurn:
         for item in output
         if getattr(item, "type", None) == "function_call"
     )
-    return ModelTurn(
-        text=_output_text(response),
-        tool_calls=calls,
-        usage=token_usage_from_provider(getattr(response, "usage", None)),
-    )
+    return ModelTurn(text=_output_text(response), tool_calls=calls, usage=usage)
 
 
 def stream_turn(client: Any, *, label: str, **request: Any) -> TextStream:
@@ -697,9 +815,7 @@ def stream_turn(client: Any, *, label: str, **request: Any) -> TextStream:
     Raises:
         TypeError: If the request holds an unknown key (``stream`` included).
     """
-    return TextStream(
-        client.responses.create(stream=True, **_responses_request(**request)), label=label
-    )
+    return TextStream(_create(client, stream=True, **_responses_request(**request)), label=label)
 
 
 _SIMPLE_ESCAPES = {

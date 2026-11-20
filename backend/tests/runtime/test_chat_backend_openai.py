@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
+import openai
 import pytest
 
+from policy_atlas.core.usage import TokenUsage
 from policy_atlas.runtime import chat_backend_openai
 from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend, _chat_messages
 from policy_atlas.runtime.chat_prompt import ChatAnswerWire
 from tests.helpers import (
     FakeResponsesClient,
+    FakeStream,
+    response_usage,
     spy_calls,
     structured_response,
     text_stream_events,
@@ -103,3 +109,104 @@ def test_tool_transcript_is_json_data_not_message_instructions() -> None:
 
     assert messages[-1]["role"] == "tool"
     assert "\\u0007" in messages[-1]["content"]
+
+
+_QUESTION = [{"role": "user", "content": "Question"}]
+
+
+def _replying(*streams: Any) -> FakeResponsesClient:
+    """A client that gives each scripted reply stream in turn, then structured answers."""
+    queue = list(streams)
+
+    def answer(request: dict[str, Any]) -> Any:
+        if request.get("stream"):
+            return queue.pop(0)
+        return _answer(request)
+
+    return FakeResponsesClient(answer)
+
+
+def _live(client: FakeResponsesClient, monkeypatch: pytest.MonkeyPatch) -> tuple[
+    OpenAIChatBackend, list[float]
+]:
+    backend = OpenAIChatBackend(api_key="test-key")
+    backend._client = client  # type: ignore[assignment]
+    waits: list[float] = []
+    monkeypatch.setattr(chat_backend_openai, "time", SimpleNamespace(sleep=waits.append))
+    return backend, waits
+
+
+def _streams(client: FakeResponsesClient) -> int:
+    return sum(1 for call in client.calls if call.get("stream"))
+
+
+def _dropped() -> openai.APIConnectionError:
+    return openai.APIConnectionError(request=httpx.Request("POST", "http://model.test"))
+
+
+def test_a_reply_cut_off_at_the_token_limit_keeps_the_text_already_shown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _replying(text_stream_events(["Hello ", "world."], ending="incomplete"))
+    backend, _waits = _live(client, monkeypatch)
+    deltas: list[str] = []
+
+    result, _usage = backend.chat_turn(
+        _QUESTION, [], force_emit=True, max_output_tokens=123, on_delta=deltas.append
+    )
+
+    assert deltas == ["Hello ", "world."]
+    assert result["answer"] is not None
+    assert result["answer"].prose == "Hello world."
+    assert _streams(client) == 1
+
+
+def test_a_reply_that_fails_before_its_first_piece_is_tried_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = text_stream_events(["Hello ", "world."])
+    client = _replying(FakeStream(events, fail_after=0, error=_dropped()), events)
+    backend, waits = _live(client, monkeypatch)
+    deltas: list[str] = []
+
+    result, _usage = backend.chat_turn(
+        _QUESTION, [], force_emit=True, max_output_tokens=123, on_delta=deltas.append
+    )
+
+    assert _streams(client) == 2
+    assert deltas == ["Hello ", "world."]
+    assert result["answer"] is not None
+    assert result["answer"].prose == "Hello world."
+    assert waits == [1.0]
+
+
+def test_a_reply_that_fails_after_its_first_piece_is_not_tried_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = text_stream_events(["Hello ", "world."])
+    client = _replying(FakeStream(events, fail_after=2, error=_dropped()), events)
+    backend, waits = _live(client, monkeypatch)
+    deltas: list[str] = []
+
+    with pytest.raises(openai.APIConnectionError):
+        backend.chat_turn(
+            _QUESTION, [], force_emit=True, max_output_tokens=123, on_delta=deltas.append
+        )
+    assert _streams(client) == 1
+    assert deltas == ["Hello "]
+    assert waits == []
+
+
+def test_the_answer_counts_the_reply_tokens_beside_the_parse_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reply = response_usage(input_tokens=100, output_tokens=40, cached=60)
+    client = _replying(text_stream_events(["Hello ", "world."], usage=reply))
+    backend, _waits = _live(client, monkeypatch)
+
+    _result, usage = backend.chat_turn(
+        _QUESTION, [], force_emit=True, max_output_tokens=123, on_delta=lambda _t: None
+    )
+
+    # The parse answer's usage is the builder's default: 10 in, 5 out.
+    assert usage == TokenUsage(prompt=110, completion=45, total=155, cached=60, reasoning=0)

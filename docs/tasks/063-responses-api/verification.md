@@ -91,10 +91,51 @@ lint and build were therefore run on a clean checkout of the same commit
   watchdog ends quietly. One test for each ending.
 - **M9:** `core/usage.py` reads the Responses usage fields; output keys and numbers are
   unchanged. The Chat Completions reading is replaced, not kept beside.
+- **M12, the fakes moved** (18 test files). `backend/tests/helpers.py` has the answer
+  builders (`response_usage`, `text_response`, `structured_response`, `tool_call_response`,
+  `text_stream_events`), `FakeResponsesClient`, `FakeStream` and `spy_calls`; the old
+  `fake_parse_client` family is deleted. Tests that assert on a site's request spy the
+  module's call and keep asserting on the chat-style request the site builds. No assertion
+  was dropped. These changed form, for the review to confirm (rubric row 5):
+  - `usage is None` became an exact `TokenUsage` match in nine tests (the new answers
+    always carry usage): stronger.
+  - `result is wire` became `result == wire` (`parse_structured` builds the object from
+    the answer's JSON text).
+  - In `core/test_openai_client.py`, "messages sent unchanged" is now "the input equals
+    the messages translated item by item", on the Responses request.
+  - `stream_options` is asserted on the request the site hands to `stream_turn` (the
+    module drops it before sending); `stream is True` on the request the client receives.
+  - `test_call_site_kwargs.py` and its data file are deleted (62 tests and the fixture
+    refresh hook, which was the suite's one skipped test). Its two checks that the capture
+    did not give were re-homed in `test_request_capture.py` in Phase 0.
+- **A third private SDK import.** `parse_structured` builds its schema with
+  `openai.lib._parsing._completions.type_to_response_format_param`, the function
+  `chat.completions.parse` used inside the SDK, so the schema body, name and strictness
+  are the same by construction. The Theory of change builder already imports it. The
+  pinned `openai>=2.44,<3` guards it; a public call was not used because
+  `responses.parse` parses during the request and hides the response status that the
+  cut-off check needs.
 - **Two forms the design probes had not sent, probed live on 2026-11-20 through the new
   module** (`research/live/probe_forms.py`, two calls): an earlier assistant turn as plain
   text (Terra) and an image part with detail `auto` (Sol, strict schema). Both accepted;
   usage read back.
+
+## Phase 4 (Part 2)
+
+- **Task 4.0, the probe before the code** (`research/probe3/`, 2026-11-20, Terra and Sol,
+  effort `low`, `store=false`): none of the five shapes of plan decision 10 was refused;
+  38 of 38 requests accepted, none timed out. Five carried turns in a row read the cache
+  on turns 2 to 5; the "not used" result was accepted (Terra went on, Sol made the call
+  again with the same arguments); carried history followed by a stream with tools and
+  `tool_choice="none"` streamed text and ended with `response.completed`; carried history
+  with no `tools` worked streamed and with a strict schema, with and without `include`;
+  a history mixing a rebuilt turn with carried turns was accepted in both orders. So no
+  fallback is needed and the build goes on as planned.
+  - Two findings differ from the design probe: requests that kept `status` on function-call
+    items were accepted, and so were requests with the reasoning item's `id` dropped. The
+    build still removes `status` from non-message items, the form the plan fixed.
+  - At `low`, Sol produced a reasoning item only on the first turn, and later turns on both
+    models often show 0 reasoning tokens.
 
 ## Diff summary
 

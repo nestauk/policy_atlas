@@ -44,6 +44,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange,
 from tests.helpers import (
     FakeResponsesClient,
     FakeStream,
+    cut_off_response,
     response_usage,
     spy_calls,
     text_stream_events,
@@ -1028,8 +1029,10 @@ def test_section_emit_stream_records_one_generation(
     assert "input" in span.updates[0]
     assert span.updates[0]["metadata"]["step"] == "synthesise_section_emit"
     assert span.updates[0]["metadata"]["attempt"] == 1
-    assert span.updates[-1]["model"] == route().model_for("synthesise_section_emit")
-    assert span.updates[-1]["usage_details"]
+    # The last update with output; the request-id scope adds its metadata after it.
+    final = next(update for update in reversed(span.updates) if "output" in update)
+    assert final["model"] == route().model_for("synthesise_section_emit")
+    assert final["usage_details"]
 
 
 def _spy_section_turn(
@@ -1228,3 +1231,14 @@ def test_run_section_loop_without_the_stream_method_uses_the_forced_tool() -> No
     assert claims is not None
     assert claims.prose == "Forced."
     assert result["turn_cap_hit"] is True
+
+
+def test_a_section_turn_cut_off_at_the_token_limit_is_a_malformed_emission_not_retried() -> None:
+    from policy_atlas.evidence_search.synthesis.synthesis_tools import MalformedEmissionError
+
+    client = FakeResponsesClient(cut_off_response(""))
+    backend = _streaming_backend(client)
+
+    with pytest.raises(MalformedEmissionError):
+        backend.section_turn(_seed(), [], force_emit=True)
+    assert len(client.calls) == 1
