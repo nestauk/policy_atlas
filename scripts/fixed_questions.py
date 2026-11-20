@@ -176,7 +176,9 @@ class Api:
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")[:500]
             raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from None
-        return json.loads(raw) if raw else None
+        # The Task Agent route streams one JSON object per line; the last is the result.
+        lines = raw.decode().strip().splitlines()
+        return json.loads(lines[-1]) if lines else None
 
 
 def mint_dev_token() -> str:
