@@ -163,10 +163,11 @@ Other rules:
     `frontend-designer` subagent loads.
   - `langfuse`: query traces, datasets and prompts in Langfuse.
   - `okf`: write and maintain an Open Knowledge Format (OKF) bundle such as `docs/knowledge/`.
-- **Project skills** in `.claude/skills/`: the four `task-cycle` skills, and seven design
+- **Project skills** in `.claude/skills/`: the four `task-cycle` skills, and eight design
   skills copied from `emilkowalski/skills` (MIT licence, kept beside each skill), because that
   repository is not a plugin: `emil-design-eng`, `apple-design`, `animate`,
-  `review-animations`, `find-animation-opportunities`, `prototype` and `pick-ui-library`.
+  `review-animations`, `find-animation-opportunities`, `improve-animations`, `prototype` and
+  `pick-ui-library`.
 - **Built-in commands:** `/plan`, `/goal`, `/code-review`, `/security-review`, `/verify`,
   `/simplify`. The
   conformance check for an OKF bundle is `make okf-validate`, a repository script, so it does
