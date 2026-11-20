@@ -52,6 +52,14 @@ Result: exit 0, two stacks with differences.
 The record's alias reads the custom domain's CloudFront name with `Fn::GetAtt` (checked in
 the synthesized template); there is no helper Lambda.
 
+**Rerun on the final branch** (2026-11-20, after the review fixes and the rebase on `dev`,
+same command): exit 0, the same lines as above **except** the ops task role policy, which no
+longer appears (the review moved that permission to the operator's IAM). The pool still gains
+only `MfaConfiguration` ON and `EnabledMfas` `["SOFTWARE_TOKEN_MFA"]`; no IAM resource, no
+`Custom::UserPoolCloudFrontDomainName` and no helper Lambda appear. The 064c headers policy
+still shows as new: 064c is merged into `dev` but not yet deployed to staging, so the next
+staging deploy carries both.
+
 **Production dry run: not run** (no production access in this session). The committed test
 `test_production_sign_in_resources_equal_baseline` is the evidence that production's
 pool, client, domain, DNS records, CSP and cert stack are unchanged. Someone with production
