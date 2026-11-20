@@ -107,13 +107,18 @@ The staging CSP is 476 characters and production's 429.
 
 ## Amendment (2026-11-20, task 064e)
 
-The staging report-only console pass showed that the `captcha-sdk` source above was wrong. The
-page loads `jsapi.js` from the WAF `ApplicationIntegrationURL`, on
-`<id>.<id>.<region>.captcha.awswaf.com`; that script loads `challenge.js` from
-`<id>.<id>.<region>.token.awswaf.com` and a font stylesheet with its fonts from
-`static.captcha.awswaf.com`, and the audio puzzle plays a `data:` clip. When the CAPTCHA is on,
-the policy now has `script-src https://*.<region>.captcha.awswaf.com
-https://*.<region>.token.awswaf.com` (pinned to the stack's region, so other regions' customer
-hosts are not allowed), `https://static.captcha.awswaf.com` in `style-src` and `font-src`, and
-`media-src 'self' data:`. `captcha-sdk` is removed. Production's CSP does not change (the
-CAPTCHA is off there). The decision itself stands.
+The staging report-only console pass and the browser's network list showed the full set of
+CAPTCHA addresses. The page asks for `jsapi.js` at the WAF `ApplicationIntegrationURL`,
+`<id>.<region>.captcha-sdk.awswaf.com`, which redirects (307) to
+`<id>.<id>.<region>.captcha.awswaf.com`; a CSP checks both addresses. `jsapi.js` loads
+`challenge.js` from `<id>.<id>.<region>.token.awswaf.com` and a font stylesheet with its fonts
+from `static.captcha.awswaf.com`, and the audio puzzle plays a `data:` clip. Its calls go only
+to the captcha and token hosts. When the CAPTCHA is on, the policy now has:
+
+- `script-src https://*.<region>.captcha-sdk.awswaf.com https://*.<region>.captcha.awswaf.com
+  https://*.<region>.token.awswaf.com`, pinned to the stack's region;
+- `https://static.captcha.awswaf.com` in `style-src` and `font-src`;
+- `media-src 'self' data:`;
+- `connect-src` narrowed from `https://*.awswaf.com` to the regional captcha and token hosts.
+
+Production's CSP does not change (the CAPTCHA is off there). The decision itself stands.

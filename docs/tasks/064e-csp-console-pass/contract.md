@@ -90,13 +90,21 @@ they must be done in the pass after this PR is deployed, before the switch to en
 | 4 | Waitlist | the stylesheet's `AmazonEmber-Light.woff2` (not seen in the console, because a browser loads a font only when text uses it; the stylesheet, read with `curl`, names it by a relative path, so it is on `static.captcha.awswaf.com`) | `font-src` | add `https://static.captcha.awswaf.com` |
 | 5 | Waitlist, audio puzzle | `data:audio/aac;base64,…` | `media-src` (falls back to `default-src`) | add `media-src 'self' data:` when the CAPTCHA is on |
 
-All five are fixed in `security_headers.py`; `https://*.captcha-sdk.awswaf.com` is removed
-(nothing used it). The `script-src` sources are pinned to the stack's region. Incognito pass
-2026-11-20: no other CSP line on the splash, waitlist and sign-in pages.
+All five are fixed in `security_headers.py`. Incognito pass 2026-11-20: no other CSP line on
+the splash, waitlist and sign-in pages.
 
-Findings 1 and 2: 064c allowed `https://*.captcha-sdk.awswaf.com`, but the script address the
-deploy gives the frontend (`VITE_WAF_CAPTCHA_SCRIPT_URL`, from the WAF
-`ApplicationIntegrationURL`) is on `captcha.awswaf.com`.
+Findings 1 and 2: the script address the deploy gives the frontend (`VITE_WAF_CAPTCHA_SCRIPT_URL`,
+from the WAF `ApplicationIntegrationURL`) is `<id>.<region>.captcha-sdk.awswaf.com`. It answers
+`jsapi.js` with a 307 redirect to `captcha.awswaf.com` (checked with `curl -sI`). A CSP checks
+both addresses, so `script-src` keeps `captcha-sdk` and adds `captcha`; the console showed only
+the second because the first was already allowed. The network list (DevTools, filter
+`awswaf`) showed the redirect. All script sources are pinned to the stack's region.
+
+Network list, waitlist with visual and audio puzzle and submit: the CAPTCHA calls go only to
+the captcha host (`problem`, `verify`) and the token host (`inputs`, `mp_verify`, `telemetry`,
+`voucher`). So `connect-src` is narrowed from `https://*.awswaf.com` to
+`https://*.eu-west-2.captcha.awswaf.com https://*.eu-west-2.token.awswaf.com`, and the
+`docs/deferred.md` seam for it is closed.
 
 Console pass 1 (2026-11-20, normal Chrome profile with extensions):
 

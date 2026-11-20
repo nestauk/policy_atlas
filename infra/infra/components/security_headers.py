@@ -38,19 +38,22 @@ def content_security_policy(
         The complete CSP header value. ``media-src`` is present only when the
         CAPTCHA is on.
     """
-    # The CAPTCHA loads jsapi.js from <id>.<id>.<region>.captcha.awswaf.com, which loads
+    # The page asks for jsapi.js at the WAF integration URL,
+    # <id>.<region>.captcha-sdk.awswaf.com, which redirects (307) to
+    # <id>.<id>.<region>.captcha.awswaf.com; a CSP checks both addresses. jsapi.js loads
     # challenge.js from <id>.<id>.<region>.token.awswaf.com and a font stylesheet (and its
-    # fonts) from static.captcha.awswaf.com; the audio puzzle plays a data: clip. Its
-    # own network calls may use other awswaf.com hosts. The web ACL is in the stack's
-    # region, which is also the Cognito region.
+    # fonts) from static.captcha.awswaf.com; the audio puzzle plays a data: clip. Its calls
+    # (problem, verify, inputs, mp_verify, telemetry, voucher) go to the captcha and token
+    # hosts. The web ACL is in the stack's region, which is also the Cognito region.
+    waf_captcha_host = f"https://*.{cognito_region}.captcha.awswaf.com"
+    waf_token_host = f"https://*.{cognito_region}.token.awswaf.com"
     waf_script_source = (
-        f" https://*.{cognito_region}.captcha.awswaf.com"
-        f" https://*.{cognito_region}.token.awswaf.com"
+        f" https://*.{cognito_region}.captcha-sdk.awswaf.com {waf_captcha_host} {waf_token_host}"
         if waf_captcha
         else ""
     )
     waf_static_source = " https://static.captcha.awswaf.com" if waf_captcha else ""
-    waf_source = " https://*.awswaf.com" if waf_captcha else ""
+    waf_source = f" {waf_captcha_host} {waf_token_host}" if waf_captcha else ""
     cognito_issuer = f"https://cognito-idp.{cognito_region}.amazonaws.com"
     hosted_domains = " ".join(cognito_hosted_domains)
     media = ("media-src 'self' data:",) if waf_captcha else ()

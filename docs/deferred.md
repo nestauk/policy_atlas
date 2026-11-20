@@ -1305,10 +1305,6 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   The managed rule groups skip the health paths; in block mode only the general rate rule could
   refuse the call, if the runner's address sent over 6,000 requests in 5 minutes. Condition: a
   deploy fails on that check.
-- `infra/infra/components/security_headers.py`: The Content Security Policy's `connect-src` allows
-  every `https://*.awswaf.com` host where the CAPTCHA is on. The console pass cannot show these
-  hosts, because the policy allows them. Condition: list the hosts from the browser's network tab
-  (filter on `awswaf`) during a waitlist submit, then narrow `connect-src` to them.
 - `scripts/waf_report.sh`: The firewall report reads at most 10,000 matched requests per run (the
   Logs Insights ceiling per query). Condition: a count week reaches it; then page by day.
 
