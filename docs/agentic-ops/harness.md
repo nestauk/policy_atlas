@@ -41,7 +41,7 @@ results and synthesizes. The routing is structural: each delegate is a pinned ag
 [`.claude/agents/`](../../.claude/agents/), so the model goes with the agent type and nobody has
 to remember a table. The Agent tool's `model` parameter overrides it for one call.
 **A `general-purpose` subagent starts with `model: "opus"`**, also when the caller is an
-Opus agent. The exception is `/code-review`: its reviewers run on the lead's model. The `agent-skills` plugin supplies the named reviewer subagents.
+Opus agent. The exceptions are `/code-review` and the contract and plan reviews of the design phase: their reviewers run on the lead's model. The `agent-skills` plugin supplies the named reviewer subagents.
 
 | Work | Route |
 |---|---|

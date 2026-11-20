@@ -199,6 +199,7 @@ the bundle's `log.md` → resume. Sources are **frozen**: change the *spec* (ADR
   which first. For a job id: `scripts/codex_job.sh wait <job-id> [timeout-s]` (or
   `status`/`result`), the runtime's **native** wait.
 - ⚠️ Do not write your own status poll: a filtered loop can hide a hard error until timeout.
-- **Fallback**: if Codex fails or is not available, a `deep-reasoner` subagent in a fresh
-  context runs the same read-only brief, and the contract's status line records that a
-  Claude reader stood in. A second independent read still finds defects the other lanes miss.
+- **Fallback**: if Codex fails or is not available, a fresh `general-purpose` subagent on
+  the lead's model (never a fork: it must not inherit the author's context) runs the same
+  read-only brief, and the contract's status line records that a Claude reader stood in. A
+  second independent read still finds defects the other lanes miss.
