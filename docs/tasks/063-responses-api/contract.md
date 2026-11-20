@@ -7,7 +7,8 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 > The contract-stage adversarial review the same day (23 findings; a fresh reader on the
 > lead's model stood in for Codex, which was out of quota) and a second live probe are
 > folded in as revision 5 (§ Contract-stage review). The changes are material, so
-> **revision 5 approval: _pending_** · Plan approved (before implementation): _pending_ ·
+> **Revision 5 approved (before planning): 2026-11-20 · owner**, with O14 and O15 ruled
+> yes · Plan approved (before implementation): _pending_ ·
 > ADR: due at step 4 (the model interface changes) · Branch: `task/063-responses-api`.
 >
 > This is a system-level task: it changes shared code that every capability uses. It runs
@@ -127,8 +128,8 @@ raised; no replays and no owner reads during the build.
 | Step | What it does | Effort after | Why |
 |---|---|---|---|
 | `synthesise_section_turn` | The section writer's gather turns (6 tools) and its repair turn. | **`low`** | Owner ruling. |
-| `synthesise_section_emit` | The streamed section prose. It shares the gather turns' cached prompt start. | **`low`** | E3: at a different effort it would lose that cache on every section. Its first words arrive a little later. **Owner item O14.** |
-| `chat` (tool turn, streamed reply, final parse) | One step, three call sites that share a prompt start. | **`low`** | Owner ruling for the tool turn; E3 for the other two. The step is not split, so there is no new route step. The reply's first words arrive a little later. **Owner item O14.** |
+| `synthesise_section_emit` | The streamed section prose. It shares the gather turns' cached prompt start. | **`low`** | E3: at a different effort it would lose that cache on every section. Its first words arrive a little later (O14). |
+| `chat` (tool turn, streamed reply, final parse) | One step, three call sites that share a prompt start. | **`low`** | Owner ruling for the tool turn; E3 for the other two. The step is not split, so there is no new route step. The reply's first words arrive a little later (O14). |
 | `synthesise_write_key_findings` | One call over the run's whole ledger of checked claims. | **`medium`** | Owner ruling. |
 | `task_agent_scoping_turn` | The planning conversation for options scoping. | **`low`** | Owner ruling. |
 | `longlist_constrain`, `longlist_distinct`, `longlist_authority` | Judgements over the options. | **`low`** | Owner ruling. |
@@ -293,7 +294,7 @@ feasibility scripts (M13).
 
 ## Owner items
 
-Ruled on 2026-11-20 unless marked open.
+All ruled on 2026-11-20.
 
 | Id | Decision | Ruling |
 |---|---|---|
@@ -310,8 +311,8 @@ Ruled on 2026-11-20 unless marked open.
 | **O11** | Every model call through one place? | Yes (M2). |
 | **O12** | Spec change 1. | Accepted (M15). |
 | **O13** | The exception to the prompting spec. | Accepted. |
-| **O14** | **Open.** A change of effort breaks the prompt cache. So the section prose step and the whole `chat` step go to `low` with their tool turns, and `chat` is not split into two steps. | Lean: agree. The other choice is to keep prose and reply at `none` and pay full price for their prompt starts. |
-| **O15** | **Open.** Carried reasoning (E1), the standard pattern, for the section writer's loop and the chat tool turn. | Lean: agree. It changes the tool loops and their fakes. |
+| **O14** | A change of effort breaks the prompt cache. So the section prose step and the whole `chat` step go to `low` with their tool turns, and `chat` is not split into two steps. | Yes. |
+| **O15** | Carried reasoning (E1), the standard pattern, for the section writer's loop and the chat tool turn. | Yes. |
 
 ## Contract-stage review
 
