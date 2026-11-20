@@ -110,10 +110,18 @@ def test_a_stream_carries_the_items_of_its_completed_event() -> None:
     assert [item["type"] for item in stream.carried.items] == ["message"]
 
 
-def test_the_repr_of_a_carried_turn_and_entry_shows_only_the_item_count() -> None:
+def test_a_carried_turn_with_unanswered_calls_cannot_be_sent() -> None:
+    client = FakeResponsesClient(tool_call_response(("lookup", {})))
+
+    with pytest.raises(ValueError, match="unanswered"):
+        _tool_turn(client, messages=[_carried_turn()])
+    assert client.calls == []
+
+
+def test_the_repr_of_a_carried_turn_shows_only_the_item_count() -> None:
     carried = _carried_turn()
     entry = carried.with_results({"call_0": "a", "call_1": "b"})
 
     assert repr(carried) == "CarriedTurn(3 items)"
-    assert repr(entry) == "CarriedEntry(5 items)"
+    assert repr(entry) == "CarriedTurn(5 items)"
     assert "let me look" not in f"{carried} {entry}"

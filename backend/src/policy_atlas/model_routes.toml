@@ -80,8 +80,8 @@ synthesise_propose_sections = { tier = "standard", reasoning_effort = "none", ti
 synthesise_write_block_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_write_artefact_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_judge_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
-synthesise_section_turn = { tier = "standard", reasoning_effort = "low", timeout_s = 120 }   # section turns and the repair share this step (D10)
-synthesise_section_emit = { tier = "standard", reasoning_effort = "low", timeout_s = 120 }   # the streamed final turn (task 058, D1): tools kept with tool_choice none, no response_format (the reply is parsed as the emit_section arguments), outside the retry loop
+synthesise_section_turn = { tier = "standard", reasoning_effort = "low", timeout_s = 120 }   # section turns and the repair share this step
+synthesise_section_emit = { tier = "standard", reasoning_effort = "low", timeout_s = 120 }   # the streamed final turn: tools kept with tool_choice none, no response_format (the reply is parsed as the emit_section arguments), outside the retry loop
 synthesise_write_key_findings = { tier = "standard", reasoning_effort = "medium", timeout_s = 120 }
 synthesise_write_case_studies = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
@@ -100,7 +100,7 @@ agent_option_design = { tier = "standard", reasoning_effort = "medium", timeout_
 agent_suggest = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
 task_agent_turn = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
 # --- Options scoping (the judgment calls run on the strongest tier) ----------
-task_agent_scoping_turn = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+task_agent_scoping_turn = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier at low effort; standard was enough on a replay
 # timeout_s 60, not 300 (task 056, owner 2026-11-02): the longlist and profile calls take 5 to 20 s, so a
 # stalled request is retried after a minute, not five.
 longlist_discover = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
@@ -108,14 +108,14 @@ longlist_assign = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
 longlist_themes = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_assign_themes = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_type = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_constrain = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_distinct = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-longlist_authority = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+longlist_constrain = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier at low effort; standard was enough on a replay
+longlist_distinct = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier at low effort; standard was enough on a replay
+longlist_authority = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier at low effort; standard was enough on a replay
 longlist_shortlist = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
 shortlist_note = { tier = "standard", reasoning_effort = "low", timeout_s = 30 }   # the not-covered note written alone from the places (task 058, round 14; owner 2026-11-09: standard at low, the frontier call was slow)
 option_profile_line = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-option_profile_potential_impact = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
-option_profile_ambition = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
+option_profile_potential_impact = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier at low effort; standard was enough on a replay
+option_profile_ambition = { tier = "standard", reasoning_effort = "low", timeout_s = 60 }   # was frontier at low effort; standard was enough on a replay
 option_profile_setting = { tier = "standard", reasoning_effort = "high", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 option_profile_fold = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
 option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }

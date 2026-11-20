@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import threading
 import uuid
-from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 import pytest
@@ -40,6 +39,7 @@ from policy_atlas.evidence_search.assess.screen_prompt import (
 )
 from policy_atlas.evidence_search.assess.screening_backend import OpenAIScreeningBackend
 from tests.helpers import (
+    FakeResponsesClient,
     seed_ingested_full_text,
     seed_run,
     seed_scope,
@@ -590,9 +590,7 @@ def test_screen_wire_model_validation_and_backend_confidence_rejection() -> None
     answer = structured_response(
         ScreenRepWire(decision="relevant", confidence=1.5, reason="too high")
     )
-    cast("Any", backend)._client = SimpleNamespace(
-        responses=SimpleNamespace(create=lambda **_kwargs: answer)
-    )
+    cast("Any", backend)._client = FakeResponsesClient(answer)
     cast("Any", backend)._langfuse_client = None
 
     with pytest.raises(RuntimeError, match="confidence out of range"):

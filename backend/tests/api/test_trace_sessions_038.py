@@ -12,7 +12,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from types import SimpleNamespace, TracebackType
+from types import TracebackType
 from typing import Any, Literal, cast
 
 import pytest
@@ -23,7 +23,7 @@ from policy_atlas.runtime.continuation_state import ResumeDecision, build
 from policy_atlas.runtime.runner import NullIO, RunnerBackends, run_plan
 from policy_atlas.runtime.task_agent import OpenAITaskAgentBackend
 from policy_atlas.runtime.task_agent_prompt import PlanDraftWire, PlannerTurnWire
-from tests.helpers import structured_response
+from tests.helpers import FakeResponsesClient, structured_response
 from tests.runtime.test_continuation_parity import _ParkOnceIO
 from tests.runtime.test_runner import _base_plan, _seed_task
 from tests.runtime.test_steering import _cleanup_task, _insert_plan_row
@@ -107,9 +107,7 @@ def test_task_agent_turn_session_is_task_id_and_metadata_carries_conversation_id
     )
     backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
     answer = structured_response(parsed)
-    cast("Any", backend)._client = SimpleNamespace(
-        responses=SimpleNamespace(create=lambda **_kwargs: answer)
-    )
+    cast("Any", backend)._client = FakeResponsesClient(answer)
     cast("Any", backend)._langfuse_client = fake_langfuse
 
     backend.plan_turn(

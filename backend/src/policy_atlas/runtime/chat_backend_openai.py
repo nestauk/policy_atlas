@@ -343,7 +343,8 @@ class OpenAIChatBackend(ChatBackend):
             try:
                 for text in stream:
                     parts.append(text)
-                    started.append(True)
+                    if not started:
+                        started.append(True)
                     if on_delta is not None:
                         on_delta(text)
             except (AnswerCutOff, ModelRefusal) as exc:
