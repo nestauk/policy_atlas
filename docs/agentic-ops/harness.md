@@ -159,15 +159,18 @@ Other rules:
     `/codex:cancel`.
   - `ponytail`: checks for over-engineering: `/ponytail-review` (a diff) and `/ponytail-audit`
     (the whole repository).
-- **Personal skills:** `frontend-designer` and the design phase also load design skills from
-  `~/.claude/skills/` and the `frontend-design` plugin. These are not in the repository (see
-  Known harness gaps).
-- **Project skills** in `.claude/skills/`: the four `task-cycle` skills and `langfuse` (query
-  traces, datasets and prompts in Langfuse).
+  - `impeccable`, `taste-skill` and `frontend-design`: frontend design skills that the
+    `frontend-designer` subagent loads.
+  - `langfuse`: query traces, datasets and prompts in Langfuse.
+  - `okf`: write and maintain an Open Knowledge Format (OKF) bundle such as `docs/knowledge/`.
+- **Project skills** in `.claude/skills/`: the four `task-cycle` skills, and seven design
+  skills copied from `emilkowalski/skills` (MIT licence, kept beside each skill), because that
+  repository is not a plugin: `emil-design-eng`, `apple-design`, `animate`,
+  `review-animations`, `find-animation-opportunities`, `prototype` and `pick-ui-library`.
 - **Built-in commands:** `/plan`, `/goal`, `/code-review`, `/security-review`, `/verify`,
   `/simplify`. The
-  `/okf` skill is a personal authoring aid; the conformance check is `make okf-validate`, a
-  repository script, so it does not depend on a personal skill.
+  conformance check for an OKF bundle is `make okf-validate`, a repository script, so it does
+  not depend on the `okf` plugin.
 - **Local subagents** in `.claude/agents/`: `deep-reasoner`, `fast-worker`, `frontend-designer`,
   `researcher`, `builder`, `contract-verifier` (see the routing table).
 - **Permissions:** deny rules in `.claude/settings.json`, and a command allowlist in each user's
@@ -259,7 +262,7 @@ or model providers. Agent and developer network use is not gated.
 - The append-only **`event_log`** table is the audit record. It is separate from traces and
   metrics.
 - **Langfuse** (self-hosted) traces model calls, with user and session ids
-  ([ADR 0038](../adr/0038-langfuse-observability-boundaries.md)). The `langfuse` project skill
+  ([ADR 0038](../adr/0038-langfuse-observability-boundaries.md)). The `langfuse` plugin skill
   queries it. The code, not Langfuse, holds the prompts.
 - **CloudWatch** holds the cloud logs (configured in `infra/`).
 
@@ -275,8 +278,6 @@ or model providers. Agent and developer network use is not gated.
   Never for Tier 3 or 4 work.
 - **Repository-wide `/ponytail-audit`.** Run it at milestones, about every five merged slices. The
   per-slice `ponytail-review` is already in the review stack.
-- **Personal design skills.** The frontend route loads skills from `~/.claude/skills/`, which a
-  teammate does not get from the repository.
 - **Docstrings are not checked by a tool** (see [readiness.md](readiness.md) § Open decisions).
 - **Grow `docs/knowledge/` in the implementing PR**, after the review stack finishes the code
   (task-cycle step 8), not after merge and not on speculation.
