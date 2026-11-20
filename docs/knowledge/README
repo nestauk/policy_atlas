@@ -1,33 +1,36 @@
-# Knowledge bundle — how to contribute
+# Knowledge bundle: how to contribute
 
-This directory is an OKF bundle (`okf_version: "0.1"`). It holds **durable, verified knowledge** about
-Policy Atlas — how it's built, how it behaves, and the domain it works in. Conventions, invariants and
-pitfalls are where it started; the scope is open (see below).
+This folder is an Open Knowledge Format (OKF) bundle, version 0.2 (`okf_version: "0.2"` in
+`index.md`). It holds verified facts about how Policy Atlas is built and how it behaves.
 
-- **To read it**, start at [index.md](index.md) — the navigational listing.
-- **What belongs here:** anything a slice has *proven* that's durable and isn't already another
-  lane's job. The test is the bar, not a fixed category list — **types are open**. Not design intent
-  (that's `docs/specs/`), not a copy of the specs (link them), not code (link it), not a scratchpad.
-- **When to add:** at the after-merge step of the [task cycle](../../.claude/skills/task-cycle/SKILL.md),
-  when a merged slice has verified something durable.
+- **To read it**, start at [index.md](index.md). It groups the concepts by part of the system.
+- **What belongs here:** a durable fact that a change has proven and that no test, hook or command
+  already enforces. Not design intent (that is `docs/specs/`), not a copy of the specs, not code.
+- **When to add:** in the pull request that changes the code, after review, so the concept matches
+  the code that ships.
 
 ## Authoring a concept
 
-One concept per `.md` file. Every concept needs YAML frontmatter:
+One concept per `.md` file. The filename is the concept id; do not rename it. Every concept needs
+YAML frontmatter:
 
 ```yaml
 ---
-type: Convention            # REQUIRED — descriptive, your choice (Convention, Invariant, Runbook, Domain concept, Integration quirk, …); OKF fixes no taxonomy
+type: Convention            # required; your choice (Convention, Invariant, Runbook, ...)
 title: short display name   # recommended
-description: one-line summary used in the index   # recommended
+description: one-line summary   # recommended; quote it if it has ": " or starts with a backtick
 tags: [area, topic]         # recommended
-timestamp: 2026-06-24       # recommended — date of last meaningful change
+generated:                  # who wrote the current content, and when
+  by: human:<id>            # or <agent>/<version>
+  at: 2026-01-01
+sources:                    # what the claims rest on: code, tests, ADRs, specs
+  - resource: backend/src/policy_atlas/core/events.py
+    title: append, the sequence retry
 ---
 ```
 
-Then a structural body. Favour headings/lists/tables over prose. Cite the source of each claim under
-a `# Citations` heading (spec, ADR, code, or test), and link related concepts with markdown links.
-Add a line to [log.md](log.md) when you add or materially change a concept.
+Then a short structural body (headings, lists). Link related concepts with markdown links. Add a
+line for the concept to the right group in [index.md](index.md).
 
-`index.md` and `log.md` are reserved filenames (no `type` frontmatter). Run `make okf-validate` after
-editing — every other `.md` in the tree must carry a non-empty `type`.
+`index.md` is reserved (no `type`). There is no `log.md`: git history records changes. Run
+`make okf-validate` after editing.
