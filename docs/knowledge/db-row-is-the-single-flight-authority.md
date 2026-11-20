@@ -3,7 +3,9 @@ type: Invariant
 title: Cross-process turn correctness lives in the DB row, never in process-local state
 description: Chat-turn single-flight, cancel, and capacity are all decided by the chat_turn row's status under the task row lock. Process-local locks and registries are latency optimisations only — every one of the 029 review stack's race findings was a path where local state was treated as the authority.
 tags: [chat, concurrency, single-flight, cancel, idempotency, two-phase, invariant]
-timestamp: 2026-09-24
+generated:
+  by: process:okf-migrate
+  at: 2026-09-24
 ---
 
 # Rule
@@ -49,8 +51,7 @@ must already tell the whole story without it.
 `_search_reservations`, the option-search abandon set, and
 `longlist_walk_exists`'s "still queued" leg, which trusts an intent record
 only if this process minted it (`created_at >= _PROCESS_STARTED`). The
-durable halves are keyed on rows
-([walk-existence-reads-intent-record-and-status](walk-existence-reads-intent-record-and-status.md));
+durable halves are keyed on rows (`tests/api/test_longlist_start.py`);
 the queued window is not.
 
 The corollary for capacity accounting (064a review stack, 2026-11-16): a launch

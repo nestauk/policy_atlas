@@ -3,7 +3,9 @@ type: Integration quirk
 title: gpt-5.6-terra rejects function tools unless reasoning_effort="none"
 description: On /v1/chat/completions, gpt-5.6-terra (and likely its fast-conversational class) returns a provider 400 for any tool-bearing call without reasoning_effort="none". Stub-tested adapters ship this bug silently — only a live call reveals it.
 tags: [openai, gpt-5.6-terra, chat, tool-calls, provider-quirk, reasoning-effort]
-timestamp: 2026-08-11
+generated:
+  by: process:okf-migrate
+  at: 2026-08-11
 ---
 
 # Rule

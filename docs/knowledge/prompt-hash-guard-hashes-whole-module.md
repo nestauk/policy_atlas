@@ -1,9 +1,20 @@
 ---
 type: Integration quirk
 title: The prompt hash guard hashes the whole module, so a package move changes component prompt hashes through their import lines alone
-description: `scripts/prompt_hash_guard.py` pins the SHA-256 of each prompt module's bytes, not of its prompt strings. Moving the package (`evidence_base` → `evidence_search`) changed seven of ten component prompt hashes with no prompt text touched; only the three modules with no package-relative import stayed byte-identical. The words-only proof of a prompt change is the diff of the prose hunks, never hash equality.
+description: '`scripts/prompt_hash_guard.py` pins the SHA-256 of each prompt module''s bytes, not of its prompt strings. Moving the package (`evidence_base` → `evidence_search`) changed seven of ten component prompt hashes with no prompt text touched; only the three modules with no package-relative import stayed byte-identical. The words-only proof of a prompt change is the diff of the prose hunks, never hash equality.'
 tags: [prompts, prompt-guard, hashing, review, task-038]
-timestamp: 2026-09-17
+generated:
+  by: process:okf-migrate
+  at: 2026-09-17
+sources:
+  - resource: "scripts/prompt_hash_guard.py"
+    title: "`scripts/prompt_hash_guard.py`, `scripts/prompt_hashes.json`"
+  - resource: "../tasks/038-vocabulary-alignment/prompt-diff.md"
+    title: "[038-vocabulary-alignment/prompt-diff.md](../tasks/038-vocabulary-alignment/prompt-diff.md)"
+  - resource: "../tasks/038-vocabulary-alignment/verification.md"
+    title: "[038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (\u00a7 Phase 3.3 \"Minor deviation flagged\")"
+  - resource: "../../AGENTS.md"
+    title: "[AGENTS.md](../../AGENTS.md) \u00a7 Landmines (prompt text is hash-pinned)"
 ---
 
 # Rule
@@ -38,10 +49,3 @@ Contract 038 V3 promised "identical hash values" for the component prompts
 after the package move. It could not hold: the hash covers the file. The
 guard still does its job — it fails loud on any unreviewed byte — but the
 promise was made about the wrong object.
-
-# Citations
-
-- `scripts/prompt_hash_guard.py`, `scripts/prompt_hashes.json`
-- [038-vocabulary-alignment/prompt-diff.md](../tasks/038-vocabulary-alignment/prompt-diff.md)
-- [038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (§ Phase 3.3 "Minor deviation flagged")
-- [AGENTS.md](../../AGENTS.md) § Landmines (prompt text is hash-pinned)

@@ -3,7 +3,9 @@ type: Integration quirk
 title: Cognito MFA, managed login and custom domains — what live tests showed
 description: Email MFA cannot coexist with self-service password reset for email-only users; preference calls do not unlink a TOTP app (AdminDeleteSoftwareToken does); leaving ManagedLoginVersion out does not roll a domain back; the authenticator entry is named after the sign-in address; discovery switches to a custom domain; old refresh tokens survive the MFA switch-on.
 tags: [infra, cognito, mfa, totp, managed-login, cdk, auth]
-timestamp: 2026-11-20
+generated:
+  by: process:okf-migrate
+  at: 2026-11-20
 ---
 
 # Rule

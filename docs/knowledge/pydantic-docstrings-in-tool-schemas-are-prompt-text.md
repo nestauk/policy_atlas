@@ -3,7 +3,9 @@ type: Prompting
 title: A pydantic class docstring in a tool schema is prompt text the model reads
 description: Pydantic turns class and field docstrings into JSON-schema descriptions; a wire model used as a tool or structured-output schema is therefore prompt text and belongs under the prompt hash guard.
 tags: [prompting, prompt-guard, pydantic, tools, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Rule

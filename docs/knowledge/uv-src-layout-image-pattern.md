@@ -3,7 +3,9 @@ type: Integration quirk
 title: uv src-layout images — deps layer via --no-install-project, project layer via a second sync
 description: Two-stage uv sync (deps with --no-dev --no-install-project --frozen before COPY, then --no-dev --frozen after) gives cacheable dependency layers and a real installed policy_atlas package — no PYTHONPATH hacks.
 tags: [docker, uv, python, build]
-timestamp: 2026-07-28
+generated:
+  by: process:okf-migrate
+  at: 2026-07-28
 ---
 
 # Rule

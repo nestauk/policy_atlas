@@ -3,7 +3,9 @@ type: Prompting
 title: Replay-diff a guidance line to learn whether it is prophylactic or corrective — and record which
 description: A pre/post replay of a prompt guidance line can show 0 verdict flips — the old prompt already behaved; the line pins behaviour against an identified text risk rather than fixing an observed failure. Recording "prophylactic, not corrective" honestly beats claiming the line fixed anything (task 020 vetter v3).
 tags: [prompting, replay, evidence, honesty, vetter]
-timestamp: 2026-07-12
+generated:
+  by: process:okf-migrate
+  at: 2026-07-12
 ---
 
 # Rule

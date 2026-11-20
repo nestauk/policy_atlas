@@ -3,7 +3,9 @@ type: Testing rule
 title: A prompt-cache measurement isolates every block with a nonce, because timed-out requests still store
 description: Replaying stored requests against the provider to compare cache modes needs a nonce in the system prompt per site-and-mode block; a request that times out client-side still completes and stores its prompt at the provider, so the retry reads it and makes the mode look cheap.
 tags: [caching, measurement, langfuse, openai, bedrock, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Rule

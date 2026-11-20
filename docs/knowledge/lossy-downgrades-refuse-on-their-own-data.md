@@ -3,7 +3,20 @@ type: Invariant
 title: Every lossy downgrade in a chain refuses on its own data; a refusal at the end of the chain comes too late
 description: alembic/env.py commits each revision on its own (transaction_per_migration), so a downgrade from head runs the later revisions to completion before an early one refuses; any step that drops a column or folds values must check its own data first, and the refusal test asserts the rows and columns are intact afterwards.
 tags: [alembic, migrations, rollback, theory-of-change, task-054]
-timestamp: 2026-11-05
+generated:
+  by: process:okf-migrate
+  at: 2026-11-05
+sources:
+  - resource: "backend/alembic/env.py"
+    title: "`backend/alembic/env.py` (`transaction_per_migration`)"
+  - resource: "backend/alembic/versions/72c3174734ea_*.py"
+    title: "`backend/alembic/versions/72c3174734ea_*.py`, `3c2752811cce_*.py`, `9d1e4c7a2b10_*.py`, `b4e8a1f63c25_*.py` (the guards); `7fbb8bf487f2_*.py`, `80f4e6c430b0_*.py` (the mappings, with `test_migration_054_beam.py` and `test_migration_054_layers.py`)"
+  - resource: "backend/tests/core/test_migration_054_core.py::test_the_downgrade_refuses_while_a_theory_of_change_task_exists"
+    title: "`backend/tests/core/test_migration_054_core.py::test_the_downgrade_refuses_while_a_theory_of_change_task_exists`"
+  - resource: "../tasks/054-toc-integration/verification.md"
+    title: "[054 verification \u00a7 Review findings](../tasks/054-toc-integration/verification.md); [ADR 0042 \u00a7 Rollback](../adr/0042-theory-of-change-task-kind.md)"
+  - resource: "alembic-roundtrip-explicit-revisions.md"
+    title: "Related: [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md)"
 ---
 
 # Rule
@@ -28,14 +41,3 @@ middle dropped figures, titles, proposals and user decisions without a check (tw
 they step down). A rollback with theories present would have committed those drops and then
 stopped at the core revision with the data already gone. Found by the contract verifier reading
 the chain (2026-11-05).
-
-# Citations
-
-- `backend/alembic/env.py` (`transaction_per_migration`)
-- `backend/alembic/versions/72c3174734ea_*.py`, `3c2752811cce_*.py`, `9d1e4c7a2b10_*.py`,
-  `b4e8a1f63c25_*.py` (the guards); `7fbb8bf487f2_*.py`, `80f4e6c430b0_*.py` (the mappings,
-  with `test_migration_054_beam.py` and `test_migration_054_layers.py`)
-- `backend/tests/core/test_migration_054_core.py::test_the_downgrade_refuses_while_a_theory_of_change_task_exists`
-- [054 verification § Review findings](../tasks/054-toc-integration/verification.md);
-  [ADR 0042 § Rollback](../adr/0042-theory-of-change-task-kind.md)
-- Related: [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md)

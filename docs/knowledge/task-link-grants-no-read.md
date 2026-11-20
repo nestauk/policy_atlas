@@ -3,7 +3,16 @@ type: Security rule
 title: A task link grants no read — every cross-task copy or read re-checks the grade, every time
 description: A scoping task links an Evidence search task and inherits its screened-in documents and report. The link is a pointer, not a permission, so a copy step that trusts it can leak a private task's uploads into a public one. As built, inherit and the linked-report read keep only the links whose source the scoping task's owner can read right now (re-checked each build; unreadable links skipped, named, walk degraded), and a read that crosses via a membership row must also find a task_link between the two tasks.
 tags: [security, tenancy, task-link, inherit, options-scoping, task-045]
-timestamp: 2026-09-24
+generated:
+  by: process:okf-migrate
+  at: 2026-09-24
+sources:
+  - resource: "backend/src/policy_atlas/runtime/inherit.py"
+    title: "`backend/src/policy_atlas/runtime/inherit.py` (`_sources_owner_reads`, `inherit_documents`, `linked_reports`)"
+  - resource: "backend/src/policy_atlas/api/readmodels/repository.py"
+    title: "`backend/src/policy_atlas/api/readmodels/repository.py` (option card linked findings, the `task_link` `EXISTS`)"
+  - resource: "../tasks/045-scoping-longlist/verification.md"
+    title: "[045 verification.md](../tasks/045-scoping-longlist/verification.md) \u00a7 Review findings (S1, S2)"
 ---
 
 # Rule
@@ -35,9 +44,3 @@ link grants no read to a task it does not target"; the copy step was the gap.
   inherited rows then read under the scoping task's own visibility, so a readable source's
   uploads reach whoever can read the scoping task, public readers included — the open gap in
   [deferred.md](../deferred.md) ("Linked uploads reach the scoping task's readers").
-
-# Citations
-
-- `backend/src/policy_atlas/runtime/inherit.py` (`_sources_owner_reads`, `inherit_documents`, `linked_reports`)
-- `backend/src/policy_atlas/api/readmodels/repository.py` (option card linked findings, the `task_link` `EXISTS`)
-- [045 verification.md](../tasks/045-scoping-longlist/verification.md) § Review findings (S1, S2)

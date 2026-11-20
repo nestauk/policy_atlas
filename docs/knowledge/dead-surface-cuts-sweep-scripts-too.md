@@ -3,7 +3,18 @@ type: Convention
 title: Before deleting a "dead" method, grep its callers under scripts/, infra/ and the tests' seeds, not only src/
 description: A simplification pass cut UploadStore.delete as unused; the operator removal script called it, its AttributeError was swallowed by a broad except, and the test seeded no uploads, so the rollback path silently stopped deleting files. Dead-surface cuts sweep every tree that imports the package and check that a test exercises the caller.
 tags: [simplification, review, scripts, rollback, task-054]
-timestamp: 2026-11-05
+generated:
+  by: process:okf-migrate
+  at: 2026-11-05
+sources:
+  - resource: "scripts/ops_remove_toc_tasks.py"
+    title: "`scripts/ops_remove_toc_tasks.py` (`_delete_files`); `backend/src/policy_atlas/core/uploads.py`"
+  - resource: "backend/tests/scripts/test_ops_remove_toc_tasks.py::test_apply_removes_the_uploaded_files_too"
+    title: "`backend/tests/scripts/test_ops_remove_toc_tasks.py::test_apply_removes_the_uploaded_files_too`"
+  - resource: "../tasks/054-toc-integration/simplification-review.md"
+    title: "[054 simplification review](../tasks/054-toc-integration/simplification-review.md) \u00a7 2.1"
+  - resource: "delegated-executor-practices.md"
+    title: "Related: [delegated-executor-practices](delegated-executor-practices.md)"
 ---
 
 # Rule
@@ -21,10 +32,3 @@ Task 054's simplification batch (`f81d8989`) removed `UploadStore.delete` as dea
 operator script `scripts/ops_remove_toc_tasks.py` — the ADR's rollback remedy — called it inside a
 broad `except`, so `--apply` logged a failure per file and reported success. Found by the
 contract verifier and `/code-review` (2026-11-05); restored with a test that seeds a file.
-
-# Citations
-
-- `scripts/ops_remove_toc_tasks.py` (`_delete_files`); `backend/src/policy_atlas/core/uploads.py`
-- `backend/tests/scripts/test_ops_remove_toc_tasks.py::test_apply_removes_the_uploaded_files_too`
-- [054 simplification review](../tasks/054-toc-integration/simplification-review.md) § 2.1
-- Related: [delegated-executor-practices](delegated-executor-practices.md)

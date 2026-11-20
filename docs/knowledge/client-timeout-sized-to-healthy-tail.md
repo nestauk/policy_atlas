@@ -3,7 +3,9 @@ type: Convention
 title: A model client's timeout is sized to that step's healthy tail, not to the model
 description: One to three percent of model calls stall at the provider until the client timeout and then succeed on retry, on both routes and both model generations; the per-client timeout sets what a stall costs, so size it per step from the measured healthy tail, keep the SDK retry, and remember retried attempts are billed and untraced.
 tags: [latency, timeouts, retries, openai, bedrock, "056", "057"]
-timestamp: 2026-11-03
+generated:
+  by: process:okf-migrate
+  at: 2026-11-03
 ---
 
 # Rule

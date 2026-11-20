@@ -1,9 +1,16 @@
 ---
 type: Invariant
 title: Judge verdicts are a function of the envelope — re-baseline on change, inspect flags before recalibrating
-description: Adding anchor chunk text to the judge envelope moved tier_3 mass to tier_2 and net-raised unsupported; tier distributions are not comparable across envelope versions. High first-contact flag volume from an asymmetric report-when-in-doubt rule is usually the writer, not the judge — hand-inspect before recalibrating. Envelope A/Bs need an identical-envelope variance baseline applied to every reported metric (022: the noise floor refuted a directional unspanned claim), and any envelope data the model can see it may echo — validators anticipate verdicts for ids never asked about.
+description: 'Adding anchor chunk text to the judge envelope moved tier_3 mass to tier_2 and net-raised unsupported; tier distributions are not comparable across envelope versions. High first-contact flag volume from an asymmetric report-when-in-doubt rule is usually the writer, not the judge — hand-inspect before recalibrating. Envelope A/Bs need an identical-envelope variance baseline applied to every reported metric (022: the noise floor refuted a directional unspanned claim), and any envelope data the model can see it may echo — validators anticipate verdicts for ids never asked about.'
 tags: [grounding-judge, envelopes, verdicts, calibration, evaluation]
-timestamp: 2026-07-11
+generated:
+  by: process:okf-migrate
+  at: 2026-07-11
+sources:
+  - resource: "../tasks/018-dress-rehearsal/verification.md"
+    title: "[018 verification.md \u00a7 B3](../tasks/018-dress-rehearsal/verification.md) (judge-envelope A/B, self-cert fixture PASS; \u00a7 B4 unspanned-flag calibration)"
+  - resource: "src/policy_atlas/grounding_judge.py"
+    title: "`build_envelope`, `grounding_judge_v2` in `src/policy_atlas/grounding_judge.py`"
 ---
 
 # Rule
@@ -58,9 +65,3 @@ the calibration pass tunes away a working detector.
   *expected*, not a flake.
 - The self-certification fixture is mandatory whenever an envelope change feeds the
   judge MORE chunk text.
-
-# Citations
-
-- [018 verification.md § B3](../tasks/018-dress-rehearsal/verification.md)
-  (judge-envelope A/B, self-cert fixture PASS; § B4 unspanned-flag calibration)
-- `build_envelope`, `grounding_judge_v2` in `src/policy_atlas/grounding_judge.py`

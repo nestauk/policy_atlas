@@ -3,7 +3,9 @@ type: Runbook
 title: A parallel-agent brief forbids git stash; a sibling's in-flight edits vanish between stash and pop
 description: When several agents edit one working tree, git stash by one of them reverts every sibling's uncommitted file for the window until git stash pop, and a sibling that saves during that window loses its edit on the pop; briefs for parallel agents forbid stash, and each agent that needs a clean tree works in its own worktree.
 tags: [agents, git, worktree, parallel, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Rule

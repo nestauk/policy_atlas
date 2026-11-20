@@ -3,7 +3,18 @@ type: Integration quirk
 title: uvicorn --proxy-headers with FORWARDED_ALLOW_IPS=* lets the client write the logged address; trust the VPC range only
 description: With --proxy-headers uvicorn takes the client address from X-Forwarded-For when the connecting peer is trusted; "*" trusts every peer, so a client's own forged entry wins. uvicorn 0.51 accepts address ranges, so the container trusts the VPC CIDR (the load balancer's addresses) and nothing else. Nothing in the API decides on the client address, so a wrong value is a logging defect, not an access one (064a Q11).
 tags: [uvicorn, proxy, x-forwarded-for, infra, logging, integration-quirk]
-timestamp: 2026-11-16
+generated:
+  by: process:okf-migrate
+  at: 2026-11-16
+sources:
+  - resource: "backend/Dockerfile"
+    title: "`backend/Dockerfile` \u2014 the `CMD`."
+  - resource: "infra/infra/policy_atlas_stack.py"
+    title: "`infra/infra/policy_atlas_stack.py` \u2014 `FORWARDED_ALLOW_IPS`; `infra/tests/unit/test_service_wiring.py`."
+  - resource: "backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py"
+    title: "`backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py` (0.51)."
+  - resource: "../tasks/064a-security-quick-wins/contract.md"
+    title: "[task 064a contract](../tasks/064a-security-quick-wins/contract.md) Q11."
 ---
 
 # Rule
@@ -29,10 +40,3 @@ access-log text only.
 The same `CMD` change sets `--timeout-keep-alive 125` (the balancer keeps idle
 connections 120 s; uvicorn's 5 s default closed them first and produced 502s) and
 `--no-server-header`.
-
-# Citations
-
-- `backend/Dockerfile` — the `CMD`.
-- `infra/infra/policy_atlas_stack.py` — `FORWARDED_ALLOW_IPS`; `infra/tests/unit/test_service_wiring.py`.
-- `backend/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py` (0.51).
-- [task 064a contract](../tasks/064a-security-quick-wins/contract.md) Q11.

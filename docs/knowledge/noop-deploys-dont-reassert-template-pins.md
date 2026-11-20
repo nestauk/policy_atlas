@@ -3,7 +3,9 @@ type: Integration quirk
 title: CloudFormation re-asserts a template value only on a changed deploy — pins need script-side alignment
 description: A template-pinned value (DesiredCount=0) does not reset live drift on a no-op deploy — CloudFormation skips unchanged stacks entirely. Any invariant a script deliberately drifts from (scale-to-1) must also be re-asserted by the script, not just the template.
 tags: [deployment, aws, cloudformation, cdk, invariant]
-timestamp: 2026-11-19
+generated:
+  by: process:okf-migrate
+  at: 2026-11-19
 ---
 
 # Rule

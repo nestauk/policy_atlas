@@ -3,7 +3,9 @@ type: Invariant
 title: Same-run re-execution fails loud before the first write — failure events need a healthy transaction
 description: synthesise_scope checks for an existing (scope, run) roll-up before writing anything; a UNIQUE-constraint failure at the end of a run poisons the transaction, so the harness's component.failed event write itself fails and no audit record survives.
 tags: [harness, events, transactions, synthesise, invariant]
-timestamp: 2026-09-24
+generated:
+  by: process:okf-migrate
+  at: 2026-09-24
 ---
 
 # Rule
@@ -35,7 +37,6 @@ record onto a fresh transaction (`runner.py::_record_failure_backstop`), but
 `harness._run_scope_component`'s generic `except` still appends `component.failed` on the
 component's own transaction without rolling back. In 045's live check a `uq_ser_memo` race
 between two child walks surfaced in the event log as `InFailedSqlTransaction`, hiding the cause
-until the memo writes moved into savepoints
-([sibling-walk-memo-writes-reuse-and-sorted-locks](sibling-walk-memo-writes-reuse-and-sorted-locks.md)).
+until the memo writes moved into savepoints.
 Any component whose failure is a DB error still reads that way (deferred.md § Options scoping
 longlist, "Component failure events land on an aborted transaction").

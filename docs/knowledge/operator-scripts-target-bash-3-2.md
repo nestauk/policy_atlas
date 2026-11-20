@@ -1,9 +1,16 @@
 ---
 type: Convention
 title: Operator shell scripts are written for bash 3.2, because that is what macOS ships
-description: `mapfile`, `${var,,}`, associative arrays and other bash-4 features pass the script tests on a laptop with Homebrew bash first on the PATH and on CI's Linux, then fail for an operator whose `/usr/bin/env bash` is Apple's 3.2; use `while read` loops and `tr` instead, and know that a green script test is not a portability proof.
+description: '`mapfile`, `${var,,}`, associative arrays and other bash-4 features pass the script tests on a laptop with Homebrew bash first on the PATH and on CI''s Linux, then fail for an operator whose `/usr/bin/env bash` is Apple''s 3.2; use `while read` loops and `tr` instead, and know that a green script test is not a portability proof.'
 tags: [bash, shell, scripts, macos, portability, convention]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
+sources:
+  - resource: "scripts/waf_report.sh"
+    title: "`scripts/waf_report.sh` (the `rules=()` read loop and its comment)."
+  - resource: "../tasks/064b-waf-captcha/verification.md"
+    title: "[task 064b verification](../tasks/064b-waf-captcha/verification.md) \u00a7 Review handoff, knowledge candidates."
 ---
 
 # Rule
@@ -20,9 +27,3 @@ Write for 3.2: `while IFS= read -r line; do arr+=("$line"); done < <(...)` inste
 `mapfile`, `tr '[:upper:]' '[:lower:]'` or a plain comparison instead of case
 conversion, indexed arrays only. The lead's review, not the test, is where this is
 caught; a `bash --version` line in a script test would make it mechanical.
-
-# Citations
-
-- `scripts/waf_report.sh` (the `rules=()` read loop and its comment).
-- [task 064b verification](../tasks/064b-waf-captcha/verification.md) § Review handoff,
-  knowledge candidates.

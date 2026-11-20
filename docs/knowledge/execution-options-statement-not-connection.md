@@ -3,7 +3,9 @@ type: Integration quirk
 title: SQLAlchemy execution_options belong on the statement, not the Connection
 description: Setting execution_options (e.g. yield_per) on a Connection is sticky — it mutates the connection's defaults for every later statement in the same transaction, including unrelated INSERTs.
 tags: [sqlalchemy, database, integration-quirk, "016"]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

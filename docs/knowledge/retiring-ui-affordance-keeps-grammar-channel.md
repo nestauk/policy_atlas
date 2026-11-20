@@ -3,7 +3,14 @@ type: Design rule
 title: Retiring a UI affordance is not retiring its grammar channel
 description: A contract line that retires a BUTTON retires a rendering, not the submission channel behind it — 028's "retype-everything" P4 button was retired, but its edit_sections requires-input option IS how an edited section list submits; a literal reading dropped both and left the frontend with no way to submit an edit. Separate the affordance (how it renders) from the channel (how the answer travels) before deleting either.
 tags: [steering, contracts, ui, grammar, task-028, review-lesson]
-timestamp: 2026-08-05
+generated:
+  by: process:okf-migrate
+  at: 2026-08-05
+sources:
+  - resource: "backend/src/policy_atlas/runtime/steering.py"
+    title: "`backend/src/policy_atlas/runtime/steering.py` (`_p4_options`, `edit_sections`)"
+  - resource: "028 verification.md \u00a7 Flagged deviations (3)"
+    title: "028 verification.md \u00a7 Flagged deviations (3)"
 ---
 
 # Rule
@@ -37,9 +44,3 @@ focus[, group_ids]}` rows, same confirm ladder) and renders it as per-row
   [tested-in-isolation-is-not-wired](tested-in-isolation-is-not-wired.md)
   (an offered option must also be appliable — the channel must be WIRED,
   not just present).
-
-# Citations
-
-- `backend/src/policy_atlas/runtime/steering.py` (`_p4_options`,
-  `edit_sections`)
-- 028 verification.md § Flagged deviations (3)

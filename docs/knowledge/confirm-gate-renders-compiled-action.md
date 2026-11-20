@@ -3,7 +3,9 @@ type: Invariant
 title: A HITL confirm gate renders the compiled action, never just the model's summary
 description: Confirmation is only consent if the user can see what will actually apply. Live task-024 runs proved two confirmed steers diverged materially from intent behind a fluent router summary ("drop methodology sections" → replaced 8 proposed sections with one; "select fewer documents" → the unchanged budget). Render the bounded compiled delta per fragment; LLM-authored destructive picks get their own declaration + confirm.
 tags: [hitl, steering, confirm-gate, router, informed-consent, ux-honesty, task-024]
-timestamp: 2026-07-17
+generated:
+  by: process:okf-migrate
+  at: 2026-07-17
 ---
 
 # Rule

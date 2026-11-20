@@ -3,7 +3,16 @@ type: Security rule
 title: A tenancy predicate lives or dies in its compiled SQL — pin the compilation, not the intent
 description: SQLAlchemy renders a correlated EXISTS as a cross join without explicit .correlate(); a selected boolean leg is SQL NULL (not False) on NULL columns; a bare with_for_update on a joined statement locks every joined row; a per-user invariant needs a per-user lock. Each surfaced in 033's org-tenancy slice.
 tags: [sqlalchemy, tenancy, security, locks, postgres, "033"]
-timestamp: 2026-08-25
+generated:
+  by: process:okf-migrate
+  at: 2026-08-25
+sources:
+  - resource: "../../backend/src/policy_atlas/api/routers/_access.py"
+    title: "[backend/src/policy_atlas/api/routers/_access.py](../../backend/src/policy_atlas/api/routers/_access.py)"
+  - resource: "../../backend/src/policy_atlas/api/chat_turns.py"
+    title: "[backend/src/policy_atlas/api/chat_turns.py](../../backend/src/policy_atlas/api/chat_turns.py)"
+  - resource: "033 verification.md \u00a7 Review findings (the coalesce and advisory-lock adoptions)"
+    title: "033 verification.md \u00a7 Review findings (the coalesce and advisory-lock adoptions)"
 ---
 
 # Rule
@@ -52,9 +61,3 @@ tests, one by an adversarial reviewer reproducing it empirically.
 - `hashtext` collisions between two subjects cost a needless wait and
   nothing else — acceptable for a cap, not for a correctness-critical
   mutual exclusion.
-
-# Citations
-
-- [backend/src/policy_atlas/api/routers/_access.py](../../backend/src/policy_atlas/api/routers/_access.py)
-- [backend/src/policy_atlas/api/chat_turns.py](../../backend/src/policy_atlas/api/chat_turns.py)
-- 033 verification.md § Review findings (the coalesce and advisory-lock adoptions)

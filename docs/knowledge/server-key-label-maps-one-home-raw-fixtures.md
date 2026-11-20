@@ -3,7 +3,14 @@ type: Frontend rule
 title: Server-key→label maps live in one presentation module, and fixtures use RAW keys
 description: Three 028 defects were the same class — a durable server key ("openalex", reason codes, backend names) rendered raw on a NEW surface while a perfectly good label map sat unused elsewhere, and the miss was invisible because the test fixture was written in display case. One shared map per vocabulary, imported everywhere it renders; fixtures carry the server's actual keys.
 tags: [frontend, vocabulary, presentation, fixtures, task-028, review-lesson]
-timestamp: 2026-08-05
+generated:
+  by: process:okf-migrate
+  at: 2026-08-05
+sources:
+  - resource: "frontend/src/views/workspace/checkInPresentation.ts"
+    title: "`frontend/src/views/workspace/checkInPresentation.ts` (`backendLabel`)"
+  - resource: "028 verification.md \u00a7 Review findings (F10, batch-10 note)"
+    title: "028 verification.md \u00a7 Review findings (F10, batch-10 note)"
 ---
 
 # Rule
@@ -38,8 +45,3 @@ module, both consumers import it, fixture re-keyed raw.
   diagnostic sets (ingest-failure reason codes) may de-snake as a fallback
   — that split is deliberate (028 review F17), record which kind a new
   vocabulary is when adding its map.
-
-# Citations
-
-- `frontend/src/views/workspace/checkInPresentation.ts` (`backendLabel`)
-- 028 verification.md § Review findings (F10, batch-10 note)

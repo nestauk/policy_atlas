@@ -3,7 +3,14 @@ type: Integration quirk
 title: Parallel mypy runs sharing one .mypy_cache can report phantom errors in files nobody edited
 description: Five delegated agents ran mypy at once on the 064a build and the shared backend/.mypy_cache produced a false attr-defined error in an unchanged conftest.py. Clear the cache before believing an error in a file nobody touched; one typecheck at a time per checkout.
 tags: [mypy, tooling, parallel-agents, cache, integration-quirk]
-timestamp: 2026-11-16
+generated:
+  by: process:okf-migrate
+  at: 2026-11-16
+sources:
+  - resource: "../tasks/064a-security-quick-wins/verification.md"
+    title: "[task 064a verification](../tasks/064a-security-quick-wins/verification.md) \u00a7 Review handoff, build incidents."
+  - resource: "backend/Makefile"
+    title: "`backend/Makefile` typecheck target."
 ---
 
 # Rule
@@ -22,9 +29,3 @@ build briefs should leave the typecheck to the lead's gate (`make verify-fast` o
 Related: the per-checkout isolation that `make test` gives the database
 ([parallel-agent-test-databases](parallel-agent-test-databases.md)) has no mypy
 equivalent; `MYPY_CACHE_DIR` per agent would be one.
-
-# Citations
-
-- [task 064a verification](../tasks/064a-security-quick-wins/verification.md) § Review
-  handoff, build incidents.
-- `backend/Makefile` typecheck target.

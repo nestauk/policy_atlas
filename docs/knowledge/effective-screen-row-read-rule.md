@@ -3,7 +3,9 @@ type: Invariant
 title: Every screening consumer resolves the effective row — including write paths
 description: A doc can hold several screening rows (stages, generations, failed retries); the effective result is the highest-generation-then-highest-stage non-failed row, read via screen.effective_screen_rows(). The rule binds write paths too — any component whose rows imply "this doc is in" (classify, appraise) must join through it, not just the audit counts.
 tags: [screening, stage-2, effective-row, screen-generation, reader-sweep, appraise, invariant]
-timestamp: 2026-07-16
+generated:
+  by: process:okf-migrate
+  at: 2026-07-16
 ---
 
 # Rule

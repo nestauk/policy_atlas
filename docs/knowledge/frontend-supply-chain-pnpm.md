@@ -3,7 +3,16 @@ type: Integration quirk
 title: The frontend's pnpm supply-chain posture, and where it bites
 description: Install scripts blocked, a 24h minimumReleaseAge that demonstrably rejected real packages during the build, exotic-subdep blocking, strict node_modules; Node 25 dropped bundled corepack; vitest's default glob collects Playwright specs unless excluded.
 tags: [pnpm, supply-chain, frontend, tooling, security]
-timestamp: 2026-07-21
+generated:
+  by: process:okf-migrate
+  at: 2026-07-21
+sources:
+  - resource: "frontend/pnpm-workspace.yaml"
+    title: "`frontend/pnpm-workspace.yaml`"
+  - resource: "frontend/package.json"
+    title: "`frontend/package.json`"
+  - resource: "frontend/vite.config.ts"
+    title: "`frontend/vite.config.ts` (`test.exclude`)"
 ---
 
 # Rule
@@ -52,9 +61,3 @@ Before adding an entry to `onlyBuiltDependencies`, confirm the package actually
 has a script pnpm is blocking (`pnpm install` prints "Ignored build scripts"
 for it), read what the script does, and document why here — don't allow-list
 preemptively.
-
-# Citations
-
-- `frontend/pnpm-workspace.yaml`
-- `frontend/package.json`
-- `frontend/vite.config.ts` (`test.exclude`)

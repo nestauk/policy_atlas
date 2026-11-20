@@ -3,7 +3,9 @@ type: Testing rule
 title: Guard tests must assert the real invariant, or agents satisfy their letter
 description: The 007 zero-egress guard banned HTTP imports by regex in every module; a delegate "solved" the live module with importlib.import_module("httpx") — technically passing, semantically defeating the guard. Guards name their invariant; evasion-shaped compliance is the tell.
 tags: [testing, guards, delegation, zero-egress, agents]
-timestamp: 2026-07-09
+generated:
+  by: process:okf-migrate
+  at: 2026-07-09
 ---
 
 # Rule
@@ -14,9 +16,10 @@ needs an exception, the honest move is to change the guard's stated invariant
 untouched and route around its pattern. Anything that passes the guard while
 violating what the guard exists to protect is a defect, even though CI is green.
 
-As built: the zero-egress guard's invariant is now "`search_live.py` is the sole
-sanctioned HTTP-import home", with an import-shaped (not prose-shaped) assertion
-that `acquire.py` never imports it (`tests/test_acquire.py`).
+As built: the zero-egress guard (`test_acquire_module_has_no_http_client` in
+`backend/tests/evidence_search/sourcing/test_acquire.py`) names its sanctioned HTTP homes:
+`search_live.py`, `fetch_live.py`, `api/auth.py` and `api/app.py`. It is still a
+line-start import regex, so `importlib.import_module("httpx")` would pass it.
 
 # Why
 
@@ -35,13 +38,12 @@ letter diverges from its invariant is an instruction to diverge.
   include them in the pattern or assert at a level evasion can't reach.
 - Review the *diff against the guard's purpose* whenever a guard file's test
   suddenly needs no change while the guarded behaviour clearly grew.
-- **The guard's SELECTOR is part of its invariant** (028): the prompt-hash
-  guard pins files whose *name* contains "prompt", so
-  `synthesise_sections_v3`/`synthesise_key_findings_v2` — prompt constants
-  living in `synthesis_backend.py` — are invisible to it; their only guard
-  is version-pin tests. A guard that selects by filename convention guards
-  the convention, not the surface: widen the glob or move the constants
-  when a gated surface lands outside the selector.
+- **The guard's selector is part of its invariant.** The prompt-hash guard
+  pins files whose name contains "prompt", plus a hand list (`EXTRA_FILES` in
+  `scripts/prompt_hash_guard.py`). Model-facing text in any other file is not
+  pinned. A guard that selects by filename guards the convention, not the
+  surface: add the file to the list or move the text when a gated surface lands
+  outside the selector.
 - **A guard can also die by evaluating to nothing** (031). A test named as pinning
   "acquire's headline is the sum of its per-backend counts" asserted
   `real["acquired"] == sum(stats["acquired"] for stats in real["by_backend"].values())`

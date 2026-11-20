@@ -1,9 +1,16 @@
 ---
 type: Integration quirk
-title: xyflow (React Flow) in this codebase: scope edge styles under .react-flow, stub DOMMatrix for vitest, and put keyboard handling on the flow, not the node
+title: 'xyflow (React Flow) in this codebase: scope edge styles under .react-flow, stub DOMMatrix for vitest, and put keyboard handling on the flow, not the node'
 description: xyflow's own stylesheet overrides edge stroke rules unless ours are scoped under .react-flow; jsdom lacks DOMMatrix so the vitest setup stubs it; the focusable element is xyflow's wrapper around a node, so Enter and Space are handled by a keydown on ReactFlow reading the focused element's data-id.
 tags: [frontend, xyflow, canvas, accessibility, vitest, task-054]
-timestamp: 2026-11-05
+generated:
+  by: process:okf-migrate
+  at: 2026-11-05
+sources:
+  - resource: "frontend/src/views/toc/TocCanvas.tsx"
+    title: "`frontend/src/views/toc/TocCanvas.tsx`; `frontend/src/index.css` (`.toc-edge--*`); `frontend/src/test/setup.ts`"
+  - resource: "../tasks/054-toc-integration/verification.md"
+    title: "[054 verification \u00a7 Review handoff](../tasks/054-toc-integration/verification.md) and \u00a7 Review findings (the design lane, 2026-11-05)"
 ---
 
 # Facts
@@ -17,10 +24,3 @@ timestamp: 2026-11-05
   the focused element's `data-id`; make edges `focusable` and give each an `aria-label`.
 - No layout library: the canvas computes its own columns and right-angled connections
   (`frontend/src/views/toc/tocModel.ts`).
-
-# Citations
-
-- `frontend/src/views/toc/TocCanvas.tsx`; `frontend/src/index.css` (`.toc-edge--*`);
-  `frontend/src/test/setup.ts`
-- [054 verification § Review handoff](../tasks/054-toc-integration/verification.md) and
-  § Review findings (the design lane, 2026-11-05)

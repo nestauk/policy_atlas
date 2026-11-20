@@ -3,7 +3,18 @@ type: Integration quirk
 title: A WAF log record keeps every request header, and a rule inside a managed group shows only in the log, never in the metrics
 description: Redact `authorization` (and `cookie`, `x-aws-waf-token`) in the logging configuration or a counted signed-in request stores the bearer token for the log's retention; the CloudWatch `WebACL` dimension is the ACL's metric name; a group-level count override reports the group, so the rule that matched is read from the log's `ruleGroupList`, grouped client-side because a Logs Insights `stats` sees only the first element of an array.
 tags: [waf, logging, cloudwatch, redaction, security, metrics, logs-insights, integration-quirk]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
+sources:
+  - resource: "../tasks/064b-waf-captcha/verification.md"
+    title: "[task 064b verification](../tasks/064b-waf-captcha/verification.md) \u00a7 Review findings (security lane; contract verifier F2, F3; Codex adversarial 1, 2)."
+  - resource: "infra/infra/components/waf.py"
+    title: "`infra/infra/components/waf.py` (`REDACTED_HEADERS`, the ACL's visibility config), `scripts/waf_report.sh`, `scripts/test_waf_report.sh`."
+  - resource: "AWS WAF developer guide: \"Log fields\", \"Monitoring with CloudWatch\"."
+    title: "AWS WAF developer guide: \"Log fields\", \"Monitoring with CloudWatch\"."
+  - resource: "infra/DEPLOYMENT.md"
+    title: "`infra/DEPLOYMENT.md` \u00a7 4 \"The firewall\"."
 ---
 
 # Rule
@@ -36,12 +47,3 @@ Also from the same stack: an emergency `disassociate-web-acl` is not undone by t
 deploy, because CloudFormation updates only changed template resources and does not
 detect the drift (see [noop-deploys-dont-reassert-template-pins](noop-deploys-dont-reassert-template-pins.md));
 `associate-web-acl` by hand puts it back.
-
-# Citations
-
-- [task 064b verification](../tasks/064b-waf-captcha/verification.md) § Review findings
-  (security lane; contract verifier F2, F3; Codex adversarial 1, 2).
-- `infra/infra/components/waf.py` (`REDACTED_HEADERS`, the ACL's visibility config),
-  `scripts/waf_report.sh`, `scripts/test_waf_report.sh`.
-- AWS WAF developer guide: "Log fields", "Monitoring with CloudWatch".
-- `infra/DEPLOYMENT.md` § 4 "The firewall".

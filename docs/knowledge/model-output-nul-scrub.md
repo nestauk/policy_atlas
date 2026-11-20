@@ -3,7 +3,16 @@ type: Integration quirk
 title: Postgres rejects NUL (U+0000) in TEXT/JSONB — scrub model output at the backend boundary
 description: A model can emit strings containing NUL; psycopg raises UntranslatableCharacter at write time and aborts the transaction. Model output is untrusted data — strip NULs once, where records come off the wire, before validation and verification.
 tags: [llm, postgres, psycopg, untrusted-output, extraction, sanitisation]
-timestamp: 2026-07-07
+generated:
+  by: process:okf-migrate
+  at: 2026-07-07
+sources:
+  - resource: "../tasks/011-extract/verification.md"
+    title: "[011-extract/verification.md](../tasks/011-extract/verification.md) (\u00a7 Live-run evidence, run 2; \u00a7 Diff summary deviation 3)"
+  - resource: "src/policy_atlas/extract.py"
+    title: "`_scrub_nul` in `src/policy_atlas/extract.py`"
+  - resource: "tests/test_extract.py"
+    title: "Test: `test_nul_bearing_model_output_is_scrubbed` in `tests/test_extract.py`"
 ---
 
 # Rule
@@ -38,10 +47,3 @@ boundary, not N call sites.
 - Quote verification runs on scrubbed text against frozen (never-scrubbed) basis text; a
   quote whose only mismatch was a NUL now verifies — that's correct (the NUL was model
   noise, not source text).
-
-# Citations
-
-- [011-extract/verification.md](../tasks/011-extract/verification.md) (§ Live-run evidence,
-  run 2; § Diff summary deviation 3)
-- `_scrub_nul` in `src/policy_atlas/extract.py`
-- Test: `test_nul_bearing_model_output_is_scrubbed` in `tests/test_extract.py`

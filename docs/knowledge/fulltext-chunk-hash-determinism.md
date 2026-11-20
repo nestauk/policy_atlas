@@ -3,7 +3,18 @@ type: Invariant
 title: Full-text chunk content hashes are deterministic — currently via a pymupdf4llm source patch
 description: Identical document bytes must produce byte-identical chunks and content_hash regardless of process or worker count; pymupdf4llm 0.3.4 breaks this with an id()-keyed cache, patched at import in ingest_full_text.
 tags: [full-text, determinism, provenance, parsing, invariant]
-timestamp: 2026-07-05
+generated:
+  by: process:okf-migrate
+  at: 2026-07-05
+sources:
+  - resource: "../tasks/008-full-text/verification.md"
+    title: "[008-full-text/verification.md](../tasks/008-full-text/verification.md) (post-build amendment: root cause, measurement, 32/32 proof; \u00a7 Review findings item 4: floor raise)"
+  - resource: "../adr/0004-parse-profile-per-snapshot-pymupdf4llm.md"
+    title: "[ADR 0004](../adr/0004-parse-profile-per-snapshot-pymupdf4llm.md) (parse profiles)"
+  - resource: "src/policy_atlas/ingest_full_text.py"
+    title: "`_install_deterministic_column_boxes` in `src/policy_atlas/ingest_full_text.py`"
+  - resource: "Test: `test_fanout_determinism_workers_1_vs_4`"
+    title: "Test: `test_fanout_determinism_workers_1_vs_4`"
 ---
 
 # Rule
@@ -41,11 +52,3 @@ reuse silently fracture.
   so the patch can be deleted.
 - Any *new* parser tier (the docling escalation seam) must clear the same bar before its
   profile ships: same bytes, same chunks, every process.
-
-# Citations
-
-- [008-full-text/verification.md](../tasks/008-full-text/verification.md) (post-build
-  amendment: root cause, measurement, 32/32 proof; § Review findings item 4: floor raise)
-- [ADR 0004](../adr/0004-parse-profile-per-snapshot-pymupdf4llm.md) (parse profiles)
-- `_install_deterministic_column_boxes` in `src/policy_atlas/ingest_full_text.py`
-- Test: `test_fanout_determinism_workers_1_vs_4`

@@ -3,7 +3,9 @@ type: Frontend rule
 title: Frontend state fed by a stream needs the same ownership gate as the components that read it
 description: 033 found stream.pendingCheckIn — SSE-fed store state with no ownership dimension — rendering the full steering card (options, free-text steer, Stop analysis) to any colleague viewing during a pending check-in. Gating the components is not enough if the store field itself is ownership-blind and new readers keep appearing.
 tags: [frontend, sse, state, tenancy, "033"]
-timestamp: 2026-08-25
+generated:
+  by: process:okf-migrate
+  at: 2026-08-25
 ---
 
 # Rule
