@@ -30,8 +30,8 @@ Slice-specific:
         before run beyond run-to-run noise, with both figures shown.
 14. [ ] **M7:** an answer cut at the output limit and a refusal each raise a named error;
         one test for each.
-15. [ ] **E2:** each changed effort has its measure and an owner ruling; every other step's
-        effort is unchanged.
+15. [ ] **E2:** `synthesise_section_turn` and the chat tool turn send `low`, each with its
+        before-and-after measure; every other step's effort is unchanged.
 16. [ ] **E3:** the Sol tool-loop smoke passed on the `bedrock` route.
 17. [ ] **S1:** traced attempts carry the request id, and one id is shown to find its call in
         AWS's audit log.

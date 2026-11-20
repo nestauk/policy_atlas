@@ -71,7 +71,7 @@ starts.
 | Id | Change |
 |---|---|
 | **E1** | A step's route-file line can set any effort the model accepts, with tools attached. When effort is above `none` in a tool loop, the encrypted reasoning from one turn is passed back on the next turn, in memory only, never stored. |
-| **E2** | The efforts of the 21 steps that send `none` today are reviewed one by one (table in § Efforts). Each change is one route-file line, plus a higher output-token limit for that step (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Each change is measured (latency, cost, a quality read by the owner) and ruled by the owner. A step with no ruling keeps `none`. |
+| **E2** | The `none` steps that use tools go to `low` (owner ruling 2026-11-20; table in § Efforts): `synthesise_section_turn` and the chat tool turn, which becomes its own route step. Each gets a higher output-token limit (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Latency and cost are measured before and after. Every other step keeps its effort. |
 | **E3** | A live tool loop on Sol passes (the section writer's tool turn with the route overlay naming `frontier`). No default route changes. This unblocks the 054 follow-up and task 059. |
 
 ### Part 3: diagnosis
@@ -94,17 +94,26 @@ tuning, or an AWS support case. The deployed apps show no fault to remedy.
 
 ## Efforts (E2): the 21 steps that send `none` today
 
-"Tools" means the request carries function tools. Lean is the lead's proposal, not a ruling.
+Owner ruling, 2026-11-20: **every `none` step that uses tools goes to `low`.** "Uses tools"
+means the model chooses which tool to call. Two call sites carry tools without choosing
+(noted below); they stay at `none`.
 
-| Step | Tools | Lean | Why |
+| Step | Tools | Effort after | Why |
 |---|---|---|---|
-| `synthesise_section_turn` | yes | try `low` | The writer picks evidence without reasoning today (`docs/deferred.md`, synthesis). The main gain the move unlocks. |
-| `chat` | yes | try `low` | Tool choice in chat turns. |
-| `task_agent_scoping_turn` | yes | try `low` | Plans the next step of a task. |
-| `synthesise_section_emit`, `synthesise_write_key_findings`, `synthesise_write_case_studies` | no | keep `none` | Streamed prose; reasoning delays the first words the user sees (task 058). Revisit in synthesis refinement. |
-| `synthesise_propose_sections`, `synthesise_write_block_summary`, `synthesise_write_artefact_summary`, `synthesise_judge_summary` | no | keep `none` | No tool, so the move changes nothing for them. Revisit in synthesis refinement. |
-| `longlist_constrain`, `longlist_distinct`, `longlist_authority`, `option_profile_line`, `option_profile_potential_impact`, `option_profile_ambition` | no | keep `none` | The owner set these to `none` on 2026-11-02 after reading replays (task 056). Task 059 reworks this area. |
-| `task_agent_toc`, `toc_discover`, `toc_judge`, `toc_summarise`, `toc_sense_check` | some | not ours to change | Theory of change is a colleague's capability. Their endpoint moves (shared code); their efforts and timeouts change only if the colleague asks (owner item O9). |
+| `synthesise_section_turn` | yes: the writer's gather turns (6 tools) and the repair turn | **`low`** | Owner ruling. The writer picks evidence without reasoning today (`docs/deferred.md`, synthesis). |
+| `chat`, tool turn only | yes: 3 read tools | **`low`** | Owner ruling. The `chat` step covers three call sites today (tool turn, streamed prose, final parse). The tool turn becomes its own route step, `chat_tool_turn`, so the streamed prose keeps `none` and its first words are not delayed. This also follows the rule of one route step for each call site. |
+| `chat`, streamed prose and final parse | no | `none` | No tool. |
+| `synthesise_section_emit` | carried, never called | `none` | It sends the tool list with `tool_choice="none"` only so the cached prompt start matches the gather turns. Streamed prose. |
+| `synthesise_write_key_findings` | one forced tool, fallback path only | `none` | The tool is an output format, not a choice. The main path is streamed with no tool. |
+| `synthesise_write_case_studies`, `synthesise_propose_sections`, `synthesise_write_block_summary`, `synthesise_write_artefact_summary`, `synthesise_judge_summary` | no | `none` | No tool. Revisit in synthesis refinement. |
+| `task_agent_scoping_turn` | no | `none` | A structured reply, no tool. |
+| `longlist_constrain`, `longlist_distinct`, `longlist_authority`, `option_profile_line`, `option_profile_potential_impact`, `option_profile_ambition` | no | `none` | No tool. Set to `none` by the owner on 2026-11-02 (task 056); task 059 reworks this area. |
+| `task_agent_toc`, `toc_discover`, `toc_judge`, `toc_summarise`, `toc_sense_check` | no | `none` | No tool. Theory of change is a colleague's capability (owner item O9). |
+
+For the two raised call sites the build records median latency, cost for each call and the
+cached-token share, before and after, and raises the output-token limit so reasoning tokens
+do not cut answers short. A cost or latency rise that the owner would not expect from
+`low` (more than a few seconds for each turn) is flagged before the change stays.
 
 ## Stalls: what the checks showed
 
@@ -241,7 +250,7 @@ each with its measure.
 | **O1** | One task in three parts, or three tasks? | One task. If the E2 measures run long, E2 splits off; Parts 1 and 3 do not wait for it. |
 | **O2** | Keep a switch back to Chat Completions? | No. Replace and delete; roll back by reverting. |
 | **O3** | The legacy `openai-direct` route. | Keep it passing unit tests; no live measure. |
-| **O4** | Which of the 21 `none` steps to raise (§ Efforts). | Try `low` on the three tool steps; keep the rest. |
+| **O4** | Which of the 21 `none` steps to raise. | **Ruled 2026-11-20:** all tool-using `none` steps to `low`. That is two call sites (§ Efforts). Open: confirm the chat tool turn becomes its own route step. |
 | **O5** | Fix the two defects found on the way (M7, M8)? | Yes; the lines are rewritten in any case. |
 | **O6** | Reuse stored extraction records made through Chat Completions? | Yes. |
 | **O7** | Set the account retention mode `none` (D2), and update the DPIA notes (D3). | Yes to both; needs DevOps. |
@@ -285,8 +294,8 @@ Halt and escalate when:
     reports;
   - one options scoping run to the shortlist; one Theory of change draft and report (smoke
     only); one chat turn that uses a tool; one task agent turn.
-- **E2:** for each step whose effort changes: median latency, cost for each call and the
-  owner's quality ruling, before and after.
+- **E2:** for the two raised call sites: median latency, cost for each call and cached-token
+  share, before and after.
 - **E3:** the Sol tool-loop smoke passes.
 - **S1:** a traced attempt in Langfuse shows the request id, and that id finds the call in
   AWS's audit log.
