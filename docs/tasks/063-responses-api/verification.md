@@ -29,6 +29,7 @@ read from saved result files in the task's gitignored `research/live/` folder.
 | Stage 1c (`4e94ddcf`) | `make verify` on the snapshot | pass | Backend 4,952 passed. |
 | Part 2 (`d5db3e9f`) | `make verify` on the snapshot | pass | Backend 4,976 passed. |
 | Chat fallback and documents (`8461fd36`) | `make verify` on the snapshot | pass | Backend 4,976 passed; okf-validate 189 concepts; prompt-guard 58 files. |
+| Step-6 exit, on the simplified code (`0f0616de`) | `make verify` on the snapshot | pass | Backend 4,977 passed (8 min 58 s); mypy 583 files; okf-validate 189 concepts; prompt-guard 58 files; drift-check OK; frontend 2,025 tests. This row was added after that gate, in a commit that changes this file only. |
 
 Every gate: mypy and ruff clean, build, eval-check, infra tests, audit-paths, rules-check,
 prompt-guard, font-guard, drift-check OK, frontend 147 files / 2,025 tests. Each ran in
