@@ -57,10 +57,14 @@ setup:
 ops-require = $(foreach v,$(1),$(if $($(v)),,$(error $(v)=... is required for this target)))
 OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 
-.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke ops-grant ops-revoke
+.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke ops-grant ops-revoke org-domain-add org-domain-remove user-deactivate user-reactivate
 
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
+org-domain-add:
+	@$(call ops-require,ENV DOMAIN ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org domain add --domain "$(DOMAIN)" --org "$(ORG)"
+org-domain-remove:
+	@$(call ops-require,ENV DOMAIN) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org domain remove --domain "$(DOMAIN)"
 user-create:
 	@$(call ops-require,ENV EMAIL NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" $(if $(ORG),--org "$(ORG)") $(if $(INVITE),--invite "$(INVITE)")
 user-enrol:
@@ -71,6 +75,10 @@ user-reissue:
 	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reissue --email "$(EMAIL)"
 user-de-enrol:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user de-enrol $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+user-deactivate:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user deactivate $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+user-reactivate:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reactivate $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 rows-assign:
 	@$(call ops-require,ENV ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) rows assign $(if $(TASK),--task "$(TASK)") $(if $(PROJECT),--project "$(PROJECT)") --org "$(ORG)"
 admin-grant:
