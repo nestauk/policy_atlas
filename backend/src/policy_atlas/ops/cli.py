@@ -423,7 +423,7 @@ def _run(
             commands.record_action(
                 conn,
                 actor=verification.caller_arn,
-                action="user.reset_app",
+                action="person.reset_app",
                 target=outcome.user_id,
                 outcome="ok",
             )

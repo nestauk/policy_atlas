@@ -57,6 +57,25 @@ def _email_templates(domain_name: str) -> tuple[str, str, str, str]:
     )
 
 
+def sign_in_block(value: object) -> dict:
+    """Return the ``sign_in`` config block, treating an absent block (None) as empty.
+
+    Args:
+        value: The ``sign_in`` value from the config file, or None when absent.
+
+    Returns:
+        The block itself, or an empty dict for None.
+
+    Raises:
+        ValueError: The value is neither None nor a dict (for example false or []).
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"sign_in must be a mapping of settings, got {value!r}.")
+    return value
+
+
 def _validate_sign_in(sign_in: dict, domain_name: str) -> None:
     """Reject an unknown ``sign_in`` key or value (ADR 0049)."""
     unknown = set(sign_in) - {*SIGN_IN_VALUES, "domain"}
@@ -118,7 +137,7 @@ class CognitoAuth(Construct):
     ) -> None:
         super().__init__(scope, construct_id)
 
-        sign_in = sign_in or {}
+        sign_in = sign_in_block(sign_in)
         _validate_sign_in(sign_in, domain_name)
         auth_domain = sign_in.get("domain")
         if auth_domain and (auth_certificate is None or hosted_zone is None):

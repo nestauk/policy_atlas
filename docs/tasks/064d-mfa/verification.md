@@ -51,7 +51,7 @@ The record's alias reads the custom domain's CloudFront name with `Fn::GetAtt` (
 the synthesized template); there is no helper Lambda.
 
 **Production dry run: not run** (no production access in this session). The committed test
-`test_m6_production_sign_in_resources_equal_baseline` is the evidence that production's
+`test_production_sign_in_resources_equal_baseline` is the evidence that production's
 pool, client, domain, DNS records, CSP and cert stack are unchanged. Someone with production
 access can confirm with the command above using `AWS_PROFILE=pa-prod` and
 `-c env_name=prod`; expected: no Cognito, certificate, DNS or CSP lines.

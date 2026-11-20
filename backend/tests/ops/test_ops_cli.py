@@ -607,10 +607,22 @@ def test_cli_user_deactivate_says_the_ops_role_was_revoked(
 # that a refusal made no Cognito write.
 
 
-def _expect_reset(stubber: Any, *, sub: str, fail_delete: bool = False) -> None:
-    """Queue the enabled read, the global sign-out, then the app unlink."""
+def _expect_reset(
+    stubber: Any, *, sub: str, fail_delete: bool = False, fail_sign_out: bool = False
+) -> None:
+    """Queue the enabled read, the global sign-out, then the app unlink.
+
+    A failing sign-out queues no unlink: the Stubber fails a call it was not given.
+    """
     params = {"UserPoolId": POOL_ID, "Username": sub}
     stubber.add_response("admin_get_user", {"Username": sub, "Enabled": True}, params)
+    if fail_sign_out:
+        stubber.add_client_error(
+            "admin_user_global_sign_out",
+            service_error_code="InternalErrorException",
+            expected_params=params,
+        )
+        return
     stubber.add_response("admin_user_global_sign_out", {}, params)
     if fail_delete:
         stubber.add_client_error(
@@ -662,11 +674,11 @@ def test_cli_user_reset_app_signs_out_then_unlinks_the_app_and_records_one_actio
 
     def queue(stubber: Any) -> None:
         expect_environment(stubber, known_subs=[sub], sampled=[sub])
-        expect_sub_lookup(stubber, sub=sub)
+        expect_sub_lookup(stubber, sub=sub, email=email.upper())
         _expect_reset(stubber, sub=sub)
 
     assert _reset_app(engine, queue, "--email", email, arn=arn) == 0
-    assert _actions_by(engine, arn) == [(arn, "user.reset_app", sub, "ok")]
+    assert _actions_by(engine, arn) == [(arn, "person.reset_app", sub, "ok")]
 
 
 def test_cli_user_reset_app_refuses_an_unknown_address(engine: Engine) -> None:
@@ -694,7 +706,7 @@ def test_cli_user_reset_app_refuses_a_deactivated_account(engine: Engine, where:
 
     def queue(stubber: Any) -> None:
         expect_environment(stubber, known_subs=[sub], sampled=[sub])
-        expect_sub_lookup(stubber, sub=sub)
+        expect_sub_lookup(stubber, sub=sub, email=email)
         if where == "disabled in Cognito":
             stubber.add_response(
                 "admin_get_user",
@@ -718,7 +730,9 @@ def test_cli_user_reset_app_failing_unlink_writes_no_action_and_a_rerun_finishes
         _expect_reset(stubber, sub=sub, fail_delete=True)
 
     assert _reset_app(engine, failing, "--sub", sub, arn=arn) == EXIT_REFUSED
-    assert "again is safe" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "signed out everywhere" in err and "InternalErrorException" in err
+    assert "again is safe" in err
     assert _actions_by(engine, arn) == []
 
     def working(stubber: Any) -> None:
@@ -727,7 +741,54 @@ def test_cli_user_reset_app_failing_unlink_writes_no_action_and_a_rerun_finishes
         _expect_reset(stubber, sub=sub)
 
     assert _reset_app(engine, working, "--sub", sub, arn=arn) == 0
-    assert _actions_by(engine, arn) == [(arn, "user.reset_app", sub, "ok")]
+    assert _actions_by(engine, arn) == [(arn, "person.reset_app", sub, "ok")]
+
+
+def test_cli_user_reset_app_refuses_when_the_pool_holds_another_address_for_that_person(
+    engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        # Nothing after the lookup is queued, so any further Cognito call fails the test.
+        expect_sub_lookup(stubber, sub=sub, email=unique_email("moved"))
+
+    assert _reset_app(engine, queue, "--email", email, arn=arn) == EXIT_REFUSED
+    assert "no longer matches Cognito" in capsys.readouterr().err
+    assert _actions_by(engine, arn) == []
+
+
+def test_cli_user_reset_app_refuses_a_row_with_no_account_in_the_pool(engine: Engine) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        stubber.add_response(
+            "list_users",
+            {"Users": []},
+            {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
+        )
+
+    assert _reset_app(engine, queue, "--sub", sub, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
+
+
+def test_cli_user_reset_app_failing_sign_out_never_unlinks_and_writes_no_action(
+    engine: Engine,
+) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        _expect_reset(stubber, sub=sub, fail_sign_out=True)
+
+    assert _reset_app(engine, queue, "--sub", sub, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
 
 
 def test_user_reset_app_takes_exactly_one_of_email_or_sub() -> None:

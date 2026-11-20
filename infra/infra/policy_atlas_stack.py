@@ -34,7 +34,7 @@ from aws_cdk import (
     aws_iam as iam,
 )
 from aws_cdk import Fn
-from infra.cognito_auth import CognitoAuth
+from infra.cognito_auth import CognitoAuth, sign_in_block
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
 from infra.components.security_headers import SecurityHeaders
@@ -59,8 +59,8 @@ class PolicyAtlasStack(Stack):
         be_config = pa_app_config["backend"]
         ops_config = pa_app_config["ops"]
         self_signup_config = pa_app_config["self_signup"]
-        sign_in_config = pa_app_config.get("sign_in")
-        auth_domain = (sign_in_config or {}).get("domain")
+        sign_in_config = sign_in_block(pa_app_config.get("sign_in"))
+        auth_domain = sign_in_config.get("domain")
 
         if type(ops_allowlist_size) is not int or not 1 <= ops_allowlist_size <= 8:
             raise ValueError("ops_allowlist_size must be an integer from 1 to 8")
@@ -417,7 +417,6 @@ class PolicyAtlasStack(Stack):
                 "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
                 "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
                 "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
-                "cognito-idp:AdminDeleteSoftwareToken",
             ],
             resources=[auth.user_pool.user_pool_arn],
         ))

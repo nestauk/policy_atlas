@@ -1522,9 +1522,13 @@ def reset_authenticator_app(
     **The order, and why.** ``AdminUserGlobalSignOut`` first: it ends every
     session (refresh tokens stop working) and is harmless on its own and safe
     to repeat. Then ``AdminDeleteSoftwareToken`` removes the app link. If the
-    second call fails, the person is signed out but their app is still linked;
-    running the command again finishes it. Cognito only: the database is read,
-    not written. The audit row is written by the CLI.
+    second call fails, the person is signed out and the link may or may not
+    remain; running the command again is safe. Cognito only: the database is
+    read, not written. The audit row is written by the CLI.
+
+    Found by ``--email``, the command refuses unless the pool's current address
+    for that person is the one given: a stale database address must not reset
+    someone else's app.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -1538,7 +1542,8 @@ def reset_authenticator_app(
 
     Raises:
         OpsError: If the person cannot be found as above, the pool holds no
-            account for them, they are deactivated (marked in the database or
+            account for them, the pool's address differs from ``email``, they
+            are deactivated (marked in the database or
             disabled in Cognito; nothing is called then), or Cognito refuses
             either call.
     """
@@ -1546,6 +1551,21 @@ def reset_authenticator_app(
     who = email or (row["email"] if row is not None else None) or user_id
     if user is None:
         raise OpsError(f"no account in the pool for {who}. Nothing was changed.")
+    if email is not None:
+        pool_email = next(
+            (
+                str(a.get("Value", ""))
+                for a in user.get("Attributes", [])
+                if a.get("Name") == "email"
+            ),
+            "",
+        )
+        if pool_email.strip().lower() != email.strip().lower():
+            raise OpsError(
+                f"the address on file for {email} no longer matches Cognito for that "
+                f"person ({user_id}), so their authenticator app was not reset — run "
+                f"`user resync` or pass `--sub`. Nothing was changed."
+            )
     username = user["Username"]
     if (row is not None and row["deactivated_at"] is not None) or not _is_enabled(
         cognito, pool_id=pool_id, username=username
@@ -1569,7 +1589,9 @@ def reset_authenticator_app(
         code = error.response.get("Error", {}).get("Code", "") or "ClientError"
         raise OpsError(
             f"{who} was signed out everywhere, but removing their authenticator app "
-            f"failed ({code}): it is still linked. No audit row was written. {rerun}"
+            f"link failed ({code}). If they never linked an app, or it was already "
+            f"removed, there is nothing to reset; otherwise {rerun[0].lower()}{rerun[1:]} "
+            f"No audit row was written."
         ) from error
     return AppReset(user_id=user_id, email=row["email"] if row is not None else email)
 

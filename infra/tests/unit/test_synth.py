@@ -96,7 +96,12 @@ METABASE_CONFIG = _load_config("metabase_config.json")
 # Five CIDRs exercise the split: one full rule of four and a second rule of one.
 ANALYTICS_ALLOWLIST_SIZE = 5
 OPS_ALLOWLIST_SIZE = 5
-APP = cdk.App(context={"aws:cdk:bundling-stacks": []})
+# The cdk.json flag that makes the sign-in address record point straight at the Cognito
+# custom domain (no helper Lambda), as a real deploy does. Only this flag: the rest of
+# cdk.json's context would change templates other tests pin.
+SIGN_IN_ALIAS_FLAG = "@aws-cdk/aws-route53-targets:userPoolDomainNameMethodWithoutCustomResource"
+CDK_CONTEXT = {SIGN_IN_ALIAS_FLAG: _load_environments("cdk.json")["context"][SIGN_IN_ALIAS_FLAG]}
+APP = cdk.App(context={**CDK_CONTEXT, "aws:cdk:bundling-stacks": []})
 ENV = Environment(account=DUMMY_ACCOUNT, region=NETWORK_CONFIG["aws_region"])
 CERT_ENV = Environment(account=DUMMY_ACCOUNT, region="us-east-1")
 NETWORK_STACK = NetworkStack(

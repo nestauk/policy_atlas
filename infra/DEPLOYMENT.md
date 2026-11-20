@@ -1321,8 +1321,8 @@ and tunnel automatically, reusing an already-open one), under the operator's own
 `cognito-idp:AdminSetUserPassword`, plus `cognito-idp:AdminDisableUser` and
 `cognito-idp:AdminUserGlobalSignOut` for `user deactivate` since task 064a, and
 `cognito-idp:AdminGetUser` plus `cognito-idp:AdminEnableUser` for `user reactivate`
-since task 066, nothing
-more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
+since task 066, and `cognito-idp:AdminDeleteSoftwareToken` for `user reset-app`,
+nothing more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
 task: Cognito permission belongs to the human operator, not to a task
 role, and the API task role gains no Cognito permission. Every command
 verifies the resolved AWS account and user pool against the connected

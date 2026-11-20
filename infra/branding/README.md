@@ -3,7 +3,7 @@
 The look of the Cognito sign-in page ("managed login") when an environment sets
 `sign_in.page` to `"managed"` in `infra/pa_config.json`. `infra/infra/cognito_auth.py` reads
 these files at synth and puts them into one `CfnManagedLoginBranding` resource for the web
-app's client. Task 064d, ADR 0049.
+app's client. ADR 0049.
 
 | File | What it is |
 |---|---|

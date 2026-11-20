@@ -3,7 +3,7 @@ type: Testing rule
 title: CDK synth tests — lookups are only assertable via the manifest, and framework constructs add hidden Lambdas
 description: CDK falls back to dummy context values silently, so a synth that "succeeds" proves nothing about from_lookup filters — assert the cloud assembly manifest's missing-context queries instead. And triggers.Trigger synthesizes a hidden provider Lambda, so exactly-N-Lambda assertions must exempt framework providers.
 tags: [cdk, testing, infra, synth]
-timestamp: 2026-07-28
+timestamp: 2026-11-20
 ---
 
 # Rule
@@ -21,6 +21,13 @@ Two traps in template-assertion suites over a CDK app (026 A.3, both encoded in
    Lambda. "Exactly one Lambda" must count *application* Lambdas and exempt the
    provider — otherwise the assertion is wrong the day it's written, or worse,
    loosened to `>= 1`.
+3. **Feature flags in `cdk.json` do not reach a test's `cdk.App()`.** The deploy reads
+   `cdk.json`'s `context`; a test app built in code does not. With
+   `@aws-cdk/aws-route53-targets:userPoolDomainNameMethodWithoutCustomResource` true, the
+   deploy's alias record reads the Cognito domain's `CloudFrontDistribution` directly; the
+   test app built a custom resource and a Lambda instead, and a test asserted that path
+   (064d review). Load `cdk.json`'s context into test apps that touch flag-guarded
+   constructs, and check a surprising template against `cdk.out` from a real synth.
 
 # Why
 

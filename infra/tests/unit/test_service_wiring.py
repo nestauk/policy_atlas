@@ -238,7 +238,6 @@ def test_ops_and_api_task_roles_hold_only_their_expected_cognito_permissions():
         "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
         "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
         "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
-        "cognito-idp:AdminDeleteSoftwareToken",
     ])
 
 

@@ -4,6 +4,7 @@ import json
 import aws_cdk as cdk
 from aws_cdk import Environment
 
+from infra.cognito_auth import sign_in_block
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
 from infra.analytics_stack import PaV3AnalyticsStack
@@ -107,7 +108,7 @@ if stage == "all":
         app,
         "PaV3CertStack",
         network_config=network_config,
-        auth_domain=pa_config["policy_atlas_config"].get("sign_in", {}).get("domain"),
+        auth_domain=sign_in_block(pa_config["policy_atlas_config"].get("sign_in")).get("domain"),
         env=cert_env,
         cross_region_references=True,
     )

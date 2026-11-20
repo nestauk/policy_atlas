@@ -1,6 +1,7 @@
 # ADR 0049 — Authenticator-app MFA, a branded Cognito sign-in page, and our own sign-in address
 
-- **Status:** Accepted — 2026-11-19 (owner, task 064d contract revision 3 and plan draft 3).
+- **Status:** Accepted — 2026-11-19 (owner, task 064d contract revision 3 and plan draft 3);
+  the text as written confirmed by the owner on 2026-11-20.
 - **Date:** 2026-11-19
 - **Task:** [064d-mfa](../tasks/064d-mfa/contract.md), fourth slice of the
   [064 security hardening programme](../tasks/064-security-hardening/programme.md).
@@ -65,7 +66,8 @@ https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resou
    certificate from the existing cert stack and an alias record. The prefix address stays
    beside it. The CSP lists both.
 6. **One `sign_in` block per environment** (`mfa`, `page`, `domain`). No block emits nothing
-   new, and a committed test proves the production template is unchanged. `page: "classic"`
+   new, and a committed test proves production's sign-in resources (pool, client, domains,
+   branding, DNS records, CSP, cert stack) are unchanged. `page: "classic"`
    names version 1 so a rollback really rolls back.
 7. **The Essentials plan stays.** Threat protection (Plus) is a later task.
 
