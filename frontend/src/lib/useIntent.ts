@@ -1,42 +1,11 @@
 /**
- * The use-intent question (in-app feedback, element C): the show-once rules.
+ * The use-intent question (in-app feedback, element C): the time of the first
+ * show.
  *
- * - The question is shown once for each user and report, on the first open.
- * - "Not now" is recorded as `dismissed` and the question never comes back.
- * - An answer collapses to one line, and stays editable through "change".
- *
- * An answer or a dismissal is a record in the API. "Shown, but not answered"
- * is known only to the browser: the time of the first show is kept in
- * `localStorage`, for this user and report. It is also sent as `shown_at`.
+ * An answer or a dismissal is a record in the API. The time when the question
+ * was first shown is known only to the browser: it is kept in `localStorage`,
+ * for this user and report, and is sent as `shown_at` with the answer.
  */
-
-/**
- * What the report shows where the question goes:
- * - `ask`: the question.
- * - `answered`: the one-line thanks with the "change" link.
- * - `hidden`: nothing.
- */
-export type UseIntentCardState = "ask" | "answered" | "hidden";
-
-/**
- * Decide what to show for the use-intent question.
- *
- * Args:
- *   useIntent: The stored answer of this user for this report (`dismissed`
- *     for "Not now"), or undefined when there is none.
- *   shownBefore: Whether an earlier open of the report showed the question.
- *
- * Returns:
- *   The card state.
- */
-export function intentCardState(
-  useIntent: string | undefined,
-  shownBefore: boolean,
-): UseIntentCardState {
-  if (useIntent === "dismissed") return "hidden";
-  if (useIntent !== undefined) return "answered";
-  return shownBefore ? "hidden" : "ask";
-}
 
 const shownKey = (userId: string, artefactId: string) =>
   `pa.useIntent.shown.${userId}.${artefactId}`;

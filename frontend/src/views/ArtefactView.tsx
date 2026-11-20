@@ -81,7 +81,7 @@ import {
 } from "./feedback/ClaimFlag";
 import { MissingPaperCard } from "./feedback/MissingPaper";
 import { TrackAction, TrackEvent } from "./feedback/TrackEvent";
-import { UseIntentCard } from "./feedback/UseIntentCard";
+import { UseIntentPrompt } from "./feedback/UseIntentPrompt";
 import { feedbackEnabled } from "../lib/feedback";
 import {
   DisclosureHeading,
@@ -3807,6 +3807,8 @@ function ArtefactReport() {
   );
   const frontSections =
     firstBodyIndex === -1 ? sections.map((section, index) => ({ section, index })) : sections.slice(0, firstBodyIndex).map((section, index) => ({ section, index }));
+  const conclusionsAt = sections.findIndex((section) => section.role === "conclusions");
+  const useIntentTriggerAt = conclusionsAt === -1 ? sections.length - 1 : conclusionsAt;
   const bodySections =
     firstBodyIndex === -1
       ? []
@@ -3993,16 +3995,22 @@ function ArtefactReport() {
             </h2>
           ),
 
-          // In-app feedback, element C: the use-intent question sits
-          // immediately below the Key findings section.
-          ...frontSections.flatMap((entry) =>
-            entry.section.role === "key_findings" && feedbackEnabled("use_intent") && !isPublicView
-              ? [
-                  renderSection(entry),
-                  <UseIntentCard key="use-intent" taskId={taskId} artefactId={data.artefact_id} />,
-                ]
-              : [renderSection(entry)],
-          ),
+          ...frontSections.map(renderSection),
+
+          // In-app feedback, element C: the use-intent question opens in
+          // front of the report when the reader reaches the conclusions (the
+          // last section, when a report has no conclusions).
+          feedbackEnabled("use_intent") && !isPublicView && sections.length > 0 ? (
+            <UseIntentPrompt
+              key="use-intent"
+              taskId={taskId}
+              artefactId={data.artefact_id}
+              triggerId={sectionAnchor(
+                sections[useIntentTriggerAt].title,
+                useIntentTriggerAt,
+              )}
+            />
+          ) : null,
 
           /* The executive summary's last part, above the Full report (owner,
              round 11, reversing round 10's D2). A baseline writes no
