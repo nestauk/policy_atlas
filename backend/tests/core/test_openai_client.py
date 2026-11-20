@@ -7,11 +7,14 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from posthog import Posthog
+from posthog.ai.openai import OpenAI as PostHogOpenAI
 from pydantic import BaseModel
 
 from policy_atlas.core.openai_client import (
     openai_kwargs,
     parse_structured,
+    resolve_openai_client,
     with_system_breakpoint,
 )
 from policy_atlas.evidence_search.synthesis.cache_modes import CACHE_MODES, cache_mode_for
@@ -153,3 +156,18 @@ def test_cache_mode_for_known_and_unknown_steps() -> None:
     assert cache_mode_for(step) == CACHE_MODES[step]
     with pytest.raises(RuntimeError, match="no_such_step"):
         cache_mode_for("no_such_step")
+
+
+def test_resolve_openai_client_keeps_zero_retries_under_the_posthog_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With PostHog configured the wrapper is built, still with no retries of its own."""
+    posthog_client = Posthog("phc_test", host="http://127.0.0.1", disabled=True)
+    monkeypatch.setattr(
+        "policy_atlas.core.openai_client.configured_client", lambda: posthog_client
+    )
+
+    client = resolve_openai_client("test-key", backend_name="Test")
+
+    assert isinstance(client, PostHogOpenAI)
+    assert client.max_retries == 0

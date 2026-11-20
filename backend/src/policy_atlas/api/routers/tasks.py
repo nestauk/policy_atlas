@@ -505,6 +505,7 @@ def get_task(
 def update_task(
     task_id: uuid.UUID,
     payload: TaskUpdate,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> TaskOut:
@@ -615,6 +616,20 @@ def update_task(
             user_id=user.user_id,
         )
     row = conn.execute(select(task).where(task.c.task_id == task_id)).mappings().one()
+    # Product analytics for the Share page's two controls. Captured last, so a
+    # refusal above sends nothing, and only for a real change of value.
+    if "visibility" in changes and row["visibility"] != access.row["visibility"]:
+        capture_event(
+            request,
+            "task_shared" if row["visibility"] == "org" else "task_unshared",
+            properties={"audience": "organisation"},
+        )
+    if row["is_public"] != access.row["is_public"]:
+        capture_event(
+            request,
+            "task_shared" if row["is_public"] else "task_unshared",
+            properties={"audience": "public"},
+        )
     return task_out(conn, row, user_id=user.user_id, project_ids=assigned_ids)
 
 

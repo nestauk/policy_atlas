@@ -33,6 +33,8 @@ for _egress_key in (
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_HOST",
     "LANGFUSE_BASE_URL",
+    "POSTHOG_PROJECT_TOKEN",
+    "POSTHOG_HOST",
     "OVERTON_API_KEY",
     "OPENALEX_API_KEY",
 ):

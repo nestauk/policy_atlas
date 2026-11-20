@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from "react-router";
 
 import { useApiClient, useCoverage, useLonglist, useEvidence, useFindings, useLandscape, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
 import type { components } from "../api/gen/types";
+import { track } from "../lib/analytics";
 import { errorCode } from "../lib/errors";
 import { Figures } from "../lib/figures";
 import { safeHref } from "../lib/safeHref";
@@ -891,6 +892,7 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
   const [failed, setFailed] = useState(false);
 
   const download = async () => {
+    track("file_downloaded", { format: "Sources (CSV)" });
     setDownloading(true);
     setFailed(false);
     try {

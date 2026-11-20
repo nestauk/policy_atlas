@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { track } from "../lib/analytics";
 import { buttonVariants } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
@@ -60,6 +61,7 @@ export function DownloadMenu({ items, small = false }: { items: DownloadItem[]; 
                   role="menuitem"
                   onClick={() => {
                     setOpen(false);
+                    track("file_downloaded", { format: item.label });
                     item.onSelect();
                   }}
                   className={MENU_ITEM_CLASS}

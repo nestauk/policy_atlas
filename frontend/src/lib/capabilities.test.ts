@@ -54,3 +54,40 @@ describe("VITE_THEORY_OF_CHANGE", () => {
     expect(off.capabilityLabel("theory_of_change")).toBe("Theory of change");
   });
 });
+
+describe("useCapabilities", () => {
+  afterEach(() => {
+    vi.doUnmock("posthog-js/react");
+    vi.resetModules();
+  });
+
+  /** Load the module with PostHog answering each flag from `flags`. */
+  async function capabilitiesWith(flags: Record<string, boolean | undefined>) {
+    vi.resetModules();
+    vi.doMock("posthog-js/react", () => ({
+      useFeatureFlagEnabled: (key: string) => flags[key],
+    }));
+    const [{ renderHook }, { useCapabilities }] = await Promise.all([
+      import("@testing-library/react"),
+      import("./capabilities"),
+    ]);
+    const { result } = renderHook(() => useCapabilities());
+    return Object.fromEntries(result.current.map((c) => [c.key, c.available]));
+  }
+
+  it("lets a PostHog flag turn a capability off and on over the build default", async () => {
+    // vite.config.ts sets VITE_OPTIONS_SCOPING=1 for tests and leaves
+    // VITE_THEORY_OF_CHANGE unset, so each flag here goes against its default.
+    const available = await capabilitiesWith({ options_scoping: false, theory_of_change: true });
+    expect(available.options_scoping).toBe(false);
+    expect(available.theory_of_change).toBe(true);
+  });
+
+  it("keeps the build default when PostHog gives no answer", async () => {
+    const available = await capabilitiesWith({});
+    expect(available.options_scoping).toBe(true);
+    expect(available.theory_of_change).toBe(false);
+    expect(available.evidence_search).toBe(true);
+    expect(available.map_stakeholders).toBe(false);
+  });
+});

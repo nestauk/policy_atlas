@@ -12,11 +12,12 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, NamedTuple
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import case, func, select, update
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.sql.elements import ColumnElement
 
+from policy_atlas.api.analytics import capture_event
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     LIST_PAGE_SIZE_DEFAULT,
@@ -590,6 +591,7 @@ def _tasks_only_here(
 def update_project(
     project_id: uuid.UUID,
     payload: ProjectUpdate,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ProjectOut:
@@ -655,6 +657,14 @@ def update_project(
     row = conn.execute(
         select(project).where(project.c.project_id == project_id)
     ).mappings().one()
+    # Product analytics for "Share with organisation" on a project; only for
+    # a real change of value.
+    if row["visibility"] != access.row["visibility"]:
+        capture_event(
+            request,
+            "project_shared" if row["visibility"] == "org" else "project_unshared",
+            properties={"audience": "organisation"},
+        )
     # The i.4 outcome number. Defined through the **caller's readable set**
     # (`_task_counts` is per-caller: read grade minus admin, active only), not
     # through "how many rows the cascade touched" — the outcome copy must

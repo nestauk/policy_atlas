@@ -15,10 +15,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from openai import OpenAI
+from posthog.ai.openai import OpenAI as PostHogOpenAI
 from pydantic import BaseModel
 
 from policy_atlas.core.model_routes import live_api_key, route
-from policy_atlas.core.posthog_ai import call_kwargs, openai_client
+from policy_atlas.core.posthog_ai import call_kwargs, configured_client
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
@@ -72,7 +74,7 @@ class CallBudget:
         return True
 
 
-def resolve_openai_client(api_key: str | None, *, backend_name: str) -> Any:
+def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
     """Resolve the OpenAI API key and construct a client, failing loudly.
 
     Shared by every live backend so key-resolution policy lives in one place.
@@ -99,10 +101,16 @@ def resolve_openai_client(api_key: str | None, *, backend_name: str) -> Any:
     resolved_key = api_key or live_api_key()
     if not resolved_key:
         raise RuntimeError(f"{backend_name} requires {route().api_key_env} or an explicit api_key.")
-    return openai_client(
+    posthog_client = configured_client()
+    if posthog_client is None:
+        return OpenAI(api_key=resolved_key, base_url=route().openai_base_url, max_retries=0)
+    # The PostHog wrapper is the same client plus usage events: analytics that
+    # is not configured must leave the plain client and its requests unchanged.
+    return PostHogOpenAI(
         api_key=resolved_key,
         base_url=route().openai_base_url,
         max_retries=0,
+        posthog_client=posthog_client,
     )
 
 

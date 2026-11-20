@@ -20,7 +20,6 @@ from typing import Any
 
 import structlog
 from posthog import Posthog
-from posthog.ai.openai import OpenAI as PostHogOpenAI
 
 log = structlog.get_logger()
 
@@ -50,7 +49,7 @@ def configure_posthog_client(client: Posthog | None) -> None:
         _client = client
 
 
-def _configured_client() -> Posthog | None:
+def configured_client() -> Posthog | None:
     """Return the shared client, creating a CLI/worker client only when configured."""
     global _client, _fallback_client_created
     if _client is not None:
@@ -65,25 +64,6 @@ def _configured_client() -> Posthog | None:
         atexit.register(client.shutdown)
         _fallback_client_created = True
     return client
-
-
-def openai_client(*, api_key: str, base_url: str | None, max_retries: int) -> Any:
-    """Build the PostHog OpenAI wrapper when analytics is configured.
-
-    A missing PostHog configuration retains the app's existing OpenAI client
-    and request behaviour; analytics must never make a model call fail.
-    """
-    client = _configured_client()
-    if client is None:
-        from openai import OpenAI
-
-        return OpenAI(api_key=api_key, base_url=base_url, max_retries=max_retries)
-    return PostHogOpenAI(
-        api_key=api_key,
-        base_url=base_url,
-        max_retries=max_retries,
-        posthog_client=client,
-    )
 
 
 def _default_context() -> AIContext:
@@ -114,7 +94,7 @@ def context(*, session_id: uuid.UUID | str | None, user_id: str | None) -> Itera
         distinct_id=resolved_user,
     )
     token = _context.set(state)
-    client = _configured_client()
+    client = configured_client()
     try:
         if client is None:
             yield
@@ -130,7 +110,7 @@ def context(*, session_id: uuid.UUID | str | None, user_id: str | None) -> Itera
 
 def call_kwargs() -> dict[str, Any]:
     """Return wrapper-only arguments for the current AI operation."""
-    if _configured_client() is None:
+    if configured_client() is None:
         return {}
     state = _default_context()
     result: dict[str, Any] = {
@@ -146,7 +126,7 @@ def capture_tool_span(
     name: str, input_state: Any, output_state: Any, latency_s: float
 ) -> None:
     """Record a local read-tool execution as a child span without affecting work."""
-    client = _configured_client()
+    client = configured_client()
     if client is None:
         return
     state = _default_context()
@@ -171,7 +151,7 @@ def capture_tool_span(
 def configure_bedrock_observability() -> None:
     """Instrument Bedrock before its boto3 client is constructed when available."""
     global _bedrock_instrumented, _bedrock_provider
-    if _bedrock_instrumented or _configured_client() is None:
+    if _bedrock_instrumented or configured_client() is None:
         return
     token = os.environ.get("POSTHOG_PROJECT_TOKEN")
     host = os.environ.get("POSTHOG_HOST")
@@ -184,10 +164,10 @@ def configure_bedrock_observability() -> None:
         from opentelemetry.sdk.trace import TracerProvider
         from posthog.ai.otel import PostHogSpanProcessor
 
-        provider = TracerProvider(Resource.create({SERVICE_NAME: "policy-atlas"}))
+        provider = TracerProvider(resource=Resource.create({SERVICE_NAME: "policy-atlas"}))
         provider.add_span_processor(PostHogSpanProcessor(api_key=token, host=host))
         trace.set_tracer_provider(provider)
-        BotocoreInstrumentor().instrument()
+        BotocoreInstrumentor().instrument()  # type: ignore[no-untyped-call]
         _bedrock_provider = provider
         _bedrock_instrumented = True
     except ImportError:

@@ -2,12 +2,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App";
+import { initAnalytics } from "./lib/analytics";
 
 async function bootstrap() {
   if (import.meta.env.VITE_MOCK === "1") {
     const { installMockApi } = await import("./mock");
     installMockApi();
   }
+
+  initAnalytics();
 
   const rootElement = document.getElementById("root");
   if (!rootElement) {

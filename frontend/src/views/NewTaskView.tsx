@@ -5,9 +5,9 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useProjects, useTasks } from "../api/queries";
 import { useCreateTask } from "../api/mutations";
 import {
-  CAPABILITIES,
   type SelectableCapabilityKey,
   isSelectableCapability,
+  useCapabilities,
 } from "../lib/capabilities";
 import { actionFailedNotice } from "../lib/errors";
 import { useDocumentTitle } from "../lib/title";
@@ -27,9 +27,10 @@ import type { TocUploadHandOff } from "./workspace/TaskAgentPane";
 
 /** Step one: pick a kind of work. Two of the four can run. */
 function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => void }) {
+  const capabilities = useCapabilities();
   return (
     <ul role="list" className="mt-10 flex flex-col">
-      {CAPABILITIES.map((capability) =>
+      {capabilities.map((capability) =>
         capability.available ? (
           <li key={capability.key}>
             <button
@@ -397,7 +398,8 @@ export function NewTaskView() {
   // falls back to the picker rather than rendering a form for work the
   // server would refuse to create.
   const requested = searchParams.get("capability");
-  const picked = isSelectableCapability(requested) ? requested : null;
+  const capabilities = useCapabilities();
+  const picked = isSelectableCapability(requested, capabilities) ? requested : null;
 
   return (
     <main className="mx-auto flex max-w-[1180px] justify-center px-6 pt-11 pb-9 max-md:px-4 max-md:py-6">

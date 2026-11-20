@@ -1,3 +1,5 @@
+import { useFeatureFlagEnabled } from "posthog-js/react";
+
 /**
  * The kinds of work the system can do.
  *
@@ -16,18 +18,19 @@ export const CAPABILITIES = [
     // translation table in between.
     key: "options_scoping",
     name: "Options scoping",
-    // Shown only where VITE_OPTIONS_SCOPING=1 at build time (local dev, staging,
-    // tests). Production builds leave it unset until the capability is complete,
-    // so the entry reads as planned there, like the two below. Delete the flag
-    // once shortlist + assessment land.
+    // The PostHog feature flag `options_scoping` decides this at run time
+    // (`useCapabilities` below). VITE_OPTIONS_SCOPING=1 is only the fallback
+    // for a build with no PostHog token (local dev, tests) and for the moment
+    // before the flags arrive. Delete both once shortlist + assessment land.
     available: import.meta.env.VITE_OPTIONS_SCOPING === "1",
   },
   {
     key: "theory_of_change",
     name: "Theory of change",
-    // Shown only where VITE_THEORY_OF_CHANGE=1 at build time (local dev,
-    // staging, tests), like Options scoping above. Production builds leave it
-    // unset until the capability is complete. Delete the flag then.
+    // The PostHog feature flag `theory_of_change` decides this, with
+    // VITE_THEORY_OF_CHANGE=1 as the fallback, like Options scoping above.
+    // The API has its own switch (POLICY_ATLAS_THEORY_OF_CHANGE) and refuses
+    // to create one while that is off, whatever the flag says.
     available: import.meta.env.VITE_THEORY_OF_CHANGE === "1",
   },
   {
@@ -41,6 +44,28 @@ const LABEL_BY_KEY = new Map<string, string>(
   CAPABILITIES.map((capability) => [capability.key, capability.name]),
 );
 
+/**
+ * The capability list, with PostHog feature flags deciding the flagged entries.
+ *
+ * A flag's key is the capability's key. Each flag gives true or false once
+ * PostHog has answered, and undefined when PostHog is not running, has not
+ * answered yet, or has no flag of that key; the entry then keeps its
+ * environment-variable default from `CAPABILITIES`.
+ *
+ * Returns:
+ *   `CAPABILITIES` with `available` settled for the current person.
+ */
+export function useCapabilities() {
+  const flags: Record<string, boolean | undefined> = {
+    options_scoping: useFeatureFlagEnabled("options_scoping"),
+    theory_of_change: useFeatureFlagEnabled("theory_of_change"),
+  };
+  return CAPABILITIES.map((capability) => ({
+    ...capability,
+    available: flags[capability.key] ?? capability.available,
+  }));
+}
+
 /** One of the keys the New task screen can offer. */
 export type SelectableCapabilityKey = "evidence_search" | "options_scoping" | "theory_of_change";
 
@@ -49,14 +74,17 @@ export type SelectableCapabilityKey = "evidence_search" | "options_scoping" | "t
  *
  * Args:
  *   key: A raw `?capability=` value, or null when the parameter is absent.
+ *   capabilities: The list to check against; pass `useCapabilities()` so
+ *     feature flags count. Defaults to the build-time list.
  *
  * Returns:
  *   Whether the value is one of the selectable keys.
  */
 export function isSelectableCapability(
   key: string | null | undefined,
+  capabilities: readonly { key: string; available: boolean }[] = CAPABILITIES,
 ): key is SelectableCapabilityKey {
-  return CAPABILITIES.some((capability) => capability.key === key && capability.available);
+  return capabilities.some((capability) => capability.key === key && capability.available);
 }
 
 /**
