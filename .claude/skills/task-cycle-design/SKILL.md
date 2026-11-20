@@ -59,9 +59,9 @@ a deviation. So, in conversation A:
    first, then the mock.
    - Direction open: the `prototype` skill (versions of one UI piece behind a picker). It
      runs only when called: the owner types `/prototype`, or the brief tells the `builder`
-     to read `~/.claude/skills/prototype/SKILL.md` first.
+     to load the `prototype` skill first.
    - New frontend dependency needed: `pick-ui-library` (the owner types
-     `/pick-ui-library`, or the agent reads `~/.claude/skills/pick-ui-library/SKILL.md`).
+     `/pick-ui-library`, or the agent loads the skill).
      The dependency still needs owner approval.
 4. **Contract** **pins behaviours, states, interfaces, invariants and measured outcomes,
    and cites the annex by version.** Rubric rows are testable (vitest, the mock journey).
