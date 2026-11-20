@@ -90,13 +90,15 @@ def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
         assert args.env == variables["ENV"]
 
 
-def test_the_role_wrappers_reach_their_own_group_and_direction() -> None:
+def test_the_subject_wrappers_reach_their_own_command_by_email_or_sub() -> None:
     parser = build_parser()
-    for group in ("admin", "ops"):
-        for direction in ("grant", "revoke"):
-            argv = _dry_run(f"{group}-{direction}", ENV="staging", EMAIL="a@b.org")
-            args = parser.parse_args(argv)
-            assert (args.group, args.command) == (group, direction)
+    pairs = [("admin", "grant"), ("admin", "revoke"), ("ops", "grant"), ("ops", "revoke")]
+    pairs += [("user", "deactivate"), ("user", "reactivate")]
+    for group, command in pairs:
+        for subject in (dict(EMAIL="a@b.org"), dict(SUB="sub-1234")):
+            args = parser.parse_args(_dry_run(f"{group}-{command}", ENV="staging", **subject))
+            assert (args.group, args.command) == (group, command)
+            assert (args.email, args.sub) == (subject.get("EMAIL"), subject.get("SUB"))
 
 
 def test_the_wrapper_argv_passes_through_the_parsers_own_normalisation() -> None:

@@ -48,6 +48,8 @@ setup:
 #     confirmation still reaches a human.
 # Usage: make user-create ENV=staging EMAIL=a@b.org NAME="A Name" [ORG="Org"]
 # Omit ORG to create the account in no organisation.
+#        make org-domain-add ENV=staging DOMAIN=b.org ORG="Org"
+#        make user-deactivate ENV=staging EMAIL=a@b.org   (or SUB=<cognito sub>, not both)
 # Optional on every target: OPERATOR="ticket-123" (an annotation; the STS ARN
 # is logged regardless).
 # The wrappers forward through scripts/ops_run.sh to the real CLI

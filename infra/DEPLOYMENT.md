@@ -355,9 +355,10 @@ synth-time context query and must not run before the VPC exists.
      takes **no password**: Cognito emails the invitation. The former
      `make staging-user` / `make prod-user` / `make cognito-user` targets are
      **deleted** — they suppressed the invitation, set a password from argv, and
-     left the account unenrolled. For prod, use `--env prod`, the
-     `PA_OPS_*_PROD` variables and prod-account credentials, not
-     `AWS_PROFILE=pa-dev`.
+     left the account unenrolled. For prod, use `ENV=prod` and
+     `PA_OPS_ACCOUNT_PROD` with the make wrappers (`--env prod` and the
+     `PA_OPS_*_PROD` variables with the direct form) and prod-account
+     credentials, not `AWS_PROFILE=pa-dev`.
 
      **When the invitation email does not arrive**, add `INVITE=manual` (CLI:
      `--invite manual`): the email is
