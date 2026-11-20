@@ -3,13 +3,15 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** revision 5, 2026-11-20. Revision 4 was approved by the owner on 2026-11-20.
+> **Status:** revision 5.1, 2026-11-20. Revision 4 was approved by the owner on 2026-11-20.
 > The contract-stage adversarial review the same day (23 findings; a fresh reader on the
 > lead's model stood in for Codex, which was out of quota) and a second live probe are
 > folded in as revision 5 (§ Contract-stage review). The changes are material, so
 > **Revision 5 approved (before planning): 2026-11-20 · owner**, with O14 and O15 ruled
-> yes · Plan approved (before implementation): _pending_ ·
-> ADR: due at step 4 (the model interface changes) · Branch: `task/063-responses-api`.
+> yes. Revision 5.1 applies the seven corrections of [plan.md](plan.md) § Contract
+> corrections, accepted by the owner with the plan · **Plan approved (before
+> implementation): 2026-11-20 · owner** (draft 2, after its adversarial review) ·
+> ADR: [0050](../../adr/0050-responses-api-one-send-module-carried-reasoning.md) · Branch: `task/063-responses-api`.
 >
 > This is a system-level task: it changes shared code that every capability uses. It runs
 > before the task 059 build, because 059's analyst needs a tool loop with reasoning on.
@@ -83,10 +85,10 @@ commits and ends green, so a difference has one cause.
 
 | Id | Change |
 |---|---|
-| **M10** | An answer cut at the output-token limit and a refusal each raise a named error with the step name, on all three calls (structured, streamed, tool turn). Today the first is an SDK error that is not retried and the second reads "was not parsed". |
+| **M10** | An answer cut at the output-token limit and a refusal each raise a named error that carries the site's label, on all three calls (structured, streamed, tool turn). Today a cut-off is an SDK error at the `.parse` sites, malformed JSON at the other sites, and silently kept by the chat reply stream; a refusal reads "was not parsed". Each site keeps what it does today with such an answer; the chat reply keeps the text already shown (plan decision 4). |
 | **M11** | The chat reply stream counts its tokens. Today it never asks for usage. |
 | **M12** | Tests: the fakes that copy the Chat Completions answer shape move to the Responses shape, or fake the shared module's three calls. The golden request fixture is replaced by the baseline capture and its checks (M4, M7), and covers every step (it misses 17 today and is captured on the legacy route). |
-| **M13** | Scripts under `scripts/` that call the SDK use the shared module, so they send `store=false` too. Two feasibility scripts that already fail on today's helpers are left alone and listed in `docs/deferred.md`. |
+| **M13** | Scripts under `scripts/` that call the SDK use the shared module, so they send `store=false` too. Three scripts that already fail or misbehave today are left as they are and listed in `docs/deferred.md` (plan item P4). |
 | **M14** | No Chat Completions call is left in `backend/src` or `scripts/`. There is no switch between the two endpoints. |
 | **M15** | The Theory of change components spec is corrected in the three places that describe Responses as a second call path or name the `chat.completions.parse` wrapper (spec change 1, accepted by the owner 2026-11-20), with a line in the specs `log.md`. |
 
@@ -94,11 +96,11 @@ commits and ends green, so a difference has one cause.
 
 | Id | Change |
 |---|---|
-| **E1** | **Reasoning is carried between tool turns** (the standard pattern on Responses). The tool-turn call returns the provider's output items for that turn. The tool loop keeps them in memory for the life of that one loop and passes them back unchanged on the next turn, followed by a result for every tool call. A tool call that the loop does not use gets a short fixed "not used" result. The items are never written to the database or to traces. The product's own record of each tool exchange is unchanged. This applies to the section writer's loop and the chat tool turn. If the build finds a case where carried items fail, that loop falls back to today's rebuilt history, which the probe showed works, and the limit is recorded. |
+| **E1** | **Reasoning is carried between tool turns** (the standard pattern on Responses). The tool-turn call returns the provider's output items for that turn. The tool loop keeps them in memory for the life of that one loop and passes them back on the next turn in the form the probe proved (the `status` field removed from items that are not messages), followed by a result for every tool call. A tool call that the loop does not use gets a short fixed "not used" result. The items are never written to the database or to traces. The product's own record of each tool exchange is unchanged. This applies to the section writer's loop and the chat tool turn. If the build finds a case where carried items fail, that loop falls back to today's rebuilt history, which the probe showed works, and the limit is recorded. |
 | **E2** | Ten steps that send `none` today get reasoning (table in § Efforts). |
 | **E3** | **Same effort for steps that share a cached prompt start.** The plan lists, for each raised step, the steps that share its prompt start (from `synthesis/cache_modes.py` and the baseline capture). A partner moves to the same effort, or the plan states the cost of the lost cache and the owner rules. |
 | **E4** | Output limits: where a raised step sends a limit today, the limit rises by 2,048 tokens at `low` and 4,096 at `medium` (reasoning tokens count against the limit). A step that sends no limit stays without one. A limit shared by several steps rises for all of them; a limit is a ceiling, so a step at `none` is not affected. The plan gives the table: step, file, old limit, new limit, and the tokens that one batch reserves against the Bedrock quota. |
-| **E5** | Timeouts: a raised step's timeout becomes the larger of its present value and 60 s (the section writer's tool turn is 25 s on `bedrock` today, sized at `none`). After one week on staging each is re-sized by the rule of ADR 0043 (twice the healthy 99th percentile). No other timeout changes. |
+| **E5** | Timeouts: a raised step's timeout on the `bedrock` route becomes the larger of its present value there and 60 s (the section writer's tool turn is 25 s on `bedrock` today, sized at `none`). After one week on staging each is re-sized by the rule of ADR 0043 (twice the healthy 99th percentile). No other timeout changes. |
 | **E6** | A live tool loop on Sol passes (the section writer's tool turn with a route overlay naming `frontier`). No default route changes. This unblocks the 054 follow-up and task 059. |
 
 ### Part 3: diagnosis
@@ -161,11 +163,12 @@ helper, and 20 request sites build and send their own requests.
 
 After this task, `core/openai_client.py` is the only module that sends a model request.
 
-- **What the module does for every call:** reads the model, effort and timeout of the
-  route step; sets `store=false` and the cache fields; translates the request (M5); traces
-  the attempt; records the request id; reads usage; raises the named errors.
-- **What stays with each call site:** the messages and tools it builds; what it does with
-  each piece of streamed text; its retry rule; its fallback. The plan lists the retry rule
+- **What the module does for every call:** takes the chat-style request the site builds;
+  translates it (M5); sets `store=false`; reads usage; raises the named errors; notes the
+  request id.
+- **What stays with each call site:** the messages and tools it builds; reading the route
+  step's model, effort and timeout; the cache marker; its trace observation; what it does
+  with each piece of streamed text; its retry rule; its fallback. The plan lists the retry rule
   of every site as it is today (most sites try three times; the task agent's stream tries
   twice before its first text; a streamed call whose text the user has seen is not retried).
   These do not change.
@@ -238,8 +241,8 @@ timeout comes from staging (E5); the step timeouts and three attempts of ADR 004
 (E2); request ids on traced attempts (S1). **Left on purpose:** web search for Theory of
 change; invocation logging; short-term Bedrock keys; the three `Retry-After` parsers.
 **Added:** the request to AWS for zero retention (D2); the effort comparison for the
-options scoping steps (O13); the `extract_interventions` timeout; the two broken
-feasibility scripts (M13).
+options scoping steps (O13); the `extract_interventions` timeout; the three broken
+scripts (M13); the chat-style internal request language (O16, added on 2026-11-20).
 
 ## Scope / Out of scope
 
@@ -272,8 +275,10 @@ feasibility scripts (M13).
 - **Prompt hashes.** The guard hashes a pinned file's code, not only its text. The plan
   lists every pinned file the task edits. Known: `grounding_judge.py` (a request site),
   `section_prompt.py` (E1), and the pinned files that hold output limits (E4).
-- **Dependencies:** none new. The pinned `openai>=2.44,<3` has the Responses calls. Two
-  private SDK helpers imported today are replaced by public calls where one exists.
+- **Dependencies:** none new. The pinned `openai>=2.44,<3` has the Responses calls. Of the two
+  private SDK helpers imported today, the Theory of change request builder keeps its one
+  (its builders do not change shape); the other is replaced only if a public call gives the
+  same schema.
 - **No schema, auth, CI, public interface or scaffold change.** If the build finds it needs
   one, it stops.
 - **Stored extraction records** made through Chat Completions are reused after the move.
@@ -313,6 +318,7 @@ All ruled on 2026-11-20.
 | **O13** | The exception to the prompting spec. | Accepted. |
 | **O14** | A change of effort breaks the prompt cache. So the section prose step and the whole `chat` step go to `low` with their tool turns, and `chat` is not split into two steps. | Yes. |
 | **O15** | Carried reasoning (E1), the standard pattern, for the section writer's loop and the chat tool turn. | Yes. |
+| **O16** | The app's internal request language stays chat-style; the module translates at the edge (plan P2). | Yes for this task. The owner calls it a stop-gap: a `docs/deferred.md` entry asks for the app's own request types after task 059. |
 
 ## Contract-stage review
 
@@ -347,7 +353,9 @@ findings were accepted in whole or in part.
 
 ## Rollback
 
-- **An effort (Part 2):** change the step's line in the route file. Nothing else.
+- **An effort (Part 2):** the step's line in the route file, its row in the allowed-differences
+  table of the request check, and a regenerated capture (one command).
+  `synthesise_section_turn` and `synthesise_section_emit` roll back together.
 - **The whole task:** revert the pull request. No stored data changes shape, so a revert is
   safe for data. It stays possible until task 059 or the 054 follow-up builds on the tool
   loop; after that, only efforts roll back.

@@ -879,6 +879,13 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   refinement for the writer and judge; none recorded for the rest.
 - Bedrock hangs: invocation logging would show the provider side, but it stores request bodies.
   Condition: the DPIA (data protection impact assessment) allows stored bodies.
+- The app's internal request language is still the Chat Completions shape (messages, `tools`,
+  `response_format`), and `core/openai_client.py` translates it to the Responses endpoint at the
+  edge. It is a stop-gap: it kept the prompt files untouched and made the endpoint move
+  provable, but features of Responses that the old shape cannot express need a special case
+  each (carried reasoning is the first). Option: the app's own request types for messages, tool
+  calls and results, built by every call site, with the module translating them. Condition:
+  after the task 059 analyst is built, or when a second special case is needed.
 
 ### Limits in the code
 

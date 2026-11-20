@@ -3,7 +3,8 @@
 > **Status:** draft 2, 2026-11-20. Serves [contract.md](contract.md) revision 5 (approved
 > 2026-11-20). The plan-stage adversarial review of draft 1 the same day (20 findings; a
 > fresh reader on the lead's model stood in for Codex, which was out of quota) is folded in
-> (§ Plan-stage review). **Plan approved (before implementation): _pending_.**
+> (§ Plan-stage review). **Plan approved (before implementation): 2026-11-20 · owner**, with
+> P1 to P4 ruled as leaned. ADR: [0050](../../adr/0050-responses-api-one-send-module-carried-reasoning.md).
 > Ids (M, E, S, D, O) and terms are the contract's. This plan stands without the
 > gitignored `research/` folder: the tables a build needs are in it.
 
@@ -312,17 +313,16 @@ Limits and timeouts:
 
 ## Owner items
 
-| Id | Item | Lean |
+| Id | Item | Ruling (2026-11-20: as leaned) |
 |---|---|---|
 | **P1** | **Chat at `low` means five reasoning turns before each reply.** A live chat answer always runs five tool turns, then the reply. At `low` each may think for a second or more, so a reply could start several seconds later than today. The contract's stop rule catches a large rise and the run after Part 2 measures it. | Build as ruled and measure. The fallback is `chat` back to `none`. |
-| **P2** | **The app's internal request language stays chat-style** (decision 1). The module translates at the edge. | Accept. It keeps the prompt files untouched and makes stage 1a provable. |
+| **P2** | **The app's internal request language stays chat-style** (decision 1). The module translates at the edge. | Accepted for this task as a stop-gap. The `docs/deferred.md` entry is written (Model routes and model calls). |
 | **P3** | The corrections in § Contract corrections. | Accept. |
 | **P4** | Three scripts already fail or misbehave today (`snowball_recall.py` raises when an effort is set; `run_screen.py` ignores its effort override; two feasibility scripts fail on the helpers). | Not fixed here; `docs/deferred.md`. Scripts that send a request still move to the module. |
 
 ## Contract corrections
 
-Found while grounding the plan in the code. Applied to the contract as revision 5.1 when
-this plan is approved. Item 6 changes a rollback statement; the others narrow wording.
+Found while grounding the plan in the code. Applied to the contract as revision 5.1. Item 6 changes a rollback statement; the others narrow wording.
 
 1. **§ One way in.** The module sends, translates, sets `store=false`, reads usage, raises
    the named errors and notes the request id. The call site reads the route step's model,
@@ -424,7 +424,7 @@ on a met rule is recorded. **Gate: fast** after 4.3 and 4.4; **full** after 4.6;
 | Task | Executor |
 |---|---|
 | 5.1 `docs/knowledge/bedrock-route-facts.md`: the stall findings; effort and cache; `strict`; stream endings; the retention setting. `make okf-validate`. | lead |
-| 5.2 `docs/deferred.md`: correct the stale stall entries; add the contract's four entries, P4 and the chat-style vocabulary note. | lead |
+| 5.2 `docs/deferred.md`: correct the stale stall entries; add the contract's four entries and P4 (the chat-style vocabulary entry is already there). | lead |
 | 5.3 `verification.md` complete. | lead |
 
 **Step-6 exit gate: full.**
