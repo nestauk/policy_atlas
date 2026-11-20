@@ -1034,7 +1034,7 @@ app's own host.
 | Directive | Sources | Where each source comes from |
 | --- | --- | --- |
 | `default-src` | `'self'` | Anything not listed below. |
-| `script-src` | `'self'`, plus `https://*.captcha.awswaf.com https://*.token.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script `jsapi.js` from `<id>.<id>.<region>.captcha.awswaf.com` (`backend.waf.captcha`), which loads `challenge.js` from `<id>.<id>.<region>.token.awswaf.com`. Never `'unsafe-inline'` or `'unsafe-eval'`. |
+| `script-src` | `'self'`, plus `https://*.<aws_region>.captcha.awswaf.com https://*.<aws_region>.token.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script `jsapi.js` from `<id>.<id>.<region>.captcha.awswaf.com` (`backend.waf.captcha`), which loads `challenge.js` from `<id>.<id>.<region>.token.awswaf.com`. Never `'unsafe-inline'` or `'unsafe-eval'`. |
 | `style-src` | `'self' 'unsafe-inline'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. The CAPTCHA's font stylesheet. |
 | `img-src` | `'self' data: blob:` | Upload previews (`blob:`) and theory-of-change image exports (`data:`). |
 | `font-src` | `'self'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The self-hosted fonts under `/fonts/`; the font files that the CAPTCHA stylesheet names. |
@@ -1064,8 +1064,11 @@ synth`, which the deploy runs before it changes anything in AWS.
 **The manual pass.** There is no report collector, so the browser console is
 the only place a violation shows. Run the pass after the first deploy in
 report-only mode, again after the switch to enforce, and again whenever a
-change adds a third-party library, script or host. In Chrome, open the
-developer console, turn on "Preserve log", and sign in.
+change adds a third-party library, script or host. In Chrome, open an
+Incognito window (browser extensions add their own `font-src` lines in a
+normal profile), open the developer console, turn on "Preserve log", and
+sign in. To keep the whole log, right-click in the console and select
+"Save as…".
 
 1. **First, the proof.** In the console, run `fetch("https://example.com")`.
    In report-only mode it must print a "[Report Only]" line naming

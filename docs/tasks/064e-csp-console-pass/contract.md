@@ -3,7 +3,8 @@
 A small follow-up to [064c](../064c-csp/contract.md): the staging console pass in report-only
 mode, and the CSP sources it shows are missing.
 
-> **Status:** drafted 2026-11-20. Contract approved: _date · who_. ADR: none (inside
+> **Status:** approved 2026-11-20 · owner (in chat: "commit and run /code-review and
+> /security-review, then commit again and push, open a PR"). ADR: amendment to ADR 0048 (inside
 > [ADR 0048](../../adr/0048-content-security-policy-and-security-headers-on-cloudfront.md):
 > "adding a source" is in its scope).
 
@@ -60,10 +61,13 @@ In Chrome on `https://v3.policyatlas.uk`: open the developer console (Cmd+Option
 Policy.
 
 - [x] Proof: `fetch("https://example.com")` prints a report-only `connect-src` line.
-- [ ] Splash page.
-- [ ] Waitlist: submit, solve the puzzle, then the audio option. (First try on 2026-11-20 hit
+Ticked items were covered on 2026-11-20 (Incognito). The unticked ones are not confirmed yet;
+they must be done in the pass after this PR is deployed, before the switch to enforce.
+
+- [x] Splash page.
+- [x] Waitlist: submit, solve the puzzle, then the audio option. (First try on 2026-11-20 hit
       a staging deploy: the API returned 503, so the submit did not finish.)
-- [ ] Sign-in on `auth.v3.policyatlas.uk`, with the authenticator code; sign-out. Also
+- [x] Sign-in on `auth.v3.policyatlas.uk`, with the authenticator code; sign-out. Also
       record every console error on the Cognito pages (any kind, not only CSP). Our CSP
       does not apply there, so a fix is in the Cognito setup (for example the branding in
       `infra/branding/`), and it may be a separate task.
@@ -80,21 +84,19 @@ Policy.
 
 | # | Page | Blocked address | Directive | Fix |
 |---|---|---|---|---|
-| 1 | Waitlist | `https://<id>.<id>.eu-west-2.captcha.awswaf.com/<id>/jsapi.js` | `script-src` | add `https://*.captcha.awswaf.com` |
-| 2 | Waitlist | `https://<id>.<id>.eu-west-2.token.awswaf.com/<id>/challenge.js` | `script-src` | add `https://*.token.awswaf.com` |
+| 1 | Waitlist | `https://<id>.<id>.eu-west-2.captcha.awswaf.com/<id>/jsapi.js` | `script-src` | add `https://*.eu-west-2.captcha.awswaf.com` |
+| 2 | Waitlist | `https://<id>.<id>.eu-west-2.token.awswaf.com/<id>/challenge.js` | `script-src` | add `https://*.eu-west-2.token.awswaf.com` |
 | 3 | Waitlist | `https://static.captcha.awswaf.com/fonts/AmazonEmberLt/stylesheet.css` | `style-src` | add `https://static.captcha.awswaf.com` |
-| 4 | Waitlist | the stylesheet's `AmazonEmber-Light.woff2` (not seen yet: a browser loads a font only when text uses it) | `font-src` | add `https://static.captcha.awswaf.com` |
+| 4 | Waitlist | the stylesheet's `AmazonEmber-Light.woff2` (not seen in the console, because a browser loads a font only when text uses it; the stylesheet, read with `curl`, names it by a relative path, so it is on `static.captcha.awswaf.com`) | `font-src` | add `https://static.captcha.awswaf.com` |
 | 5 | Waitlist, audio puzzle | `data:audio/aac;base64,…` | `media-src` (falls back to `default-src`) | add `media-src 'self' data:` when the CAPTCHA is on |
 
 All five are fixed in `security_headers.py`; `https://*.captcha-sdk.awswaf.com` is removed
-(nothing used it). Incognito pass 2026-11-20: no other CSP line on the waitlist, sign-in and
-app pages.
+(nothing used it). The `script-src` sources are pinned to the stack's region. Incognito pass
+2026-11-20: no other CSP line on the splash, waitlist and sign-in pages.
 
 Findings 1 and 2: 064c allowed `https://*.captcha-sdk.awswaf.com`, but the script address the
-deploy gives the frontend (`VITE_WAF_CAPTCHA_SCRIPT_URL`) is on `captcha.awswaf.com`. So
-`https://*.captcha-sdk.awswaf.com` is probably not needed; remove it if the pass shows no use.
-Finding 3 suggests the puzzle also loads fonts from `static.captcha.awswaf.com` (`font-src`);
-the full waitlist run will show it.
+deploy gives the frontend (`VITE_WAF_CAPTCHA_SCRIPT_URL`, from the WAF
+`ApplicationIntegrationURL`) is on `captcha.awswaf.com`.
 
 Console pass 1 (2026-11-20, normal Chrome profile with extensions):
 

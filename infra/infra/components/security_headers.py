@@ -35,14 +35,19 @@ def content_security_policy(
         waf_captcha: Whether the API firewall shows AWS WAF CAPTCHA puzzles.
 
     Returns:
-        The complete CSP header value in the contract's directive order.
+        The complete CSP header value. ``media-src`` is present only when the
+        CAPTCHA is on.
     """
-    # The CAPTCHA loads jsapi.js from <id>.<region>.captcha.awswaf.com, which loads
-    # challenge.js from <id>.<region>.token.awswaf.com and a font stylesheet (and its
+    # The CAPTCHA loads jsapi.js from <id>.<id>.<region>.captcha.awswaf.com, which loads
+    # challenge.js from <id>.<id>.<region>.token.awswaf.com and a font stylesheet (and its
     # fonts) from static.captcha.awswaf.com; the audio puzzle plays a data: clip. Its
-    # own network calls may use other awswaf.com hosts.
+    # own network calls may use other awswaf.com hosts. The web ACL is in the stack's
+    # region, which is also the Cognito region.
     waf_script_source = (
-        " https://*.captcha.awswaf.com https://*.token.awswaf.com" if waf_captcha else ""
+        f" https://*.{cognito_region}.captcha.awswaf.com"
+        f" https://*.{cognito_region}.token.awswaf.com"
+        if waf_captcha
+        else ""
     )
     waf_static_source = " https://static.captcha.awswaf.com" if waf_captcha else ""
     waf_source = " https://*.awswaf.com" if waf_captcha else ""

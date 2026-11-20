@@ -32,7 +32,8 @@ from tests.unit.test_synth import (
 
 STAGING_CSP = (
     "default-src 'self'; "
-    "script-src 'self' https://*.captcha.awswaf.com https://*.token.awswaf.com; "
+    "script-src 'self' https://*.eu-west-2.captcha.awswaf.com "
+    "https://*.eu-west-2.token.awswaf.com; "
     "style-src 'self' 'unsafe-inline' https://static.captcha.awswaf.com; "
     "img-src 'self' data: blob:; font-src 'self' https://static.captcha.awswaf.com; "
     "media-src 'self' data:; "
@@ -137,8 +138,12 @@ def test_s1_to_s4_report_only_properties_match_each_environment_config():
         }
         assert "ContentSecurityPolicy" not in security
         assert ("https://*.awswaf.com" in csp) is waf_captcha
-        assert ("https://*.captcha.awswaf.com" in csp.split("; ")[1]) is waf_captcha
-        assert ("media-src 'self' data:" in csp) is waf_captcha
+        directives = dict(d.split(" ", 1) for d in csp.split("; "))
+        assert ("https://*.eu-west-2.captcha.awswaf.com" in directives["script-src"]) is waf_captcha
+        assert ("https://*.eu-west-2.token.awswaf.com" in directives["script-src"]) is waf_captcha
+        for name in ("style-src", "font-src"):
+            assert ("https://static.captcha.awswaf.com" in directives[name]) is waf_captcha
+        assert (directives.get("media-src") == "'self' data:") is waf_captcha
 
 
 def test_s3_enforce_uses_the_built_in_csp_header_only():
