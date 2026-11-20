@@ -1034,11 +1034,12 @@ app's own host.
 | Directive | Sources | Where each source comes from |
 | --- | --- | --- |
 | `default-src` | `'self'` | Anything not listed below. |
-| `script-src` | `'self'`, plus `https://*.captcha-sdk.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script, which loads from `<id>.<region>.captcha-sdk.awswaf.com` (`backend.waf.captcha`). Never `'unsafe-inline'` or `'unsafe-eval'`. |
-| `style-src` | `'self' 'unsafe-inline'` | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. |
+| `script-src` | `'self'`, plus `https://*.<aws_region>.captcha-sdk.awswaf.com https://*.<aws_region>.captcha.awswaf.com https://*.<aws_region>.token.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script `jsapi.js` (`backend.waf.captcha`). The page asks for it at the integration URL `<id>.<region>.captcha-sdk.awswaf.com`, which redirects (307) to `<id>.<id>.<region>.captcha.awswaf.com`; a CSP checks both. `jsapi.js` loads `challenge.js` from `<id>.<id>.<region>.token.awswaf.com`. Never `'unsafe-inline'` or `'unsafe-eval'`. |
+| `style-src` | `'self' 'unsafe-inline'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. The CAPTCHA's font stylesheet. |
 | `img-src` | `'self' data: blob:` | Upload previews (`blob:`) and theory-of-change image exports (`data:`). |
-| `font-src` | `'self'` | The self-hosted fonts under `/fonts/`. |
-| `connect-src` | `'self'`, `https://<backend_subdomain>.<domain_name>`, `https://cognito-idp.<aws_region>.amazonaws.com`, `https://<cognito_domain_prefix>.auth.<aws_region>.amazoncognito.com`, plus `https://*.awswaf.com` when the CAPTCHA is on | The API (including the progress stream); the Cognito sign-in settings; the Cognito token exchange and refresh; the CAPTCHA's own calls. |
+| `font-src` | `'self'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The self-hosted fonts under `/fonts/`; the font files that the CAPTCHA stylesheet names. |
+| `media-src` | `'self' data:`, only when the CAPTCHA is on | The audio puzzle plays its clip from a `data:` address. Without the CAPTCHA, `default-src` covers media. |
+| `connect-src` | `'self'`, `https://<backend_subdomain>.<domain_name>`, `https://cognito-idp.<aws_region>.amazonaws.com`, `https://<cognito_domain_prefix>.auth.<aws_region>.amazoncognito.com`, plus the same three regional CAPTCHA hosts as `script-src` when the CAPTCHA is on | The API (including the progress stream); the Cognito sign-in settings; the Cognito token exchange and refresh; the CAPTCHA's own calls (`problem` and `verify` on the captcha host; `inputs`, `mp_verify`, `telemetry` and `voucher` on the token host; `captcha-sdk` in case the script fetches from its own address). |
 | `frame-src` | `'self'`, the Cognito hosted domain | The sign-in library's hidden-frame fallback: the frame opens the Cognito domain, which sends it back to our own address. |
 | `frame-ancestors` | `'self'` | Who may show our page in a frame (same as `X-Frame-Options`). |
 | `form-action` | `'self'` | Where a form may post. |
@@ -1063,8 +1064,11 @@ synth`, which the deploy runs before it changes anything in AWS.
 **The manual pass.** There is no report collector, so the browser console is
 the only place a violation shows. Run the pass after the first deploy in
 report-only mode, again after the switch to enforce, and again whenever a
-change adds a third-party library, script or host. In Chrome, open the
-developer console, turn on "Preserve log", and sign in.
+change adds a third-party library, script or host. In Chrome, open an
+Incognito window (browser extensions add their own `font-src` lines in a
+normal profile), open the developer console, turn on "Preserve log", and
+sign in. To keep the whole log, right-click in the console and select
+"Save as…".
 
 1. **First, the proof.** In the console, run `fetch("https://example.com")`.
    In report-only mode it must print a "[Report Only]" line naming

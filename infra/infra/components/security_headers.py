@@ -35,20 +35,35 @@ def content_security_policy(
         waf_captcha: Whether the API firewall shows AWS WAF CAPTCHA puzzles.
 
     Returns:
-        The complete CSP header value in the contract's directive order.
+        The complete CSP header value. ``media-src`` is present only when the
+        CAPTCHA is on.
     """
-    # The CAPTCHA script comes from <id>.<region>.captcha-sdk.awswaf.com (read
-    # from staging 2026-11-19); its own network calls may use other awswaf.com hosts.
-    waf_script_source = " https://*.captcha-sdk.awswaf.com" if waf_captcha else ""
-    waf_source = " https://*.awswaf.com" if waf_captcha else ""
+    # The page asks for jsapi.js at the WAF integration URL,
+    # <id>.<region>.captcha-sdk.awswaf.com, which redirects (307) to
+    # <id>.<id>.<region>.captcha.awswaf.com; a CSP checks both addresses. jsapi.js loads
+    # challenge.js from <id>.<id>.<region>.token.awswaf.com and a font stylesheet (and its
+    # fonts) from static.captcha.awswaf.com; the audio puzzle plays a data: clip. Its calls
+    # (problem, verify, inputs, mp_verify, telemetry, voucher) go to the captcha and token
+    # hosts; connect-src also lists captcha-sdk in case jsapi.js fetches from it.
+    # Every CAPTCHA host is in the stack's region (passed in as cognito_region).
+    waf_source = (
+        f" https://*.{cognito_region}.captcha-sdk.awswaf.com"
+        f" https://*.{cognito_region}.captcha.awswaf.com"
+        f" https://*.{cognito_region}.token.awswaf.com"
+        if waf_captcha
+        else ""
+    )
+    waf_static_source = " https://static.captcha.awswaf.com" if waf_captcha else ""
     cognito_issuer = f"https://cognito-idp.{cognito_region}.amazonaws.com"
     hosted_domains = " ".join(cognito_hosted_domains)
+    media = ("media-src 'self' data:",) if waf_captcha else ()
     return "; ".join((
         "default-src 'self'",
-        f"script-src 'self'{waf_script_source}",
-        "style-src 'self' 'unsafe-inline'",
+        f"script-src 'self'{waf_source}",
+        f"style-src 'self' 'unsafe-inline'{waf_static_source}",
         "img-src 'self' data: blob:",
-        "font-src 'self'",
+        f"font-src 'self'{waf_static_source}",
+        *media,
         (
             f"connect-src 'self' {api_origin} {cognito_issuer} "
             f"{hosted_domains}{waf_source}"
