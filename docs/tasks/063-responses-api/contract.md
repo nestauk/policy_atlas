@@ -338,8 +338,8 @@ Halt and escalate when:
 - **Live, `bedrock` route** (scope: every capability has a model call, so one full run of
   each; about 40 minutes of wall time in total, named here so the gate approves it):
   - one Evidence search run on the fixed question, before and after Part 1: stage wall
-    times, cost and cached-token share for each step, side by side; the owner reads both
-    reports;
+    times, cost and cached-token share for each step, side by side; the build's lead compares the two reports and flags any
+    difference in kind (a missing section, uncited claims), not wording;
   - one options scoping run to the shortlist; one Theory of change draft and report (smoke
     only); one chat turn that uses a tool; one task agent turn.
 - **E2:** each raised step sends the effort in § Efforts (the golden request fixture shows it);
