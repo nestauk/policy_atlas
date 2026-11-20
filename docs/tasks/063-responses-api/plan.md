@@ -4,7 +4,7 @@
 > 2026-11-20). The plan-stage adversarial review of draft 1 the same day (20 findings; a
 > fresh reader on the lead's model stood in for Codex, which was out of quota) is folded in
 > (§ Plan-stage review). **Plan approved (before implementation): 2026-11-20 · owner**, with
-> P1 to P4 ruled as leaned. ADR: [0050](../../adr/0050-responses-api-one-send-module-carried-reasoning.md).
+> P1 to P4 ruled as leaned; M16 (the chat reply retry) added the same day at the owner's request. ADR: [0050](../../adr/0050-responses-api-one-send-module-carried-reasoning.md).
 > Ids (M, E, S, D, O) and terms are the contract's. This plan stands without the
 > gitignored `research/` folder: the tables a build needs are in it.
 
@@ -83,7 +83,7 @@ Reading the route file, the cache marker, tracing, the retry rule and the fallba
 module sends, translates (from 1b), sets `store=false`, reads usage, raises the two named
 errors and notes the request id.
 
-### 3. The 20 request sites and their retry rules (unchanged by this task)
+### 3. The 20 request sites and their retry rules (unchanged by this task, except site 17)
 
 "TA" is `tracing.traced_attempts`: three attempts, retrying only failures that
 `tracing._retryable` accepts.
@@ -106,7 +106,7 @@ errors and notes the request id.
 | 14 | `write_full_report_intro_stream._stream` | intro, normal path | `stream_turn` | one attempt; fallback #13 |
 | 15 | `grounding_judge.py` `_judge_once` | `judge_grounding` | `parse_structured` | TA |
 | 16 | `chat_backend_openai.py` `_tool_turn_once` | `chat` tool turn | `send_turn` | TA; no tool call raises, not retried |
-| 17 | `_stream_then_parse` | `chat` reply stream | `stream_turn` | none; a failure leaves `chat_turn` |
+| 17 | `_stream_then_parse` | `chat` reply stream | `stream_turn` | none today; a failure leaves `chat_turn`. **Changed by M16 in task 3.2:** two attempts, retry only before the first text piece, the rule of site 19 |
 | 18 | `_parse_once` | `chat` final parse | `parse_structured` | TA; on a prose mismatch keep the streamed prose, drop claims |
 | 19 | `runtime/task_agent.py` `_stream_attempt._call` | the three task agent steps, streamed | `stream_turn` | local loop, two attempts, retry only before the first decoded reply text |
 | 20 | `theory_of_change/backend.py` `_stream_parse.pieces` | `toc_draft`, `toc_report` | `stream_turn` | one attempt; any failure is `StreamFailed`; the callers fall back once to `traced_parse` |
@@ -395,7 +395,7 @@ Done when: M7 passes for every step and variant; the one-way-in test passes; no 
 | Task | Executor |
 |---|---|
 | 3.1 `AnswerCutOff` and `ModelRefusal` from all three calls; each site's handling per decision 4; one test for each call and error, and one for the chat reply keeping its text. | deep-reasoner |
-| 3.2 The chat reply stream records usage and opens a trace observation (M11); `NOT_WRAPPED` updated. | deep-reasoner |
+| 3.2 The chat reply stream records usage and opens a trace observation (M11); `NOT_WRAPPED` updated. It is tried again before its first text piece, reusing the rule and wait of site 19's loop (M16); tests for a retry before text and none after. | deep-reasoner |
 | 3.3 `request_id_scope()`, its use in `traced_attempts` and at the seven sites of decision 8; tests: an attempt with no response shows no id; an id set on a copied-context thread is seen. | deep-reasoner |
 | 3.4 Spec change 1 in the three places of the Theory of change components spec, with the `log.md` line (M15). | lead |
 | 3.5 **The after run** (the same four items as 0.2, plus one Theory of change draft and report) and the comparison with 0.2. The token match against the audit log, call by call, by request id; streamed calls through their stream-end event; calls with no response listed and excluded. Read with the `pa-prod` read-only sign-in the owner already has. | lead runs; builder adapts the join script, which stays in `research/` |
@@ -424,7 +424,7 @@ on a met rule is recorded. **Gate: fast** after 4.3 and 4.4; **full** after 4.6;
 | Task | Executor |
 |---|---|
 | 5.1 `docs/knowledge/bedrock-route-facts.md`: the stall findings; effort and cache; `strict`; stream endings; the retention setting. `make okf-validate`. | lead |
-| 5.2 `docs/deferred.md`: correct the stale stall entries; add the contract's four entries and P4 (the chat-style vocabulary entry is already there). | lead |
+| 5.2 `docs/deferred.md`: remove the chat reply retry entry (done by M16); correct the stale stall entries; add the contract's four entries and P4 (the chat-style vocabulary entry is already there). | lead |
 | 5.3 `verification.md` complete. | lead |
 
 **Step-6 exit gate: full.**

@@ -31,6 +31,8 @@ Part 1:
         a test; "first content" is the first text piece.
 14. [ ] **M10:** a cut-off and a refusal each raise a named error, tested on each of the
         three calls.
+14a. [ ] **M16:** the chat reply stream is retried before its first text piece and never
+        after it, shown by a test.
 15. [ ] **M9, M11:** token counts match the audit log call by call for the after run, the
         chat reply stream included.
 16. [ ] **Same results:** no prompt text, model, effort or output limit changed in Part 1;

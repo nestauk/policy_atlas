@@ -3,13 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** revision 5.1, 2026-11-20. Revision 4 was approved by the owner on 2026-11-20.
+> **Status:** revision 5.2, 2026-11-20. Revision 4 was approved by the owner on 2026-11-20.
 > The contract-stage adversarial review the same day (23 findings; a fresh reader on the
 > lead's model stood in for Codex, which was out of quota) and a second live probe are
 > folded in as revision 5 (§ Contract-stage review). The changes are material, so
 > **Revision 5 approved (before planning): 2026-11-20 · owner**, with O14 and O15 ruled
 > yes. Revision 5.1 applies the seven corrections of [plan.md](plan.md) § Contract
-> corrections, accepted by the owner with the plan · **Plan approved (before
+> corrections, accepted by the owner with the plan; revision 5.2 adds M16 at the owner's request · **Plan approved (before
 > implementation): 2026-11-20 · owner** (draft 2, after its adversarial review) ·
 > ADR: [0050](../../adr/0050-responses-api-one-send-module-carried-reasoning.md) · Branch: `task/063-responses-api`.
 >
@@ -81,7 +81,7 @@ commits and ends green, so a difference has one cause.
 | **M8** | The stream reader handles each way a stream can end: `response.completed` gives text and usage; `response.incomplete` raises the cut-off error (M10) and still records usage; `response.failed` or `error` raises a provider error that follows the site's retry rule; a stream that stops with no final event is a connection error. "First content" (the task agent's retry rule, the Theory of change watchdog) means the first text piece, not the first event: lifecycle events arrive in about 0.4 s, before any text. |
 | **M9** | `core/usage.py` reads the Responses usage fields (input, output, cached, cache-write, reasoning tokens). Cost reports and Langfuse traces show the same numbers as before for the same call. |
 
-**Stage 1c: two fixes and the clean-up.**
+**Stage 1c: three fixes and the clean-up.**
 
 | Id | Change |
 |---|---|
@@ -91,6 +91,7 @@ commits and ends green, so a difference has one cause.
 | **M13** | Scripts under `scripts/` that call the SDK use the shared module, so they send `store=false` too. Three scripts that already fail or misbehave today are left as they are and listed in `docs/deferred.md` (plan item P4). |
 | **M14** | No Chat Completions call is left in `backend/src` or `scripts/`. There is no switch between the two endpoints. |
 | **M15** | The Theory of change components spec is corrected in the three places that describe Responses as a second call path or name the `chat.completions.parse` wrapper (spec change 1, accepted by the owner 2026-11-20), with a line in the specs `log.md`. |
+| **M16** | The chat reply stream is tried again when it fails before its first text piece, by the rule the planning stream already uses (two attempts, only for failures the tracing code calls retryable). Once any text has been shown it is never retried. Today a connection error before the first word fails the whole answer. Takes in a `docs/deferred.md` "Now" entry (owner ruling 2026-11-20). |
 
 ### Part 2: reasoning with tools
 
@@ -238,7 +239,7 @@ timeout comes from staging (E5); the step timeouts and three attempts of ADR 004
 - `research/call-site-inventory.md` and `research/adversarial-review-contract.md`.
 
 **Deferred work taken in** (`docs/deferred.md`): the writer's `reasoning_effort="none"` limit
-(E2); request ids on traced attempts (S1). **Left on purpose:** web search for Theory of
+(E2); request ids on traced attempts (S1); the chat reply stream's missing retry (M16). **Left on purpose:** web search for Theory of
 change; invocation logging; short-term Bedrock keys; the three `Retry-After` parsers.
 **Added:** the request to AWS for zero retention (D2); the effort comparison for the
 options scoping steps (O13); the `extract_interventions` timeout; the three broken
@@ -387,6 +388,8 @@ Halt and escalate when:
 - **M7:** after stage 1b, every step passes the content check against the baseline capture,
   `store=false` included.
 - **M2, M13, M14:** the one-way-in test passes for `backend/src` and `scripts/`.
+- **M16:** a test shows the chat reply is tried again after a retryable failure before its
+  first text piece, and is not tried again after one.
 - **M8, M10:** one test for each stream ending, and one cut-off test and one refusal test
   for each of the three calls.
 - **Live, `bedrock` route, after Part 1** (about 40 minutes of wall time, from a laptop):
