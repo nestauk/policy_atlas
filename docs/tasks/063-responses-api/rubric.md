@@ -44,6 +44,6 @@ Slice-specific:
 21. [ ] **M12:** `core/openai_client.py` is the only module in `backend/src` that calls the
         SDK, proven by a test; each call site kept its own stream handling, retry rule and
         fallback.
-22. [ ] **D2:** `verification.md` states whether the account's zero-data-retention setting
-        was in place at the production deploy (an owner action; it does not block the task).
+22. [ ] **D2:** the request to AWS for zero data retention on the GPT-6 models is an entry in
+        `docs/deferred.md`; no account setting was changed by this task.
 23. [ ] **M13:** spec change 1 is applied, with its line in the specs `log.md`.

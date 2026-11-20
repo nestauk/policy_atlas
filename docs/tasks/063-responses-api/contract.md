@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** revision 3, 2026-11-20: the owner's rulings of that day are folded in
+> **Status:** revision 4, 2026-11-20: the owner's rulings of that day are folded in
 > (§ Owner items). Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: due at step 4 (the model
 > interface changes) · Branch: `task/063-responses-api`.
@@ -92,8 +92,8 @@ tuning, or an AWS support case. The deployed apps show no fault to remedy.
 | Id | Change |
 |---|---|
 | **D1** | On Responses, Bedrock stores the input and output of a call for 30 days unless the call says `store=false`. With a `global.` profile the stored copy sits in the Region that served the call. Chat Completions has no such default. So M6 is a data-protection control, not a style choice. |
-| **D2** | AWS says `store=false` alone "does not guarantee zero data retention" and offers an account setting (retention mode `none`) for each Region. Owner ruling 2026-11-20: the production account is set to zero data retention. This is an owner action on the AWS account, not this task's code. It does not block the build, the pull request or the merge; `store=false` on every call (M6) is the control this task ships. `verification.md` records whether the setting was in place at the time of the production deploy. |
-| **D3** | The owner updates the DPIA (Data Protection Impact Assessment) notes with: the Responses endpoint; the Regions that served our calls in the last 14 days (Luna in us-west-2, Terra and Sol in us-east-1, all 112,264 calls); and that traffic flagged by the provider's abuse checks can be kept for up to 30 days. |
+| **D2** | AWS says `store=false` alone "does not guarantee zero data retention" and offers an account setting (retention mode `none`). **That setting cannot be used today.** It was tried on 2026-11-20 and Bedrock then refused every GPT-6 call ("data retention mode 'none' is not available for this model"); it was reverted within minutes. AWS grants zero retention for such models to an account, model by model, on request to the AWS account manager. Owner ruling 2026-11-20: no account setting for now; `store=false` on every call (M6) is the control. The request to AWS stays open as an entry in `docs/deferred.md`. |
+| **D3** | The owner updates the DPIA (Data Protection Impact Assessment) notes with: that account-level zero retention is not available for these models without a grant from AWS; the Responses endpoint; the Regions that served our calls in the last 14 days (Luna in us-west-2, Terra and Sol in us-east-1, all 112,264 calls); and that traffic flagged by the provider's abuse checks can be kept for up to 30 days. |
 
 ## Efforts (E2): the 21 steps that send `none` today
 
@@ -255,9 +255,7 @@ parsers.
 - **Runtime egress (gate, hit).** Project data goes to the same provider and host, on a new
   endpoint path with a different storage default. Approval of this contract approves the
   endpoint with `store=false` on every call (M6).
-- **Production config (approved by owner ruling O7).** The account retention mode is an AWS
-  setting, changed by a person with that access, not by this task's code. It does not
-  block this task.
+- **Production config:** none. The account retention setting is not changed (D2).
 - **Prompt hashes.** At least 3 pinned files change code and need a re-pin
   (`section_prompt.py`, `import_prompt.py`, `grounding_judge.py`); 4 more if
   `parse_structured`'s signature changes. The `ChatCompletionMessageParam` annotation on
@@ -298,7 +296,7 @@ All ruled on 2026-11-20 unless marked open.
 | **O4** | Which `none` steps to raise. | § Efforts: nine steps or call sites; key findings at `medium`, the rest at `low`. No replays; the build's lead judges from the live checks. |
 | **O5** | Fix the two defects found on the way (M7, M8)? | Yes. |
 | **O6** | Reuse stored extraction records made through Chat Completions? | Yes. |
-| **O7** | Data retention. | The account is set to zero data retention (an owner action that does not block this task), and every call sends `store=false` as well (D1, D2). The owner updates the DPIA notes (D3). |
+| **O7** | Data retention. | Every call sends `store=false` (D1). No account-level setting for now: it blocks the GPT-6 models (D2). The owner updates the DPIA notes (D3). |
 | **O8** | Build no stall remedy and send no AWS support case, given § Stalls. | Treated as settled by the evidence; the owner did not object. |
 | **O9** | Theory of change: the endpoint moves; nothing else of the colleague's changes. | Agreed. The owner tells the colleague before the build. |
 | **O10** | Find why laptop connections stall. Outside this task. | Optional. |
