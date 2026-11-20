@@ -10,13 +10,14 @@ from langfuse import Langfuse
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import openai_kwargs, require_parsed, resolve_openai_client
-from policy_atlas.core.usage import (
-    UsageResult,
-    token_usage_from_provider,
-    usage_details,
-    usage_metadata,
+from policy_atlas.core.openai_client import (
+    openai_kwargs,
+    parse_structured,
+    resolve_openai_client,
+    send_turn,
+    stream_turn,
 )
+from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.evidence_search.synthesis.section_prompt import (
     LOOKUP_TOOL_SCHEMA,
@@ -132,10 +133,11 @@ class OpenAIChatBackend(ChatBackend):
     def _tool_turn_once(
         self, messages: list[dict[str, Any]], max_output_tokens: int | None
     ) -> UsageResult[ChatTurn]:
-        completions: Any = self._client.chat.completions
         # The reasoning-effort pin the chat model needs (Terra refuses function
         # tools without it) comes from the route file.
-        response = completions.create(
+        turn = send_turn(
+            self._client,
+            label="chat tool turn",
             **_chat_kwargs(),
             messages=messages,
             tools=_CHAT_READ_TOOL_SCHEMAS,
@@ -143,30 +145,14 @@ class OpenAIChatBackend(ChatBackend):
             tool_choice="required",
             max_completion_tokens=max_output_tokens,
         )
-        if not response.choices:
-            raise RuntimeError("OpenAI chat tool turn returned no choices.")
-        calls = response.choices[0].message.tool_calls or []
-        if not calls:
+        if not turn.tool_calls:
             raise RuntimeError("OpenAI chat tool turn returned no tool calls.")
         parsed_calls: list[dict[str, Any]] = []
-        for call in calls:
-            function = call.function
-            name = function.name
-            if not isinstance(name, str) or not name:
+        for call in turn.tool_calls:
+            if not call.name:
                 raise RuntimeError("OpenAI chat tool turn returned an unnamed tool call.")
-            arguments = function.arguments
-            parsed_calls.append(
-                {
-                    "tool": name,
-                    "arguments": _json_object(
-                        arguments if isinstance(arguments, str) else "{}"
-                    ),
-                }
-            )
-        return (
-            {"answer": None, "tool_calls": parsed_calls},
-            token_usage_from_provider(response.usage),
-        )
+            parsed_calls.append({"tool": call.name, "arguments": _json_object(call.arguments)})
+        return {"answer": None, "tool_calls": parsed_calls}, turn.usage
 
     def _stream_then_parse(
         self,
@@ -175,7 +161,6 @@ class OpenAIChatBackend(ChatBackend):
         max_output_tokens: int | None,
         on_delta: Callable[[str], None] | None,
     ) -> UsageResult[ChatTurn]:
-        completions: Any = self._client.chat.completions
         # The prose stream is schema-free, and the system prompt describes the
         # structured answer shape — without this steering the model appends
         # the citations/claims JSON as text.
@@ -191,19 +176,18 @@ class OpenAIChatBackend(ChatBackend):
                 ),
             },
         ]
-        stream = completions.create(
+        stream = stream_turn(
+            self._client,
+            label="chat reply",
             **_chat_kwargs(),
             messages=prose_messages,
-            stream=True,
             max_completion_tokens=max_output_tokens,
         )
         prose_parts: list[str] = []
-        for chunk in stream:
-            text = _stream_text(chunk)
-            if text:
-                prose_parts.append(text)
-                if on_delta is not None:
-                    on_delta(text)
+        for text in stream:
+            prose_parts.append(text)
+            if on_delta is not None:
+                on_delta(text)
         prose = "".join(prose_parts)
         structured_messages = [
             *messages,
@@ -218,13 +202,18 @@ class OpenAIChatBackend(ChatBackend):
         ]
 
         def _parse_once() -> UsageResult[ChatTurn]:
-            response = completions.parse(
-                **_chat_kwargs(),
+            answer, usage = parse_structured(
+                self._client,
                 messages=structured_messages,
                 response_format=ChatAnswerWire,
+                usage_event="chat.final_answer.usage",
+                label="chat final answer",
+                model=CHAT_MODEL,
+                reasoning_effort=route().effort_for("chat"),
+                prompt_cache=cache_mode_for("chat"),
+                timeout_s=route().timeout_for("chat"),
                 max_completion_tokens=max_output_tokens,
             )
-            answer = require_parsed(response, label="chat final answer")
             if answer.prose != prose:
                 # The streamed prose is what the user saw. Keeping it as the
                 # durable prose avoids a silent post-stream rewrite; claims that
@@ -235,9 +224,7 @@ class OpenAIChatBackend(ChatBackend):
                     claims=[],
                     evidence_not_held=answer.evidence_not_held,
                 )
-            return {"answer": answer, "tool_calls": []}, token_usage_from_provider(
-                response.usage
-            )
+            return {"answer": answer, "tool_calls": []}, usage
 
         return self._attempts(_parse_once, messages=structured_messages)
 
@@ -299,13 +286,3 @@ def _json_object(value: str) -> dict[str, Any]:
     except (TypeError, ValueError):
         return {}
     return decoded if isinstance(decoded, dict) else {}
-
-
-def _stream_text(chunk: Any) -> str:
-    """Extract one text fragment from an SDK streaming chunk."""
-    choices = getattr(chunk, "choices", None)
-    if not choices:
-        return ""
-    delta = getattr(choices[0], "delta", None)
-    text = getattr(delta, "content", None)
-    return text if isinstance(text, str) else ""

@@ -20,7 +20,7 @@
   "backend/src/policy_atlas/evidence_search/sourcing/search_queries_system_claude_v1.txt": "43cd60ef012e653f1ec299c5ce69fe1cfa0253b5659a877db9fbfe2dc5ebca08",
   "backend/src/policy_atlas/evidence_search/sourcing/search_queries_system_v3.txt": "c6e3206ca18f082f1ecfb5edd4df757661ef81194a7e66d66ec42bf482a0e49d",
   "backend/src/policy_atlas/evidence_search/synthesis/baseline_prompt.py": "e9931caf21ae2bdf59ca8fc74890f0cc1ba653fa5be3192b2ba9f52e69c060da",
-  "backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py": "7d06351886748189f158890a3277aa9e77ac7c63e85e56ce2b2e631623e27d86",
+  "backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py": "1e8e52bc735e86ba5f73d9758814506f645acfc664e3b36f94e5cd575090dc5a",
   "backend/src/policy_atlas/evidence_search/synthesis/section_prompt.py": "aae4bd34a3b52dcd6e65a2b9ca4567f6d65abb278b97a52910f5f92ccc6a2802",
   "backend/src/policy_atlas/evidence_search/synthesis/summary_prompts.py": "74474ed58c6e51b01ea16bc67da19cf4f64d9dbfd6703f7506c53f3d1f9496e5",
   "backend/src/policy_atlas/evidence_search/synthesis/voice_prompt.py": "26f4dbac02d226616f3dfd1e8c341686c5dc6f5b7b6a3c7c26d7c30c9ba4f4e0",

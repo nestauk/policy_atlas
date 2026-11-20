@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from policy_atlas.core.model_routes import live_api_key, route
 from policy_atlas.core.usage import (
+    TokenUsage,
     UsageResult,
     log_usage,
     token_usage_from_provider,
@@ -356,6 +357,174 @@ def traced_parse[T: BaseModel](
         before=lambda span: span.update(input={"messages": messages}, model=model),
         update=_update,
     )
+
+
+#: The request keys a call site may pass to :func:`send_turn` and :func:`stream_turn`:
+#: exactly the chat-completions keyword arguments the sites build today.
+_REQUEST_KEYS = frozenset(
+    {
+        "model",
+        "messages",
+        "reasoning_effort",
+        "timeout",
+        "extra_body",
+        "tools",
+        "tool_choice",
+        "parallel_tool_calls",
+        "response_format",
+        "max_completion_tokens",
+        "stream_options",
+    }
+)
+
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """One tool (function) the model asked to run.
+
+    Args:
+        name: The tool's name.
+        arguments: The tool's arguments as the model wrote them: JSON text, not
+            yet checked.
+        call_id: The id that pairs this call with its result in a later turn.
+    """
+
+    name: str
+    arguments: str
+    call_id: str
+
+
+@dataclass(frozen=True)
+class ModelTurn:
+    """The answer to one non-streamed model request.
+
+    Args:
+        text: The answer's text (``""`` when the model only called tools).
+        tool_calls: The tool calls the model made, in order (empty when none).
+        usage: Token counts for the request (``None`` when the provider sent
+            none).
+        carried: Reserved for what a later request must carry over from this
+            one; always ``None`` for now.
+    """
+
+    text: str
+    tool_calls: tuple[ToolCall, ...]
+    usage: TokenUsage | None
+    carried: object | None = None
+
+
+class TextStream:
+    """A streamed model answer, read piece by piece.
+
+    In plain terms: loop over it to get the answer's text in the order it
+    arrives. Once the loop ends (or stops early with an error), :attr:`usage`
+    holds the token counts the provider sent, or ``None`` when it sent none.
+    :meth:`close` cuts the stream off and may be called from another thread,
+    for example a watchdog that gives up waiting.
+
+    Attributes:
+        label: Human-readable call label.
+        usage: Token counts read so far.
+        carried: Always ``None`` for now.
+    """
+
+    def __init__(self, stream: Any, *, label: str) -> None:
+        self._stream = stream
+        self.label = label
+        self.usage: TokenUsage | None = None
+        self.carried: object | None = None
+
+    def __iter__(self) -> Iterator[str]:
+        for chunk in self._stream:
+            chunk_usage = getattr(chunk, "usage", None)
+            if chunk_usage is not None:
+                self.usage = token_usage_from_provider(chunk_usage)
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            fragment = getattr(getattr(choices[0], "delta", None), "content", None)
+            if isinstance(fragment, str) and fragment:
+                yield fragment
+
+    def close(self) -> None:
+        """Cancel the underlying stream (safe from another thread)."""
+        self._stream.close()
+
+
+def _check_request(request: Mapping[str, Any]) -> None:
+    unknown = sorted(set(request) - _REQUEST_KEYS)
+    if unknown:
+        raise TypeError(f"Unknown model request key(s): {', '.join(unknown)}")
+
+
+def send_turn(client: Any, *, label: str, **request: Any) -> ModelTurn:
+    """Send one model request and read its text, tool calls and token usage.
+
+    The request goes to the provider exactly as the call site built it; the
+    site applies any prompt-cache breakpoint itself.
+
+    Args:
+        client: The OpenAI client.
+        label: Human-readable call label.
+        **request: The chat-completions keyword arguments the site builds
+            (``model``, ``messages``, ``reasoning_effort``, ``timeout``,
+            ``extra_body``, and where used ``tools``, ``tool_choice``,
+            ``parallel_tool_calls``, ``response_format``,
+            ``max_completion_tokens``, ``stream_options``).
+
+    Returns:
+        The answer's text, tool calls and token usage.
+
+    Raises:
+        TypeError: If the request holds a key outside the list above.
+        RuntimeError: If the response holds no answer at all (no choices).
+    """
+    _check_request(request)
+    response = client.chat.completions.create(**request)
+    choices = getattr(response, "choices", None)
+    if not choices:
+        raise RuntimeError(f"OpenAI {label} response had no choices.")
+    message = getattr(choices[0], "message", None)
+    content = getattr(message, "content", None)
+    calls = []
+    for index, call in enumerate(getattr(message, "tool_calls", None) or ()):
+        function = getattr(call, "function", None)
+        name = getattr(function, "name", None)
+        arguments = getattr(function, "arguments", None)
+        calls.append(
+            ToolCall(
+                name=name if isinstance(name, str) else "",
+                arguments=arguments if isinstance(arguments, str) else "{}",
+                call_id=getattr(call, "id", None) or f"call_{index}",
+            )
+        )
+    return ModelTurn(
+        text=content if isinstance(content, str) else "",
+        tool_calls=tuple(calls),
+        usage=token_usage_from_provider(getattr(response, "usage", None)),
+    )
+
+
+def stream_turn(client: Any, *, label: str, **request: Any) -> TextStream:
+    """Send one model request as a stream.
+
+    The request goes to the provider exactly as the call site built it, plus
+    ``stream=True``.
+
+    Args:
+        client: The OpenAI client.
+        label: Human-readable call label.
+        **request: The same keyword arguments :func:`send_turn` takes.
+
+    Returns:
+        The stream: loop over it for the text pieces.
+
+    Raises:
+        TypeError: If the request holds an unknown key (``stream`` included).
+    """
+    _check_request(request)
+    return TextStream(client.chat.completions.create(stream=True, **request), label=label)
 
 
 _SIMPLE_ESCAPES = {
@@ -726,20 +895,17 @@ class JsonArrayStringDecoder:
             self._value_pending = False
 
 
-def require_single_tool_call(response: Any, *, label: str) -> Any:
-    """Return the response's single tool call or fail loud.
+def require_single_tool_call(turn: ModelTurn, *, label: str) -> ToolCall:
+    """Return the answer's single tool call or fail loud.
 
     Args:
-        response: A chat-completions ``create`` response.
+        turn: The answer from :func:`send_turn`.
         label: Human-readable call label for the error message.
 
     Raises:
-        RuntimeError: If the response has no choices, no tool call, or more
-            than one tool call.
+        RuntimeError: If the answer has no tool call, or more than one.
     """
-    if not response.choices:
-        raise RuntimeError(f"OpenAI {label} response had no choices.")
-    tool_calls = response.choices[0].message.tool_calls or []
+    tool_calls = turn.tool_calls
     if not tool_calls:
         raise RuntimeError(f"OpenAI {label} response had no tool call.")
     if len(tool_calls) != 1:

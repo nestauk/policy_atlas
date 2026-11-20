@@ -42,7 +42,7 @@ from typing import Any, Literal, NotRequired, Protocol, TypedDict
 import structlog
 from langfuse import Langfuse
 from openai.lib._pydantic import to_strict_json_schema
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from policy_atlas.core import tracing
 from policy_atlas.core.liveness import (
@@ -56,16 +56,19 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
     JsonArrayObjectDecoder,
     JsonStringFieldDecoder,
+    ModelTurn,
+    ToolCall,
     openai_kwargs,
-    require_parsed,
+    parse_structured,
     require_single_tool_call,
     resolve_openai_client,
+    send_turn,
+    stream_turn,
     with_system_breakpoint,
 )
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
-    token_usage_from_provider,
     usage_details,
     usage_metadata,
 )
@@ -182,6 +185,44 @@ def _cache_messages(step: str, messages: list[Any]) -> list[Any]:
     if cache_mode_for(step) == "breakpoint":
         return with_system_breakpoint(messages)
     return messages
+
+
+def _parse_step[T: BaseModel](
+    client: Any,
+    step: str,
+    messages: list[Any],
+    response_format: type[T],
+    *,
+    usage_event: str,
+    label: str,
+) -> UsageResult[T]:
+    """Run one structured-output call for a synthesis step.
+
+    The model, effort, prompt-cache mode and timeout all come from the step;
+    :func:`parse_structured` applies the cache breakpoint itself.
+
+    Args:
+        client: The OpenAI client.
+        step: A step name from the route file's ``[steps]`` table.
+        messages: The chat messages built for the call.
+        response_format: The pydantic wire type to parse into.
+        usage_event: structlog event name for usage logging.
+        label: Call label used in error messages.
+
+    Returns:
+        The parsed output plus token usage.
+    """
+    return parse_structured(
+        client,
+        messages=messages,
+        response_format=response_format,
+        usage_event=usage_event,
+        label=label,
+        model=route().model_for(step),
+        reasoning_effort=route().effort_for(step),
+        prompt_cache=cache_mode_for(step),
+        timeout_s=route().timeout_for(step),
+    )
 
 # Read-path ceiling for section titles (artefacts minted before the 60-character
 # proposal bound); the
@@ -888,8 +929,8 @@ def _first_theme_reference(
 
 
 def _first_named_tool_call(
-    response: Any, *, name: str, label: str
-) -> tuple[Any, list[str]]:
+    turn: ModelTurn, *, name: str, label: str
+) -> tuple[ToolCall, list[str]]:
     """Return a forced response's first ``name`` call and the ignored calls' names.
 
     The forced final section turn and the repair keep ``parallel_tool_calls``
@@ -901,7 +942,7 @@ def _first_named_tool_call(
     protocol check still fires.
 
     Args:
-        response: A chat-completions ``create`` response.
+        turn: The model's answer.
         name: The forced function's name.
         label: Human-readable call label for error messages and the log.
 
@@ -909,18 +950,16 @@ def _first_named_tool_call(
         The taken tool call and the names of the ignored ones, in order.
 
     Raises:
-        RuntimeError: If the response has no choices or no tool call.
+        RuntimeError: If the response has no tool call.
     """
-    if not response.choices:
-        raise RuntimeError(f"OpenAI {label} response had no choices.")
-    tool_calls = response.choices[0].message.tool_calls or []
+    tool_calls = turn.tool_calls
     if not tool_calls:
         raise RuntimeError(f"OpenAI {label} response had no tool call.")
     taken_index = next(
-        (index for index, call in enumerate(tool_calls) if call.function.name == name), 0
+        (index for index, call in enumerate(tool_calls) if call.name == name), 0
     )
     ignored = [
-        str(call.function.name)
+        call.name
         for index, call in enumerate(tool_calls)
         if index != taken_index
     ]
@@ -1002,17 +1041,14 @@ class OpenAISynthesisBackend:
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[SectionProposalWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.parse(
-            **_step_kwargs("synthesise_propose_sections"),
-            messages=_cache_messages("synthesise_propose_sections", messages),
-            response_format=SectionProposalWire,
+        return _parse_step(
+            self._client,
+            "synthesise_propose_sections",
+            messages,
+            SectionProposalWire,
+            usage_event="synthesis.proposal.usage",
+            label="synthesis section proposal",
         )
-        log_usage("synthesis.proposal.usage", response.usage)
-        parsed_model: SectionProposalWire = require_parsed(
-            response, label="synthesis section proposal"
-        )
-        return parsed_model, token_usage_from_provider(response.usage)
 
     def propose_sections(
         self,
@@ -1070,15 +1106,14 @@ class OpenAISynthesisBackend:
     def _write_summary_once(
         self, messages: list[dict[str, Any]], *, step: str
     ) -> UsageResult[SummaryWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.parse(
-            **_step_kwargs(step),
-            messages=_cache_messages(step, messages),
-            response_format=SummaryWire,
+        return _parse_step(
+            self._client,
+            step,
+            messages,
+            SummaryWire,
+            usage_event="synthesis.summary.usage",
+            label="synthesis summary",
         )
-        log_usage("synthesis.summary.usage", response.usage)
-        parsed = require_parsed(response, label="synthesis summary")
-        return parsed, token_usage_from_provider(response.usage)
 
     def write_block_summary(self, seed: dict[str, Any]) -> UsageResult[SummaryWire]:
         """Write a block navigation summary through structured OpenAI output.
@@ -1138,15 +1173,14 @@ class OpenAISynthesisBackend:
         messages = build_summary_judge_messages(summary=summary, detail=detail)
 
         def _call() -> UsageResult[SummaryJudgeWire]:
-            completions: Any = self._client.chat.completions
-            response = completions.parse(
-                **_step_kwargs("synthesise_judge_summary"),
-                messages=_cache_messages("synthesise_judge_summary", messages),
-                response_format=SummaryJudgeWire,
+            return _parse_step(
+                self._client,
+                "synthesise_judge_summary",
+                messages,
+                SummaryJudgeWire,
+                usage_event="synthesis.summary_judge.usage",
+                label="synthesis summary judge",
             )
-            log_usage("synthesis.summary_judge.usage", response.usage)
-            parsed = require_parsed(response, label="synthesis summary judge")
-            return parsed, token_usage_from_provider(response.usage)
 
         def _update(span: Any, result: UsageResult[SummaryJudgeWire]) -> None:
             verdict, usage = result
@@ -1178,8 +1212,9 @@ class OpenAISynthesisBackend:
         # differs (allowed_tools over the four section tools, or emit_section
         # by name on the forced final turn). ``tools`` defaults to the full
         # lookup vocabulary when a caller has no seed to derive it from.
-        completions: Any = self._client.chat.completions
-        response = completions.create(
+        response = send_turn(
+            self._client,
+            label="synthesis section turn",
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
             tools=tools if tools is not None else section_request_tools({}),
@@ -1195,24 +1230,22 @@ class OpenAISynthesisBackend:
             turn: SectionTurn = {"tool_calls": [], "claims": section}
             if malformed:
                 turn["malformed_claims"] = malformed
-            return turn, token_usage_from_provider(response.usage)
+            return turn, response.usage
 
         def _read_turn(name: str, arguments: str) -> UsageResult[SectionTurn]:
             return {
                 "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
                 "claims": None,
-            }, token_usage_from_provider(response.usage)
+            }, response.usage
 
         if force_emit:
             taken, ignored = _first_named_tool_call(
                 response, name="emit_section", label="synthesis section turn"
             )
-            name = taken.function.name
-            arguments = taken.function.arguments
-            if not isinstance(name, str) or not name:
+            name = taken.name
+            arguments = taken.arguments
+            if not name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if not isinstance(arguments, str):
-                arguments = "{}"
             forced_turn = _emit_turn(arguments) if name == "emit_section" else _read_turn(
                 name, arguments
             )
@@ -1225,11 +1258,9 @@ class OpenAISynthesisBackend:
                 "tool_calls": [],
                 "claims": None,
                 "ready": True,
-            }, token_usage_from_provider(response.usage)
+            }, response.usage
 
-        if not response.choices:
-            raise RuntimeError("OpenAI synthesis section turn response had no choices.")
-        message_tool_calls = response.choices[0].message.tool_calls or []
+        message_tool_calls = response.tool_calls
         if not message_tool_calls:
             # A bare reply with no tool call means the writer is ready to write
             # The loop runs the write turn next.
@@ -1237,12 +1268,10 @@ class OpenAISynthesisBackend:
 
         if len(message_tool_calls) == 1:
             only_call = message_tool_calls[0]
-            name = only_call.function.name
-            arguments = only_call.function.arguments
-            if not isinstance(name, str) or not name:
+            name = only_call.name
+            arguments = only_call.arguments
+            if not name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if not isinstance(arguments, str):
-                arguments = "{}"
             if name == "write_section":
                 return _ready_turn()
             if name == "emit_section":
@@ -1253,12 +1282,10 @@ class OpenAISynthesisBackend:
         emit_arguments: str | None = None
         write_requested = False
         for tool_call in message_tool_calls:
-            name = tool_call.function.name
-            arguments = tool_call.function.arguments
-            if not isinstance(name, str) or not name:
+            name = tool_call.name
+            arguments = tool_call.arguments
+            if not name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if not isinstance(arguments, str):
-                arguments = "{}"
             if name == "write_section":
                 write_requested = True
                 continue
@@ -1284,7 +1311,7 @@ class OpenAISynthesisBackend:
             log.warning(
                 "synthesis.emit_with_reads_deferred", read_tool_count=len(read_calls)
             )
-        return {"tool_calls": read_calls, "claims": None}, token_usage_from_provider(response.usage)
+        return {"tool_calls": read_calls, "claims": None}, response.usage
 
     def section_turn(
         self,
@@ -1403,39 +1430,30 @@ class OpenAISynthesisBackend:
         def _stream(span: Any | None = None) -> UsageResult[SectionTurn]:
             if span is not None:
                 span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                self._client,
+                label="synthesis section emit",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 tools=tools,
                 tool_choice="none",
-                stream=True,
                 stream_options={"include_usage": True},
             )
             decoder = JsonStringFieldDecoder("prose")
             markers = StreamedClaimMarker(index, seed, transcript)
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        decoded = decoder.feed(fragment)
-                        if decoded:
-                            publish_section_delta(index, decoded)
-                        markers.feed(fragment, decoded)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.section_emit_stream.usage", provider_usage)
+            for fragment in stream:
+                text += fragment
+                decoded = decoder.feed(fragment)
+                if decoded:
+                    publish_section_delta(index, decoded)
+                markers.feed(fragment, decoded)
+            log_usage("synthesis.section_emit_stream.usage", stream.usage)
             section, malformed = _salvage_section(_strip_code_fence(text))
             turn: SectionTurn = {"tool_calls": [], "claims": section}
             if malformed:
                 turn["malformed_claims"] = malformed
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -1482,8 +1500,9 @@ class OpenAISynthesisBackend:
         # The same five tools and parallel tool calls as the
         # section turns, so the repair reads the section's cached prefix;
         # emit_repairs is forced by name.
-        completions: Any = self._client.chat.completions
-        response = completions.create(
+        response = send_turn(
+            self._client,
+            label="synthesis repair",
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
             tools=tools if tools is not None else section_request_tools({}),
@@ -1494,18 +1513,15 @@ class OpenAISynthesisBackend:
         taken, ignored = _first_named_tool_call(
             response, name="emit_repairs", label="synthesis repair"
         )
-        function = taken.function
-        if function.name != "emit_repairs":
+        if taken.name != "emit_repairs":
             raise RuntimeError("OpenAI synthesis repair response did not emit repairs.")
-        arguments = function.arguments
-        if not isinstance(arguments, str):
-            arguments = "{}"
+        arguments = taken.arguments
         # An unparseable envelope means the loop-free, unrepeatable repair
         # produced nothing — the raised MalformedEmissionError lands the
         # failing claims per the exhaustion rules (soft-flag / the counted
         # exclusions), never a whole-component failure.
         repairs = _salvage_repairs(arguments)
-        return repairs, token_usage_from_provider(response.usage), len(ignored)
+        return repairs, response.usage, len(ignored)
 
     def repair_section(
         self,
@@ -1560,24 +1576,21 @@ class OpenAISynthesisBackend:
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[SectionProseWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.create(
+        response = send_turn(
+            self._client,
+            label="synthesis key findings",
             **_step_kwargs("synthesise_write_key_findings"),
             messages=_cache_messages("synthesise_write_key_findings", messages),
             tools=[EMIT_SECTION_TOOL_SCHEMA],
             tool_choice={"type": "function", "function": {"name": "emit_section"}},
         )
         log_usage("synthesis.key_findings.usage", response.usage)
-        function = require_single_tool_call(
-            response, label="synthesis key findings"
-        ).function
+        function = require_single_tool_call(response, label="synthesis key findings")
         if function.name != "emit_section":
             raise RuntimeError(
                 "OpenAI synthesis key-findings response did not emit a section."
             )
         arguments = function.arguments
-        if not isinstance(arguments, str):
-            arguments = "{}"
         try:
             # Reuse the section salvage path (per-claim salvage). A malformed
             # emission with no recoverable prose is treated as the absence path
@@ -1586,7 +1599,7 @@ class OpenAISynthesisBackend:
             section, _malformed = _salvage_section(arguments)
         except MalformedEmissionError:
             section = SectionProseWire(prose="", claims=[])
-        return section, token_usage_from_provider(response.usage)
+        return section, response.usage
 
     def write_key_findings(
         self, seed: dict[str, Any]
@@ -1674,8 +1687,9 @@ class OpenAISynthesisBackend:
         def _stream(span: Any | None = None) -> UsageResult[SectionProseWire]:
             if span is not None:
                 span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                self._client,
+                label="synthesis key findings",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 response_format={
@@ -1686,7 +1700,6 @@ class OpenAISynthesisBackend:
                         "strict": True,
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
             )
             decoder = JsonStringFieldDecoder("prose")
@@ -1694,24 +1707,15 @@ class OpenAISynthesisBackend:
                 index, seed, [], sources=sources if sources is not None else ({}, {})
             )
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        decoded = decoder.feed(fragment)
-                        if decoded:
-                            publish_section_delta(index, decoded)
-                        markers.feed(fragment, decoded)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.key_findings.usage", provider_usage)
+            for fragment in stream:
+                text += fragment
+                decoded = decoder.feed(fragment)
+                if decoded:
+                    publish_section_delta(index, decoded)
+                markers.feed(fragment, decoded)
+            log_usage("synthesis.key_findings.usage", stream.usage)
             section, _malformed = _salvage_section(_strip_code_fence(text))
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -1749,15 +1753,14 @@ class OpenAISynthesisBackend:
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[CaseStudyWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.parse(
-            **_step_kwargs("synthesise_write_case_studies"),
-            messages=_cache_messages("synthesise_write_case_studies", messages),
-            response_format=CaseStudyWire,
+        return _parse_step(
+            self._client,
+            "synthesise_write_case_studies",
+            messages,
+            CaseStudyWire,
+            usage_event="synthesis.case_studies.usage",
+            label="synthesis case studies",
         )
-        log_usage("synthesis.case_studies.usage", response.usage)
-        parsed = require_parsed(response, label="synthesis case studies")
-        return parsed, token_usage_from_provider(response.usage)
 
     def write_case_studies(
         self, seed: dict[str, Any]
@@ -1829,8 +1832,9 @@ class OpenAISynthesisBackend:
         def _stream(span: Any | None = None) -> UsageResult[CaseStudyWire]:
             if span is not None:
                 span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                self._client,
+                label="synthesis case studies",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 # The schema ``parse`` sends for the same wire.
@@ -1842,26 +1846,16 @@ class OpenAISynthesisBackend:
                         "strict": True,
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
             )
             cards = StreamedCardPublisher(index)
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        cards.feed(fragment)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.case_studies.usage", provider_usage)
+            for fragment in stream:
+                text += fragment
+                cards.feed(fragment)
+            log_usage("synthesis.case_studies.usage", stream.usage)
             wire = CaseStudyWire.model_validate_json(_strip_code_fence(text))
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -1919,15 +1913,14 @@ class OpenAISynthesisBackend:
         ]
 
         def _call() -> UsageResult[NoteWire]:
-            completions: Any = client.chat.completions
-            response = completions.parse(
-                **_step_kwargs("synthesise_write_source_note"),
-                messages=_cache_messages("synthesise_write_source_note", messages),
-                response_format=NoteWire,
+            return _parse_step(
+                client,
+                "synthesise_write_source_note",
+                messages,
+                NoteWire,
+                usage_event="synthesis.mrs_note.usage",
+                label="MRS note",
             )
-            log_usage("synthesis.mrs_note.usage", response.usage)
-            parsed = require_parsed(response, label="MRS note")
-            return parsed, token_usage_from_provider(response.usage)
 
         def _update(span: Any, result: UsageResult[NoteWire]) -> None:
             wire, usage = result
@@ -1974,15 +1967,14 @@ class OpenAISynthesisBackend:
         ]
 
         def _call() -> UsageResult[IntroWire]:
-            completions: Any = client.chat.completions
-            response = completions.parse(
-                **_step_kwargs("synthesise_write_intro"),
-                messages=_cache_messages("synthesise_write_intro", messages),
-                response_format=IntroWire,
+            return _parse_step(
+                client,
+                "synthesise_write_intro",
+                messages,
+                IntroWire,
+                usage_event="synthesis.full_report_intro.usage",
+                label="full report intro",
             )
-            log_usage("synthesis.full_report_intro.usage", response.usage)
-            parsed = require_parsed(response, label="full report intro")
-            return parsed, token_usage_from_provider(response.usage)
 
         def _update(span: Any, result: UsageResult[IntroWire]) -> None:
             wire, usage = result
@@ -2052,8 +2044,9 @@ class OpenAISynthesisBackend:
         def _stream(span: Any | None = None) -> UsageResult[IntroWire]:
             if span is not None:
                 span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                client,
+                label="full report intro",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 # The schema ``parse`` sends for the same wire.
@@ -2065,28 +2058,18 @@ class OpenAISynthesisBackend:
                         "strict": True,
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
             )
             decoder = JsonStringFieldDecoder("intro")
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        decoded = decoder.feed(fragment)
-                        if decoded:
-                            publish_section_delta(index, decoded)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.full_report_intro.usage", provider_usage)
+            for fragment in stream:
+                text += fragment
+                decoded = decoder.feed(fragment)
+                if decoded:
+                    publish_section_delta(index, decoded)
+            log_usage("synthesis.full_report_intro.usage", stream.usage)
             wire = IntroWire.model_validate_json(_strip_code_fence(text))
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),

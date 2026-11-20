@@ -29,16 +29,12 @@ from policy_atlas.core.openai_client import (
     JsonStringFieldDecoder,
     openai_kwargs,
     resolve_openai_client,
+    stream_turn,
     traced_parse,
     with_system_breakpoint,
 )
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import (
-    log_usage,
-    token_usage_from_provider,
-    usage_details,
-    usage_metadata,
-)
+from policy_atlas.core.usage import log_usage, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.runtime.capability_registry import (
@@ -371,8 +367,9 @@ class OpenAITaskAgentBackend:
         prompt_cache = cache_mode_for(step)
 
         def _call(span: Any | None) -> Any:
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                self._client,
+                label=profile.label,
                 messages=with_system_breakpoint(messages)
                 if prompt_cache == "breakpoint"
                 else messages,
@@ -387,7 +384,6 @@ class OpenAITaskAgentBackend:
                         "schema": to_strict_json_schema(profile.wire),
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
                 max_completion_tokens=profile.max_output_tokens,
                 **openai_kwargs(
@@ -399,27 +395,19 @@ class OpenAITaskAgentBackend:
             )
             decoder = JsonStringFieldDecoder("reply")
             pieces: list[str] = []
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    fragment = getattr(getattr(choices[0], "delta", None), "content", None)
-                    if isinstance(fragment, str) and fragment:
-                        pieces.append(fragment)
-                        text = scrub_nul(decoder.feed(fragment))
-                        if text:
-                            started.append(True)
-                            on_delta(text)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage(profile.usage_event, provider_usage)
+            for fragment in stream:
+                pieces.append(fragment)
+                text = scrub_nul(decoder.feed(fragment))
+                if text:
+                    started.append(True)
+                    on_delta(text)
+            usage = stream.usage
+            log_usage(profile.usage_event, usage)
             try:
                 parsed = profile.wire.model_validate_json("".join(pieces))
             except ValueError as exc:
                 raise RuntimeError(f"OpenAI {profile.label} streamed turn was not parsed.") from exc
             turn = _scrub_turn(cast(Any, parsed))
-            usage = token_usage_from_provider(provider_usage)
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),

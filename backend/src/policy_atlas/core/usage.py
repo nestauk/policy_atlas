@@ -258,7 +258,7 @@ def usage_details(usage: TokenUsage | None) -> dict[str, Any] | None:
     return details
 
 
-def log_usage(event: str, usage: CompletionUsage | None) -> None:
+def log_usage(event: str, usage: CompletionUsage | TokenUsage | None) -> None:
     """Log one model call's token usage (``None``-safe).
 
     Args:
