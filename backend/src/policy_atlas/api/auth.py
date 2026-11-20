@@ -182,6 +182,22 @@ class JwtAuthenticator:
         return AuthenticatedUser(user_id=subject)
 
 
+def _identify_posthog_user(request: Request, user: AuthenticatedUser) -> None:
+    """Bind a verified user subject to the active PostHog request context.
+
+    ``PosthogASGIMiddleware`` opens the context before FastAPI resolves this
+    dependency. Identifying it here therefore attributes subsequent captures
+    and uncaught exceptions for this request without repeating identity at
+    individual event call sites.
+    """
+    posthog_client = getattr(request.app.state, "posthog", None)
+    if posthog_client is not None:
+        try:
+            posthog_client.identify_context(user.user_id)
+        except Exception:
+            log.warning("posthog.identify_context_failed")
+
+
 async def get_current_user(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
@@ -202,10 +218,12 @@ async def get_current_user(
         raise _unauthenticated()
     authenticator = cast(JwtAuthenticator, request.app.state.authenticator)
     try:
-        return authenticator.authenticate(credentials.credentials)
+        user = authenticator.authenticate(credentials.credentials)
     except (httpx.HTTPError, jwt.PyJWTError, KeyError, OSError, ValueError):
         log.info("auth.token_rejected")
         raise _unauthenticated() from None
+    _identify_posthog_user(request, user)
+    return user
 
 
 async def get_optional_user(

@@ -16,9 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.analytics import capture_event
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     LatestRun,
@@ -139,6 +140,7 @@ def get_option(
 def post_option(
     task_id: uuid.UUID,
     payload: OptionAddIn,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     agent: Annotated[AgentBackend, Depends(get_agent_backend)],
@@ -181,6 +183,7 @@ def post_option(
         )
     except LonglistRefused as exc:
         raise http_error(exc) from None
+    capture_event(request, "option_added", properties={"opened_search": added.run_open})
     return OptionAddedOut(
         option=_card(engine, task_id, added.option_id),
         # ``None`` while the search is still queued (A4): the card reads it
@@ -249,6 +252,7 @@ def post_include(
 def post_shortlist(
     task_id: uuid.UUID,
     option_id: uuid.UUID,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> OptionOut:
@@ -266,6 +270,7 @@ def post_shortlist(
             raise http_error(exc) from None
         except OptionNotFound:
             raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL) from None
+    capture_event(request, "option_shortlisted")
     return _card(engine, task_id, option_id)
 
 
@@ -273,6 +278,7 @@ def post_shortlist(
 def post_unshortlist(
     task_id: uuid.UUID,
     option_id: uuid.UUID,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> OptionOut:
@@ -290,6 +296,7 @@ def post_unshortlist(
             raise http_error(exc) from None
         except OptionNotFound:
             raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL) from None
+    capture_event(request, "option_unshortlisted")
     return _card(engine, task_id, option_id)
 
 

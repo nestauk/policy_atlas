@@ -7,13 +7,14 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated, Any, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api import continuation
+from policy_atlas.api.analytics import capture_event
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.check_ins_read import _check_in
@@ -189,6 +190,7 @@ def respond_to_check_in(
     task_id: uuid.UUID,
     check_in_id: uuid.UUID,
     response: CheckInResponse,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
@@ -238,6 +240,8 @@ def respond_to_check_in(
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except LookupError:
         raise HTTPException(status_code=404, detail="resource not found") from None
+
+    capture_event(request, "check_in_answered", properties={"response_kind": response.kind})
 
     if result.follow_on == LONGLIST_PURPOSE:
         # "Confirm plan and build longlist" (task 045, S3): the decision has

@@ -43,6 +43,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client
+from policy_atlas.core.posthog_ai import call_kwargs, configure_bedrock_observability
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import chunk_embedding, task_source_snapshot
 from policy_atlas.core.tokens import word_tokens
@@ -274,6 +275,7 @@ class OpenAIEmbeddingBackend:
                     input=texts,
                     dimensions=EMBEDDING_DIMENSIONS,
                     timeout=OPENAI_EMBEDDING_TIMEOUT_S,
+                    **call_kwargs(),
                 )
             except RateLimitError as exc:
                 # "Too many requests" is the caller's to wait out (task 057, D6).
@@ -326,6 +328,7 @@ class CohereEmbeddingBackend:
     mode = "live"
 
     def __init__(self, client: Any | None = None) -> None:
+        configure_bedrock_observability()
         self._client = client or boto3.client(
             "bedrock-runtime",
             region_name=os.environ.get("AWS_REGION") or "eu-west-2",

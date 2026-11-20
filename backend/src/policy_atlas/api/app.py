@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import atexit
+import os
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +16,8 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from posthog import Posthog
+from posthog.integrations.asgi import PosthogASGIMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
@@ -26,6 +30,13 @@ from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.core.posthog_ai import configure_posthog_client, flush_bedrock_observability
+from policy_atlas.core.posthog_logs import (
+    configure_posthog_log_exporter,
+    flush_posthog_logs,
+    log_api_ready,
+    log_api_stopping,
+)
 from policy_atlas.theory_of_change.edits import EditRefused
 
 log = structlog.get_logger()
@@ -161,6 +172,47 @@ class ApiCapacity(Exception):
         self.message = message
 
 
+def _configure_posthog(app: FastAPI, settings: Settings) -> Posthog | None:
+    """Create and expose the process-scoped PostHog client when configured."""
+    app.state.posthog = None
+    project_token = settings.posthog_project_token
+    host = settings.posthog_host
+    missing = tuple(
+        name
+        for name, value in (
+            ("POSTHOG_PROJECT_TOKEN", project_token),
+            ("POSTHOG_HOST", host),
+        )
+        if value is None
+    )
+    if missing:
+        if os.environ.get("ENVIRONMENT", "development") != "production":
+            for name in missing:
+                log.warning(
+                    "posthog.configuration_missing",
+                    message=(
+                        f"{name} variable required by PostHog is missing or un-configured, "
+                        f"this causes events to be silently missed. This error stops appearing "
+                        f"once {name} is configured"
+                    ),
+                )
+        return None
+
+    assert project_token is not None
+    assert host is not None
+    client = Posthog(
+        project_token,
+        host=host,
+        enable_exception_autocapture=True,
+        privacy_mode=False,
+    )
+    app.state.posthog = client
+    configure_posthog_client(client)
+    configure_posthog_log_exporter(project_token, host)
+    atexit.register(client.shutdown)
+    return client
+
+
 def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter] = ()) -> FastAPI:
     """Create the Policy Atlas HTTP application.
 
@@ -190,6 +242,9 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         dependencies=[Depends(bind_route_template)],
     )
     app.state.settings = app_settings
+    posthog_client = _configure_posthog(app, app_settings)
+    if posthog_client is not None:
+        app.add_middleware(PosthogASGIMiddleware, client=posthog_client)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[app_settings.app_origin],
@@ -396,8 +451,10 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                     ingest_mode=settings.ingest_mode,
                     ingest_queue_url=settings.ingest_queue_url,
                 )
+            log_api_ready(ingest_mode=settings.ingest_mode)
             yield
         finally:
+            log_api_stopping()
             http_client.close()
             executor.shutdown(wait=True)
             if langfuse_client is not None:
@@ -405,6 +462,14 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                 # ponytail: a detached chat thread mid-turn at shutdown can
                 # still lose its tail spans; accepted.
                 langfuse_client.shutdown()
+            posthog_client = getattr(app.state, "posthog", None)
+            if posthog_client is not None:
+                try:
+                    posthog_client.flush()
+                except Exception:
+                    log.warning("posthog.flush_failed")
+            flush_bedrock_observability()
+            flush_posthog_logs()
             engine.dispose()
 
     return lifespan

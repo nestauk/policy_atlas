@@ -36,6 +36,9 @@ class Settings:
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
             (``POLICY_ATLAS_INGEST_QUEUE_URL``); None in process.
+        posthog_project_token: Public PostHog project token, optional so analytics
+            configuration never prevents the API from starting.
+        posthog_host: PostHog ingestion host, optional with the project token.
     """
 
     oidc_issuer: str
@@ -53,6 +56,8 @@ class Settings:
     theory_of_change_enabled: bool = False
     ingest_mode: IngestMode = "in_process"
     ingest_queue_url: str | None = None
+    posthog_project_token: str | None = None
+    posthog_host: str | None = None
 
 
 def load_settings() -> Settings:
@@ -106,6 +111,8 @@ def load_settings() -> Settings:
         theory_of_change_enabled=_optional("POLICY_ATLAS_THEORY_OF_CHANGE") == "1",
         ingest_mode=ingest_mode,
         ingest_queue_url=ingest_queue_url_from_env(ingest_mode),
+        posthog_project_token=_optional("POSTHOG_PROJECT_TOKEN"),
+        posthog_host=_optional("POSTHOG_HOST"),
     )
 
 

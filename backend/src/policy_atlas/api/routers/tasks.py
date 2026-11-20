@@ -7,10 +7,11 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 
+from policy_atlas.api.analytics import capture_event
 from policy_atlas.api.app import ApiConflict, ApiUnprocessable
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
@@ -395,6 +396,7 @@ def _write_task_links(
 @router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
 def create_task(
     payload: TaskCreate,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -459,6 +461,15 @@ def create_task(
         now=now,
     )
     row = conn.execute(select(task).where(task.c.task_id == task_id)).mappings().one()
+    capture_event(
+        request,
+        "task_created",
+        properties={
+            "capability": payload.capability,
+            "has_source_tasks": bool(payload.from_task_ids),
+            "project_count": len(assigned_ids),
+        },
+    )
     return task_out(conn, row, user_id=user.user_id, project_ids=assigned_ids)
 
 
@@ -599,6 +610,7 @@ def update_task(
 @router.post("/{task_id}/archive", response_model=TaskOut)
 def archive_task_route(
     task_id: uuid.UUID,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> TaskOut:
@@ -626,8 +638,10 @@ def archive_task_route(
 
     if dispatch_reserved(task_id):
         raise ApiConflict("run_active", "the latest run is still active")
-    archive_task(conn, task_id, user.user_id)
+    archived = archive_task(conn, task_id, user.user_id)
     refreshed = conn.execute(
         select(task).where(task.c.task_id == task_id)
     ).mappings().one()
+    if archived:
+        capture_event(request, "task_archived", properties={"capability": refreshed["capability"]})
     return task_out(conn, refreshed, user_id=user.user_id)

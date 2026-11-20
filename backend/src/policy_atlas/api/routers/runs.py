@@ -9,10 +9,11 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.analytics import capture_event
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import RunCreate, RunOut, RunStageOut
@@ -131,7 +132,7 @@ def _dispatch_run(
     try:
         # Opened inside the executor worker: contextvars do not cross a plain
         # executor.submit. run_plan opens its own session scope per component.
-        with tracing.trace_scope(user_id=user_id):
+        with tracing.trace_scope(session_id=task_id, user_id=user_id):
             if capability == THEORY_OF_CHANGE and evidence_scope_id is None:
                 # Imported here: the opener imports this module.
                 from policy_atlas.api.toc_start import start_scope
@@ -336,6 +337,7 @@ def _await_new_run(
 def create_run(
     task_id: uuid.UUID,
     _: RunCreate,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -432,6 +434,7 @@ def create_run(
 
         # Only once the walk's row exists: a Start that fails names nothing.
         in_background(_name_task, name=f"policy-atlas-task-title-{task_id}")
+    capture_event(request, "run_started", properties={"capability": access.row["capability"]})
     return created
 
 

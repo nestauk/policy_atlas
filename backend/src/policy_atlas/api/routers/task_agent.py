@@ -1303,7 +1303,7 @@ def _planner_turn(
     # The Task Agent's own session scope nests under this user scope (ADR
     # 0038). Opened inside the worker thread: context variables do not cross
     # a thread start.
-    with tracing.trace_scope(user_id=user_id):
+    with tracing.trace_scope(session_id=task_id, user_id=user_id):
         turn = task_agent.turn(
             profile,
             turns,

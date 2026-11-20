@@ -1,0 +1,35 @@
+{
+  "id": "fastapi",
+  "displayName": "FastAPI",
+  "match": {
+    "framework": "fastapi"
+  },
+  "rules": {
+    "file": "references/COMMANDMENTS.md",
+    "description": "Framework-specific rules the integration must follow"
+  },
+  "products": {
+    "integration": [
+      {
+        "file": "references/python.md",
+        "description": "Python"
+      }
+    ],
+    "error-tracking": [
+      {
+        "file": "references/error-tracking/installation-python.md",
+        "description": "Python error tracking installation"
+      },
+      {
+        "file": "references/error-tracking/libraries-python.md",
+        "description": "Python"
+      }
+    ],
+    "feature-flags": [
+      {
+        "file": "references/feature-flags/python.md",
+        "description": "Python feature flags installation"
+      }
+    ]
+  }
+}

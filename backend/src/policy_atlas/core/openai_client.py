@@ -15,10 +15,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from openai import OpenAI
 from pydantic import BaseModel
 
 from policy_atlas.core.model_routes import live_api_key, route
+from policy_atlas.core.posthog_ai import call_kwargs, openai_client
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
@@ -72,7 +72,7 @@ class CallBudget:
         return True
 
 
-def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
+def resolve_openai_client(api_key: str | None, *, backend_name: str) -> Any:
     """Resolve the OpenAI API key and construct a client, failing loudly.
 
     Shared by every live backend so key-resolution policy lives in one place.
@@ -99,7 +99,7 @@ def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
     resolved_key = api_key or live_api_key()
     if not resolved_key:
         raise RuntimeError(f"{backend_name} requires {route().api_key_env} or an explicit api_key.")
-    return OpenAI(
+    return openai_client(
         api_key=resolved_key,
         base_url=route().openai_base_url,
         max_retries=0,
@@ -137,6 +137,12 @@ def openai_kwargs(
     }
     if prompt_cache in ("off", "breakpoint"):
         kwargs["extra_body"] = {"prompt_cache_options": {"mode": "explicit"}}
+    ai_kwargs = call_kwargs()
+    if route().name == "bedrock-claude":
+        properties = ai_kwargs.get("posthog_properties")
+        if isinstance(properties, dict):
+            properties["$ai_provider"] = "aws-bedrock"
+    kwargs.update(ai_kwargs)
     return kwargs
 
 

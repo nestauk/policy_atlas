@@ -21,6 +21,7 @@ from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import BEDROCK_CLIENT_CONFIG
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
+from policy_atlas.core.posthog_ai import configure_bedrock_observability
 from policy_atlas.core.usage import (
     TokenUsage,
     UsageAccumulator,
@@ -332,6 +333,7 @@ class ClaudeSearchGenerationBackend:
         client: Any | None = None,
         inner: OpenAISearchGenerationBackend | None = None,
     ) -> None:
+        configure_bedrock_observability()
         self._client = client or boto3.client(
             "bedrock-runtime",
             region_name=os.environ.get("AWS_REGION") or "eu-west-2",
