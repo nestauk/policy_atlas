@@ -74,7 +74,7 @@ starts.
 | Id | Change |
 |---|---|
 | **E1** | A step's route-file line can set any effort the model accepts, with tools attached. When effort is above `none` in a tool loop, the encrypted reasoning from one turn is passed back on the next turn, in memory only, never stored. |
-| **E2** | Ten steps that send `none` today get reasoning (owner rulings 2026-11-20; table in § Efforts). Each gets a higher output-token limit (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Latency and cost are measured before and after for each. Every other step keeps its effort. |
+| **E2** | Nine steps or call sites that send `none` today get reasoning (owner rulings 2026-11-20; table in § Efforts). Each gets a higher output-token limit (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Latency and cost are measured before and after for each. Every other step keeps its effort. |
 | **E3** | A live tool loop on Sol passes (the section writer's tool turn with the route overlay naming `frontier`). No default route changes. This unblocks the 054 follow-up and task 059. |
 
 ### Part 3: diagnosis
