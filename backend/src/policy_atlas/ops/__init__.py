@@ -28,7 +28,8 @@ defaults that to SMS — and lets Cognito send its own invitation. There is no
 ``--temporary-password`` flag (``--invite manual`` and ``user reissue`` mint
 their own and print it once) and no code path calls ``AdminDeleteUser``:
 deleting a user is out of scope, because it is coupled to ownership
-transfer.
+transfer. ``user reset-app`` calls ``AdminDeleteSoftwareToken``, which unlinks
+a person's authenticator app and leaves the account itself in place.
 
 Two safety properties are the reason this is a program and not a shell script:
 

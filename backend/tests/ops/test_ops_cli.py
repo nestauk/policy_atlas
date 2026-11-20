@@ -24,9 +24,10 @@ import pytest
 from sqlalchemy import RootTransaction, select, update
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import app_user, organisation, organisation_domain
+from policy_atlas.core.schema import app_user, ops_action, organisation, organisation_domain
 from policy_atlas.ops.cli import EXIT_REFUSED, _prompt, _quota_value, build_parser, main
 from tests.api.org_support import make_org, ops_enrol, seeded, unique_email
+from tests.helpers import now
 from tests.ops.support import (
     ACCOUNT_ID,
     CALLER_ARN,
@@ -597,3 +598,142 @@ def test_cli_user_deactivate_says_the_ops_role_was_revoked(
     ]
     row = _person(engine, sub)
     assert (row["org_id"] is not None, row["is_ops"]) == (True, False)  # keeps the organisation
+
+
+# --- user reset-app ---------------------------------------------------------------------
+#
+# The Stubber answers calls strictly in the order they were queued and fails any
+# call it was not given, so the queue is both the order assertion and the proof
+# that a refusal made no Cognito write.
+
+
+def _expect_reset(stubber: Any, *, sub: str, fail_delete: bool = False) -> None:
+    """Queue the enabled read, the global sign-out, then the app unlink."""
+    params = {"UserPoolId": POOL_ID, "Username": sub}
+    stubber.add_response("admin_get_user", {"Username": sub, "Enabled": True}, params)
+    stubber.add_response("admin_user_global_sign_out", {}, params)
+    if fail_delete:
+        stubber.add_client_error(
+            "admin_delete_software_token",
+            service_error_code="InternalErrorException",
+            expected_params=params,
+        )
+    else:
+        stubber.add_response("admin_delete_software_token", {}, params)
+
+
+def _reset_app(engine: Engine, stubber_setup: Any, *command: str, arn: str) -> int:
+    with cognito() as (client, stubber):
+        stubber_setup(stubber)
+        status = main(
+            _argv("user", "reset-app", *command),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(arn=arn),
+            write=lambda _line: None,
+        )
+        stubber.assert_no_pending_responses()
+    return status
+
+
+def _actions_by(engine: Engine, arn: str) -> list[tuple[Any, ...]]:
+    with seeded(engine) as conn:
+        rows = conn.execute(
+            select(
+                ops_action.c.actor_user_id,
+                ops_action.c.action,
+                ops_action.c.target,
+                ops_action.c.outcome,
+            ).where(ops_action.c.actor_user_id == arn)
+        ).all()
+    return [tuple(row) for row in rows]
+
+
+def _operator() -> str:
+    """A caller identity unique to one test, so its audit rows are its own."""
+    return f"arn:aws:sts::{ACCOUNT_ID}:assumed-role/Operator/{uuid.uuid4()}"
+
+
+def test_cli_user_reset_app_signs_out_then_unlinks_the_app_and_records_one_action(
+    engine: Engine,
+) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        _expect_reset(stubber, sub=sub)
+
+    assert _reset_app(engine, queue, "--email", email, arn=arn) == 0
+    assert _actions_by(engine, arn) == [(arn, "user.reset_app", sub, "ok")]
+
+
+def test_cli_user_reset_app_refuses_an_unknown_address(engine: Engine) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    unknown = unique_email("nobody")
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_lookup(stubber, email=unknown, sub=None)
+
+    assert _reset_app(engine, queue, "--email", unknown, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
+
+
+@pytest.mark.parametrize("where", ["marked in the database", "disabled in Cognito"])
+def test_cli_user_reset_app_refuses_a_deactivated_account(engine: Engine, where: str) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    if where == "marked in the database":
+        with seeded(engine) as conn:
+            conn.execute(
+                update(app_user).where(app_user.c.user_id == sub).values(deactivated_at=now())
+            )
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        if where == "disabled in Cognito":
+            stubber.add_response(
+                "admin_get_user",
+                {"Username": sub, "Enabled": False},
+                {"UserPoolId": POOL_ID, "Username": sub},
+            )
+
+    assert _reset_app(engine, queue, "--email", email, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
+
+
+def test_cli_user_reset_app_failing_unlink_writes_no_action_and_a_rerun_finishes(
+    engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def failing(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        _expect_reset(stubber, sub=sub, fail_delete=True)
+
+    assert _reset_app(engine, failing, "--sub", sub, arn=arn) == EXIT_REFUSED
+    assert "again is safe" in capsys.readouterr().err
+    assert _actions_by(engine, arn) == []
+
+    def working(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        _expect_reset(stubber, sub=sub)
+
+    assert _reset_app(engine, working, "--sub", sub, arn=arn) == 0
+    assert _actions_by(engine, arn) == [(arn, "user.reset_app", sub, "ok")]
+
+
+def test_user_reset_app_takes_exactly_one_of_email_or_sub() -> None:
+    parser = build_parser()
+    assert parser.parse_args(_argv("user", "reset-app", "--email", "A@x.org")).email == "a@x.org"
+    assert parser.parse_args(_argv("user", "reset-app", "--sub", "s")).sub == "s"
+    for selectors in ((), ("--email", "a@x.org", "--sub", "s")):
+        with pytest.raises(SystemExit):
+            parser.parse_args(_argv("user", "reset-app", *selectors))

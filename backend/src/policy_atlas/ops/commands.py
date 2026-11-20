@@ -18,11 +18,13 @@ key and only Cognito can turn an address into one, so
 ``AdminSetUserPassword``. ``user deactivate`` and ``user reactivate`` are the
 commands that change an account's state in Cognito: ``ListUsers``, then
 ``AdminDisableUser`` and ``AdminUserGlobalSignOut``, or ``AdminEnableUser``
-(ADR 0045 decision 5). ``admin grant``,
+(ADR 0045 decision 5). ``user reset-app`` calls ``ListUsers``, ``AdminGetUser``,
+``AdminUserGlobalSignOut`` and ``AdminDeleteSoftwareToken``. ``admin grant``,
 ``admin revoke``, ``user de-enrol`` and ``rows assign`` resolve entirely in the
 database and make no AWS call at all — which is also why operator IAM needs
 nothing beyond ``ListUsers``, ``AdminCreateUser``, ``AdminSetUserPassword``,
-``AdminDisableUser``, ``AdminUserGlobalSignOut`` and ``AdminEnableUser``.
+``AdminDisableUser``, ``AdminUserGlobalSignOut``, ``AdminEnableUser`` and
+``AdminDeleteSoftwareToken``.
 
 *Compare and refuse under the row lock.* Every write to ``app_user`` reads the
 row ``FOR UPDATE`` first and refuses when the state is not what the operator was
@@ -532,6 +534,27 @@ class Reactivation(Record):
         """Render the reactivation as one line."""
         who = f"{self.email} ({self.user_id})" if self.email else self.user_id
         return f"reactivated {who}" if self.changed else f"{who} is not deactivated; nothing to do"
+
+
+@dataclass(frozen=True)
+class AppReset(Record):
+    """One person's authenticator app unlinked, after signing them out everywhere.
+
+    Attributes:
+        user_id: The Cognito subject; the audit row's target.
+        email: The address they were found by or stored under, if any.
+    """
+
+    user_id: str
+    email: str | None
+
+    def summary(self) -> str:
+        """Render the reset as one line, with what the person sees next."""
+        who = f"{self.email} ({self.user_id})" if self.email else self.user_id
+        return (
+            f"reset the authenticator app of {who}: signed out everywhere; their next "
+            "sign-in shows the QR code to set up an app again"
+        )
 
 
 # --------------------------------------------------------------------------
@@ -1361,40 +1384,7 @@ def deactivate_user(
             knows the person, or Cognito refuses either call (the database
             is then untouched).
     """
-    if (email is None) == (sub is None):
-        raise OpsError("give exactly one of --email or --sub")
-    row: RowMapping | None
-    if sub is not None:
-        _require_filter_safe(sub)
-        row = _lock_user(conn, sub)
-        user = _find_user_by_sub(cognito, pool_id=pool_id, sub=sub)
-    else:
-        assert email is not None  # narrowed by the check above
-        _require_filter_safe(email)
-        stored = (
-            conn.execute(select(app_user).where(app_user.c.email == email).with_for_update())
-            .mappings()
-            .all()
-        )
-        if len(stored) > 1:
-            subjects = ", ".join(str(r["user_id"]) for r in stored)
-            raise OpsError(
-                f"{len(stored)} users share the address {email} ({subjects}); "
-                "resolve with --sub instead. Nothing was changed."
-            )
-        if stored:
-            row = stored[0]
-            user = _find_user_by_sub(cognito, pool_id=pool_id, sub=str(row["user_id"]))
-        else:
-            user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
-            found_sub = _sub_of(user.get("Attributes", [])) if user is not None else ""
-            row = _lock_user(conn, found_sub) if found_sub else None
-    if row is not None:
-        user_id = str(row["user_id"])
-    elif user is not None:
-        user_id = _sub_of(user.get("Attributes", []))
-    else:
-        raise OpsError(f"no account in the pool for {email or sub}. Nothing was changed.")
+    row, user, user_id = _resolve_account(conn, cognito, pool_id=pool_id, email=email, sub=sub)
     who = email or (row["email"] if row is not None else None) or user_id
 
     if user is None:
@@ -1513,6 +1503,75 @@ def reactivate_user(
             update(app_user).where(app_user.c.user_id == sub).values(deactivated_at=None)
         )
     return Reactivation(user_id=sub, email=email, changed=True)
+
+
+def reset_authenticator_app(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    email: str | None = None,
+    sub: str | None = None,
+) -> AppReset:
+    """Unlink a person's authenticator app, for a lost or replaced phone.
+
+    Their next sign-in asks for their password and then shows the QR code to
+    link an app again. The person is found the way :func:`deactivate_user`
+    finds them.
+
+    **The order, and why.** ``AdminUserGlobalSignOut`` first: it ends every
+    session (refresh tokens stop working) and is harmless on its own and safe
+    to repeat. Then ``AdminDeleteSoftwareToken`` removes the app link. If the
+    second call fails, the person is signed out but their app is still linked;
+    running the command again finishes it. Cognito only: the database is read,
+    not written. The audit row is written by the CLI.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified user pool.
+        email: The address to find them by; mutually exclusive with ``sub``.
+        sub: The Cognito subject to find them by.
+
+    Returns:
+        The reset.
+
+    Raises:
+        OpsError: If the person cannot be found as above, the pool holds no
+            account for them, they are deactivated (marked in the database or
+            disabled in Cognito; nothing is called then), or Cognito refuses
+            either call.
+    """
+    row, user, user_id = _resolve_account(conn, cognito, pool_id=pool_id, email=email, sub=sub)
+    who = email or (row["email"] if row is not None else None) or user_id
+    if user is None:
+        raise OpsError(f"no account in the pool for {who}. Nothing was changed.")
+    username = user["Username"]
+    if (row is not None and row["deactivated_at"] is not None) or not _is_enabled(
+        cognito, pool_id=pool_id, username=username
+    ):
+        raise OpsError(
+            f"{who} is deactivated, so their authenticator app was not reset — "
+            f"`user reactivate --sub {user_id}` first. Nothing was changed."
+        )
+    rerun = f"Running `user reset-app --sub {user_id}` again is safe."
+    try:
+        cognito.admin_user_global_sign_out(UserPoolId=pool_id, Username=username)
+    except ClientError as error:
+        code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+        raise OpsError(
+            f"Cognito refused to sign {who} out everywhere ({code}), so their "
+            f"authenticator app was not reset. Nothing was changed. {rerun}"
+        ) from error
+    try:
+        cognito.admin_delete_software_token(UserPoolId=pool_id, Username=username)
+    except ClientError as error:
+        code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+        raise OpsError(
+            f"{who} was signed out everywhere, but removing their authenticator app "
+            f"failed ({code}): it is still linked. No audit row was written. {rerun}"
+        ) from error
+    return AppReset(user_id=user_id, email=row["email"] if row is not None else email)
 
 
 def set_admin(
@@ -2392,6 +2451,64 @@ def _resolve_and_lock(conn: Connection, *, email: str | None, sub: str | None) -
             f"{len(rows)} users share the address {email} ({subjects}); resolve with --sub instead"
         )
     return rows[0]
+
+
+def _resolve_account(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    email: str | None,
+    sub: str | None,
+) -> tuple[RowMapping | None, UserTypeTypeDef | None, str]:
+    """Find a person by address or subject, in the database and in Cognito.
+
+    The rule :func:`deactivate_user` documents under "Finding the person". The
+    ``app_user`` row, when there is one, is read ``FOR UPDATE``.
+
+    Returns:
+        The locked row or ``None``, the Cognito user or ``None``, and the subject.
+
+    Raises:
+        OpsError: If neither or both selectors are given, the address is
+            stored on more than one row, or neither the pool nor the database
+            knows the person.
+    """
+    if (email is None) == (sub is None):
+        raise OpsError("give exactly one of --email or --sub")
+    row: RowMapping | None
+    if sub is not None:
+        _require_filter_safe(sub)
+        row = _lock_user(conn, sub)
+        user = _find_user_by_sub(cognito, pool_id=pool_id, sub=sub)
+    else:
+        assert email is not None  # narrowed by the check above
+        _require_filter_safe(email)
+        stored = (
+            conn.execute(select(app_user).where(app_user.c.email == email).with_for_update())
+            .mappings()
+            .all()
+        )
+        if len(stored) > 1:
+            subjects = ", ".join(str(r["user_id"]) for r in stored)
+            raise OpsError(
+                f"{len(stored)} users share the address {email} ({subjects}); "
+                "resolve with --sub instead. Nothing was changed."
+            )
+        if stored:
+            row = stored[0]
+            user = _find_user_by_sub(cognito, pool_id=pool_id, sub=str(row["user_id"]))
+        else:
+            user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
+            found_sub = _sub_of(user.get("Attributes", [])) if user is not None else ""
+            row = _lock_user(conn, found_sub) if found_sub else None
+    if row is not None:
+        user_id = str(row["user_id"])
+    elif user is not None:
+        user_id = _sub_of(user.get("Attributes", []))
+    else:
+        raise OpsError(f"no account in the pool for {email or sub}. Nothing was changed.")
+    return row, user, user_id
 
 
 def _find_sub_by_email(
