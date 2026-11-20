@@ -299,9 +299,8 @@ def test_live_section_turn_parses_two_read_tool_calls_in_order(
         },
     }
     assert kwargs["model"] == SYNTHESIS_MODEL
-    # Pin regression: gpt-5.6-terra 400s on function tools without this (029).
     assert kwargs["reasoning_effort"] == route().effort_for("synthesise_section_turn")
-    assert kwargs["reasoning_effort"] == "none"
+    assert kwargs["reasoning_effort"] == "low"
 
 
 def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
@@ -352,6 +351,8 @@ def test_live_section_turn_drops_write_section_alongside_reads() -> None:
     with capture_logs() as logs:
         turn, _usage = cast("Any", backend)._create_section_turn_once([], force_emit=False)
 
+    # ``carried`` is the in-memory model turn the loop sends back; not part of this check.
+    turn.pop("carried")
     assert turn == {
         "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "housing"}}],
         "claims": None,
@@ -366,7 +367,7 @@ def test_step_kwargs_send_the_steps_model_and_effort() -> None:
 
     assert sb._step_kwargs("synthesise_section_turn") == {
         "model": route().model_for("synthesise_section_turn"),
-        "reasoning_effort": "none",
+        "reasoning_effort": "low",
         "timeout": route().timeout_for("synthesise_section_turn"),
     }
     # A "breakpoint" step also sends the body that turns the provider's own storing off.

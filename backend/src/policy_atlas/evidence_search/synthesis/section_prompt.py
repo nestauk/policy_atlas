@@ -34,6 +34,7 @@ from policy_atlas.evidence_search.synthesis.summary_prompts import (
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
+    CarriedCall,
     ToolExchange,
     window_repair_dependency_chunks,
 )
@@ -1399,13 +1400,94 @@ def build_section_prefix(seed: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+# The result a carried turn's tool call gets when the loop did not run it.
+NOT_USED_TOOL_RESULT = "Not used: this call was not run in this turn. If it is still needed, make it again."  # noqa: E501
+
+
+def tool_history_messages(
+    transcript: Sequence[ToolExchange],
+    carried: Sequence[CarriedCall | None] | None = None,
+) -> list[Any]:
+    """The tool exchanges so far, as request messages, in order.
+
+    An exchange with no carried entry is rebuilt: an assistant message holding
+    its one tool call (with a stable made-up call id) and a tool message holding
+    its result as JSON (JSON keeps control characters inert). The exchanges a
+    carried model turn produced (next to each other, the same ``turn``) are
+    instead sent as that turn itself, through
+    :meth:`~policy_atlas.core.openai_client.CarriedTurn.with_results`: each call
+    the loop ran gets the same JSON text the rebuilt tool message would carry,
+    and every call it did not run (``write_section`` or ``emit_section`` beside
+    reads, an ignored extra) gets :data:`NOT_USED_TOOL_RESULT`.
+
+    Args:
+        transcript: Executed tool exchanges, in order.
+        carried: One entry per exchange (the model turn it came from), or
+            ``None`` to rebuild every exchange.
+
+    Returns:
+        The messages, rebuilt ones as dicts and carried turns as entries the
+        model-call module expands.
+
+    Raises:
+        ValueError: If ``carried`` is not one entry per exchange.
+    """
+    links = list(carried) if carried is not None else [None] * len(transcript)
+    if len(links) != len(transcript):
+        raise ValueError("carried must hold one entry per transcript exchange")
+    messages: list[Any] = []
+    index = 0
+    while index < len(transcript):
+        link = links[index]
+        if link is None:
+            call_id = f"call_{index}"
+            exchange = transcript[index]
+            messages.append(
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": exchange["tool"],
+                                "arguments": json.dumps(
+                                    exchange["arguments"], ensure_ascii=False, sort_keys=True
+                                ),
+                            },
+                        }
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": json.dumps(exchange["result"], ensure_ascii=False, sort_keys=True),
+                }
+            )
+            index += 1
+            continue
+        results = dict.fromkeys(link.turn.call_ids, NOT_USED_TOOL_RESULT)
+        while index < len(transcript) and (
+            (other := links[index]) is not None and other.turn is link.turn
+        ):
+            results[other.call_id] = json.dumps(
+                transcript[index]["result"], ensure_ascii=False, sort_keys=True
+            )
+            index += 1
+        messages.append(link.turn.with_results(results))
+    return messages
+
+
 def build_section_messages(
     seed: dict[str, Any],
     transcript: list[ToolExchange],
     *,
     force_emit: bool,
     streamed: bool = False,
-) -> list[dict[str, Any]]:
+    carried: Sequence[CarriedCall | None] | None = None,
+) -> list[Any]:
     """Assemble the section-loop conversation for one turn.
 
     The conversation is rebuilt deterministically from the seed and the
@@ -1420,41 +1502,17 @@ def build_section_messages(
         streamed: The turn writes the section as a streamed JSON reply (task
             058): after the model's ``write_section`` call, or on the forced
             final turn. Appends the write-turn message instead.
+        carried: One entry per exchange: the model turn it came from, sent
+            back in place of the rebuilt messages (see
+            :func:`tool_history_messages`). ``None`` rebuilds every exchange.
 
     Returns:
         Chat messages ready for the completion: the prefix, then the
         transcript exchanges, then (when writing) the write-turn or final-turn
         message.
     """
-    messages = build_section_prefix(seed)
-    for index, exchange in enumerate(transcript):
-        call_id = f"call_{index}"
-        messages.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "id": call_id,
-                        "type": "function",
-                        "function": {
-                            "name": exchange["tool"],
-                            "arguments": json.dumps(
-                                exchange["arguments"], ensure_ascii=False, sort_keys=True
-                            ),
-                        },
-                    }
-                ],
-            }
-        )
-        messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": json.dumps(
-                    exchange["result"], ensure_ascii=False, sort_keys=True
-                ),
-            }
-        )
+    messages: list[Any] = build_section_prefix(seed)
+    messages.extend(tool_history_messages(transcript, carried))
     if streamed:
         messages.append({"role": "user", "content": SECTION_WRITE_TURN_MESSAGE})
     elif force_emit:

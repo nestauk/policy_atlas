@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import structlog
@@ -35,9 +35,10 @@ from policy_atlas.evidence_search.synthesis.section_prompt import (
     LOOKUP_TOOL_SCHEMA,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SEARCH_CHUNKS_TOOL_SCHEMA,
+    tool_history_messages,
 )
-from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
-from policy_atlas.runtime.chat_backend import ChatBackend, ChatTurn
+from policy_atlas.evidence_search.synthesis.synthesis_tools import CarriedCall, ToolExchange
+from policy_atlas.runtime.chat_backend import ChatBackend, ChatTurn, traceable_turn
 from policy_atlas.runtime.chat_prompt import CHAT_MODEL, ChatAnswerWire
 
 log = structlog.get_logger()
@@ -93,7 +94,10 @@ class OpenAIChatBackend(ChatBackend):
         *,
         messages: list[dict[str, Any]],
     ) -> UsageResult[ChatTurn]:
-        """Run one non-streamed chat call under the traced retry wrapper."""
+        """Run one non-streamed chat call under the traced retry wrapper.
+
+        ``messages`` is the rebuilt copy the trace records (never carried items).
+        """
 
         def _update(span: Any, result: UsageResult[ChatTurn]) -> None:
             turn, usage = result
@@ -101,7 +105,7 @@ class OpenAIChatBackend(ChatBackend):
             span.update(
                 usage_details=usage_details(usage),
                 input={"messages": messages},
-                output=answer.model_dump() if answer is not None else turn,
+                output=answer.model_dump() if answer is not None else traceable_turn(turn),
                 model=CHAT_MODEL,
                 metadata=usage_metadata(usage),
             )
@@ -118,6 +122,7 @@ class OpenAIChatBackend(ChatBackend):
         force_emit: bool,
         max_output_tokens: int | None = None,
         on_delta: Callable[[str], None] | None = None,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[ChatTurn]:
         """Produce a tool-call turn or a streamed final answer.
 
@@ -127,26 +132,33 @@ class OpenAIChatBackend(ChatBackend):
             force_emit: Whether this is the bounded final turn.
             max_output_tokens: Provider output ceiling.
             on_delta: Receives final prose fragments only.
+            carried: One entry per exchange: the model turn it came from, sent
+                back in place of the rebuilt messages on the tool turn, the
+                reply and the parse. Traces record the rebuilt messages.
 
         Returns:
             One provider turn plus any available token usage.
         """
-        provider_messages = _chat_messages(messages, transcript, force_emit=force_emit)
+        # The trace's copy is rebuilt, so carried items never reach a trace.
+        traced = _chat_messages(messages, transcript, force_emit=force_emit)
+        provider_messages = (
+            _chat_messages(messages, transcript, force_emit=force_emit, carried=carried)
+            if carried is not None
+            else traced
+        )
         if force_emit:
             return self._stream_then_parse(
-                provider_messages, max_output_tokens=max_output_tokens, on_delta=on_delta
+                provider_messages,
+                traced=traced,
+                max_output_tokens=max_output_tokens,
+                on_delta=on_delta,
             )
-        return self._tool_turn(provider_messages, max_output_tokens=max_output_tokens)
-
-    def _tool_turn(
-        self, messages: list[dict[str, Any]], *, max_output_tokens: int | None
-    ) -> UsageResult[ChatTurn]:
         return self._attempts(
-            lambda: self._tool_turn_once(messages, max_output_tokens), messages=messages
+            lambda: self._tool_turn_once(provider_messages, max_output_tokens), messages=traced
         )
 
     def _tool_turn_once(
-        self, messages: list[dict[str, Any]], max_output_tokens: int | None
+        self, messages: list[Any], max_output_tokens: int | None
     ) -> UsageResult[ChatTurn]:
         # The reasoning-effort pin the chat model needs (Terra refuses function
         # tools without it) comes from the route file.
@@ -167,20 +179,25 @@ class OpenAIChatBackend(ChatBackend):
             if not call.name:
                 raise RuntimeError("OpenAI chat tool turn returned an unnamed tool call.")
             parsed_calls.append({"tool": call.name, "arguments": _json_object(call.arguments)})
-        return {"answer": None, "tool_calls": parsed_calls}, turn.usage
+        result: ChatTurn = {"answer": None, "tool_calls": parsed_calls}
+        if turn.carried is not None:
+            result["carried"] = [
+                CarriedCall(turn.carried, call.call_id) for call in turn.tool_calls
+            ]
+        return result, turn.usage
 
     def _stream_then_parse(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         *,
+        traced: list[dict[str, Any]],
         max_output_tokens: int | None,
         on_delta: Callable[[str], None] | None,
     ) -> UsageResult[ChatTurn]:
         # The prose stream is schema-free, and the system prompt describes the
         # structured answer shape — without this steering the model appends
         # the citations/claims JSON as text.
-        prose_messages = [
-            *messages,
+        prose_tail: list[dict[str, Any]] = [
             {
                 "role": "user",
                 "content": (
@@ -192,10 +209,12 @@ class OpenAIChatBackend(ChatBackend):
             },
         ]
         prose, reply_usage = self._stream_reply(
-            prose_messages, max_output_tokens=max_output_tokens, on_delta=on_delta
+            [*messages, *prose_tail],
+            traced=[*traced, *prose_tail],
+            max_output_tokens=max_output_tokens,
+            on_delta=on_delta,
         )
-        structured_messages = [
-            *messages,
+        structured_tail: list[dict[str, Any]] = [
             {"role": "assistant", "content": prose},
             {
                 "role": "user",
@@ -205,6 +224,7 @@ class OpenAIChatBackend(ChatBackend):
                 ),
             },
         ]
+        structured_messages = [*messages, *structured_tail]
 
         def _parse_once() -> UsageResult[ChatTurn]:
             answer, usage = parse_structured(
@@ -231,14 +251,15 @@ class OpenAIChatBackend(ChatBackend):
                 )
             return {"answer": answer, "tool_calls": []}, usage
 
-        turn, parse_usage = self._attempts(_parse_once, messages=structured_messages)
+        turn, parse_usage = self._attempts(_parse_once, messages=[*traced, *structured_tail])
         # The answer's tokens are the reply's and the parse's together.
         return turn, add_token_usage(reply_usage, parse_usage)
 
     def _stream_reply(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         *,
+        traced: list[dict[str, Any]],
         max_output_tokens: int | None,
         on_delta: Callable[[str], None] | None,
     ) -> tuple[str, TokenUsage | None]:
@@ -252,6 +273,13 @@ class OpenAIChatBackend(ChatBackend):
         other model call uses (:func:`tracing._retryable`,
         :func:`tracing._retry_wait_s`), as in the task agent's streamed turn.
 
+        Args:
+            messages: The request's messages (carried entries included); a
+                retried attempt sends the same ones.
+            traced: The rebuilt copy the trace records.
+            max_output_tokens: Provider output ceiling.
+            on_delta: Receives the prose pieces.
+
         Returns:
             The reply prose and its token usage.
         """
@@ -261,6 +289,7 @@ class OpenAIChatBackend(ChatBackend):
             try:
                 return self._reply_attempt(
                     messages,
+                    traced=traced,
                     max_output_tokens=max_output_tokens,
                     on_delta=on_delta,
                     started=started,
@@ -286,8 +315,9 @@ class OpenAIChatBackend(ChatBackend):
 
     def _reply_attempt(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         *,
+        traced: list[dict[str, Any]],
         max_output_tokens: int | None,
         on_delta: Callable[[str], None] | None,
         started: list[bool],
@@ -340,7 +370,7 @@ class OpenAIChatBackend(ChatBackend):
             ) as span,
             tracing.request_id_scope(span),
         ):
-            span.update(input={"messages": messages}, model=CHAT_MODEL, metadata=metadata)
+            span.update(input={"messages": traced}, model=CHAT_MODEL, metadata=metadata)
             try:
                 return _call(span)
             except Exception as exc:
@@ -353,41 +383,18 @@ def _chat_messages(
     transcript: list[ToolExchange],
     *,
     force_emit: bool,
-) -> list[dict[str, Any]]:
+    carried: Sequence[CarriedCall | None] | None = None,
+) -> list[Any]:
     """Rebuild the provider transcript with tool results labelled as data.
 
-    This is the same assistant-tool-call/tool-result representation used by
-    ``OpenAISynthesisBackend._section_messages``. JSON encoding keeps control
-    characters inert and the system prompt identifies all tool results as
-    data, never instructions.
+    The tool exchanges use the section writer's representation
+    (:func:`~policy_atlas.evidence_search.synthesis.section_prompt.tool_history_messages`),
+    carried model turns included. JSON encoding keeps control characters inert
+    and the system prompt identifies all tool results as data, never
+    instructions.
     """
-    rendered: list[dict[str, Any]] = [dict(message) for message in messages]
-    for index, exchange in enumerate(transcript):
-        call_id = f"call_{index}"
-        rendered.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "id": call_id,
-                        "type": "function",
-                        "function": {
-                            "name": exchange["tool"],
-                            "arguments": json.dumps(
-                                exchange["arguments"], ensure_ascii=False, sort_keys=True
-                            ),
-                        },
-                    }
-                ],
-            }
-        )
-        rendered.append(
-            {
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": json.dumps(exchange["result"], ensure_ascii=False, sort_keys=True),
-            }
-        )
+    rendered: list[Any] = [dict(message) for message in messages]
+    rendered.extend(tool_history_messages(transcript, carried))
     if force_emit:
         rendered.append(
             {

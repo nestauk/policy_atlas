@@ -510,6 +510,12 @@ def _responses_request(**request: Any) -> dict[str, Any]:
     ``stream_options`` is dropped (Responses always sends usage on its last
     event). ``store=False`` is always added, so the provider keeps no copy.
 
+    A :class:`CarriedEntry` in ``messages`` (from :meth:`CarriedTurn.with_results`)
+    becomes an earlier turn's own output items followed by one
+    ``function_call_output`` per tool call, in place. A request with tools and an
+    effort above ``"none"`` also asks for the model's reasoning back
+    (``include=["reasoning.encrypted_content"]``), so a later turn can carry it.
+
     Raises:
         TypeError: If the request holds an unknown key, or a message, content
             part, tool or tool choice of a kind this translation does not know.
@@ -518,7 +524,13 @@ def _responses_request(**request: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"store": False}
     for key, value in request.items():
         if key == "messages":
-            out["input"] = [item for message in value for item in _input_items(message)]
+            out["input"] = [
+                item
+                for message in value
+                for item in (
+                    message.items if isinstance(message, CarriedEntry) else _input_items(message)
+                )
+            ]
         elif key == "reasoning_effort":
             out["reasoning"] = {"effort": value}
         elif key == "max_completion_tokens":
@@ -531,6 +543,10 @@ def _responses_request(**request: Any) -> dict[str, Any]:
             out["text"] = {"format": _text_format(value)}
         elif key != "stream_options":
             out[key] = value
+    if request.get("tools") and request.get("reasoning_effort") not in (None, "none"):
+        # The provider hands back the model's reasoning (encrypted) only when
+        # asked, and with ``store=False`` it is the only way to carry it on.
+        out["include"] = ["reasoning.encrypted_content"]
     return out
 
 
@@ -651,6 +667,100 @@ class ToolCall:
     call_id: str
 
 
+@dataclass(frozen=True, repr=False)
+class CarriedEntry:
+    """An earlier turn, ready to sit in a later request's ``messages`` list.
+
+    Made by :meth:`CarriedTurn.with_results`; the module expands it when it
+    translates the request. Its repr shows only the item count, so a stray log
+    line cannot show what it holds.
+
+    Attributes:
+        items: The turn's own output items, then one ``function_call_output``
+            per tool call.
+    """
+
+    items: tuple[dict[str, Any], ...]
+
+    def __repr__(self) -> str:
+        return f"CarriedEntry({len(self.items)} items)"
+
+
+@dataclass(frozen=True, repr=False)
+class CarriedTurn:
+    """What one answer hands on to the next request of the same tool loop.
+
+    In plain terms: when the model reasons before calling a tool, the provider
+    returns that reasoning as an encrypted block the app cannot read. Sending the
+    turn's own output items back on the next request (instead of a rebuilt copy
+    of its tool calls) lets the model keep its reasoning. The items are kept as
+    the provider sent them, with the ``status`` field removed from every item
+    that is not a message (the form the provider accepts back). A call site
+    never reads inside them, and they are never stored, logged or traced: the
+    repr shows only the item count.
+
+    Attributes:
+        items: The provider's output items for the turn.
+    """
+
+    items: tuple[dict[str, Any], ...]
+
+    def __repr__(self) -> str:
+        return f"CarriedTurn({len(self.items)} items)"
+
+    @property
+    def call_ids(self) -> tuple[str, ...]:
+        """The ids of the turn's tool calls, in order."""
+        return tuple(
+            item["call_id"] for item in self.items if item.get("type") == "function_call"
+        )
+
+    def with_results(self, results: Mapping[str, str]) -> CarriedEntry:
+        """Pair the turn with one result text for each of its tool calls.
+
+        Args:
+            results: The result text for each call, by call id.
+
+        Returns:
+            The entry to put in a later request's ``messages`` list where the
+            rebuilt messages of this turn would have gone.
+
+        Raises:
+            ValueError: If a call has no result, or a result names a call the
+                turn did not make.
+        """
+        call_ids = self.call_ids
+        missing = [call_id for call_id in call_ids if call_id not in results]
+        unknown = sorted(set(results) - set(call_ids))
+        if missing or unknown:
+            raise ValueError(
+                f"carried turn results do not match its calls: missing {missing}, "
+                f"unknown {unknown}"
+            )
+        outputs = tuple(
+            {"type": "function_call_output", "call_id": call_id, "output": results[call_id]}
+            for call_id in call_ids
+        )
+        return CarriedEntry(items=self.items + outputs)
+
+
+def _carried(response: Any) -> CarriedTurn | None:
+    """The response's output items as a :class:`CarriedTurn` (``None`` if not readable)."""
+    items: list[dict[str, Any]] = []
+    for item in getattr(response, "output", None) or ():
+        if hasattr(item, "model_dump"):
+            plain = item.model_dump(exclude_none=True)
+        elif isinstance(item, Mapping):
+            plain = dict(item)
+        else:
+            # A test double's output this module cannot copy: carry nothing.
+            return None
+        if plain.get("type") != "message":
+            plain.pop("status", None)
+        items.append(plain)
+    return CarriedTurn(items=tuple(items)) if items else None
+
+
 @dataclass(frozen=True)
 class ModelTurn:
     """The answer to one non-streamed model request.
@@ -660,14 +770,14 @@ class ModelTurn:
         tool_calls: The tool calls the model made, in order (empty when none).
         usage: Token counts for the request (``None`` when the provider sent
             none).
-        carried: Reserved for what a later request must carry over from this
-            one; always ``None`` for now.
+        carried: The answer's output items, for a later request of the same
+            tool loop to send back (see :class:`CarriedTurn`).
     """
 
     text: str
     tool_calls: tuple[ToolCall, ...]
     usage: TokenUsage | None
-    carried: object | None = None
+    carried: CarriedTurn | None = None
 
 
 class TextStream:
@@ -699,7 +809,8 @@ class TextStream:
     Attributes:
         label: Human-readable call label.
         usage: Token counts read so far.
-        carried: Always ``None`` for now.
+        carried: The answer's output items (see :class:`CarriedTurn`), read
+            from the final ``response.completed`` event; ``None`` until then.
     """
 
     def __init__(self, stream: Any, *, label: str) -> None:
@@ -707,7 +818,7 @@ class TextStream:
         self._closed = False
         self.label = label
         self.usage: TokenUsage | None = None
-        self.carried: object | None = None
+        self.carried: CarriedTurn | None = None
 
     def __iter__(self) -> Iterator[str]:
         ended = False
@@ -741,6 +852,7 @@ class TextStream:
             raise ModelRefusal(self.label, self.usage)
         if final is not None:
             _check_finished(final, label=self.label, usage=self.usage)
+            self.carried = _carried(final)
 
     def _provider_error(self, message: Any, body: Any) -> openai.APIError:
         text = message if isinstance(message, str) and message else "the provider failed the answer"
@@ -796,7 +908,9 @@ def send_turn(client: Any, *, label: str, **request: Any) -> ModelTurn:
         for item in output
         if getattr(item, "type", None) == "function_call"
     )
-    return ModelTurn(text=_output_text(response), tool_calls=calls, usage=usage)
+    return ModelTurn(
+        text=_output_text(response), tool_calls=calls, usage=usage, carried=_carried(response)
+    )
 
 
 def stream_turn(client: Any, *, label: str, **request: Any) -> TextStream:

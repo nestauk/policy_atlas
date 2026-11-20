@@ -34,7 +34,7 @@ plus the typed claims that anchor into it (ADR 0015).
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
@@ -125,6 +125,7 @@ from policy_atlas.evidence_search.synthesis.summary_prompts import (
     SUMMARY_JUDGE_PROMPT_VERSION,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
+    CarriedCall,
     MalformedEmissionError,
     ToolCallRequest,
     ToolExchange,
@@ -271,6 +272,10 @@ class SectionTurn(TypedDict):
     it called ``write_section``, or replied with no tool
     call at all. Such a turn carries no reads and no claims; the loop then
     runs the write turn, which streams the section to the user.
+
+    ``carried`` (live backend only) is parallel to ``tool_calls``: for each
+    call, the model turn it came from, which the section loop keeps in memory
+    to send back on the next turn. No trace or stored record reads it.
     """
 
     tool_calls: list[ToolCallRequest]
@@ -278,6 +283,7 @@ class SectionTurn(TypedDict):
     malformed_claims: NotRequired[int]
     extra_tool_calls_ignored: NotRequired[int]
     ready: NotRequired[bool]
+    carried: NotRequired[list[CarriedCall]]
 
 
 # --- The backend seam ---
@@ -352,6 +358,7 @@ class SynthesisBackend(Protocol):
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Produce one loop turn: one or more read-tool calls, the claims
         emission, or the ready signal.
@@ -360,6 +367,9 @@ class SynthesisBackend(Protocol):
             seed: Id-keyed section seed.
             transcript: Executed tool exchanges so far.
             force_emit: True on the final turn — the backend must emit claims.
+            carried: One entry per exchange: the model turn it came from, to
+                send back instead of the rebuilt messages (a backend with no
+                model may ignore it).
 
         Returns:
             The turn plus token usage: exactly one of ``tool_calls`` (one or
@@ -1037,15 +1047,6 @@ class OpenAISynthesisBackend:
         """Tracing client shared with the section read loop (``tool:*`` spans)."""
         return self._langfuse_client
 
-    def _section_messages(
-        self,
-        seed: dict[str, Any],
-        transcript: list[ToolExchange],
-        *,
-        force_emit: bool,
-    ) -> list[dict[str, Any]]:
-        return build_section_messages(seed, transcript, force_emit=force_emit)
-
     @property
     def _section_prompt_version(self) -> str:
         return SECTION_PROMPT_VERSION
@@ -1220,7 +1221,7 @@ class OpenAISynthesisBackend:
 
     def _create_section_turn_once(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         *,
         force_emit: bool,
         tools: list[dict[str, Any]] | None = None,
@@ -1243,30 +1244,40 @@ class OpenAISynthesisBackend:
             ),
         )
         log_usage("synthesis.section_turn.usage", response.usage)
+        carried_turn = response.carried
 
-        def _emit_turn(arguments: str) -> UsageResult[SectionTurn]:
-            section, malformed = _salvage_section(arguments)
+        def _emit_turn(call: ToolCall) -> UsageResult[SectionTurn]:
+            try:
+                section, malformed = _salvage_section(call.arguments)
+            except MalformedEmissionError as exc:
+                if carried_turn is not None:
+                    exc.carried = CarriedCall(carried_turn, call.call_id)
+                raise
             turn: SectionTurn = {"tool_calls": [], "claims": section}
             if malformed:
                 turn["malformed_claims"] = malformed
             return turn, response.usage
 
-        def _read_turn(name: str, arguments: str) -> UsageResult[SectionTurn]:
-            return {
-                "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
+        def _read_turn(calls: list[ToolCall]) -> UsageResult[SectionTurn]:
+            turn: SectionTurn = {
+                "tool_calls": [
+                    {"tool": call.name, "arguments": _json_object_or_empty(call.arguments)}
+                    for call in calls
+                ],
                 "claims": None,
-            }, response.usage
+            }
+            if carried_turn is not None:
+                turn["carried"] = [CarriedCall(carried_turn, call.call_id) for call in calls]
+            return turn, response.usage
 
         if force_emit:
             taken, ignored = _first_named_tool_call(
                 response, name="emit_section", label="synthesis section turn"
             )
-            name = taken.name
-            arguments = taken.arguments
-            if not name:
+            if not taken.name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            forced_turn = _emit_turn(arguments) if name == "emit_section" else _read_turn(
-                name, arguments
+            forced_turn = (
+                _emit_turn(taken) if taken.name == "emit_section" else _read_turn([taken])
             )
             if ignored:
                 forced_turn[0]["extra_tool_calls_ignored"] = len(ignored)
@@ -1287,36 +1298,32 @@ class OpenAISynthesisBackend:
 
         if len(message_tool_calls) == 1:
             only_call = message_tool_calls[0]
-            name = only_call.name
-            arguments = only_call.arguments
-            if not name:
+            if not only_call.name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if name == "write_section":
+            if only_call.name == "write_section":
                 return _ready_turn()
-            if name == "emit_section":
-                return _emit_turn(arguments)
-            return _read_turn(name, arguments)
+            if only_call.name == "emit_section":
+                return _emit_turn(only_call)
+            return _read_turn([only_call])
 
-        read_calls: list[ToolCallRequest] = []
-        emit_arguments: str | None = None
+        read_calls: list[ToolCall] = []
+        emit_call: ToolCall | None = None
         write_requested = False
         for tool_call in message_tool_calls:
-            name = tool_call.name
-            arguments = tool_call.arguments
-            if not name:
+            if not tool_call.name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if name == "write_section":
+            if tool_call.name == "write_section":
                 write_requested = True
                 continue
-            if name == "emit_section":
-                emit_arguments = arguments
+            if tool_call.name == "emit_section":
+                emit_call = tool_call
                 continue
-            read_calls.append({"tool": name, "arguments": _json_object_or_empty(arguments)})
-        if emit_arguments is not None and not read_calls:
+            read_calls.append(tool_call)
+        if emit_call is not None and not read_calls:
             # Every parallel call was emit_section (perhaps beside
             # write_section) — honour the emission rather than returning an
             # empty turn the loop would treat as a protocol violation.
-            return _emit_turn(emit_arguments)
+            return _emit_turn(emit_call)
         if write_requested and not read_calls:
             # Every parallel call was write_section: the writer is ready.
             return _ready_turn()
@@ -1326,11 +1333,11 @@ class OpenAISynthesisBackend:
             log.warning(
                 "synthesis.write_with_reads_deferred", read_tool_count=len(read_calls)
             )
-        if emit_arguments is not None:
+        if emit_call is not None:
             log.warning(
                 "synthesis.emit_with_reads_deferred", read_tool_count=len(read_calls)
             )
-        return {"tool_calls": read_calls, "claims": None}, response.usage
+        return _read_turn(read_calls)
 
     def section_turn(
         self,
@@ -1338,6 +1345,7 @@ class OpenAISynthesisBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Produce one OpenAI tool-forced section-loop turn.
 
@@ -1345,6 +1353,9 @@ class OpenAISynthesisBackend:
             seed: Section seed record.
             transcript: Executed tool exchanges so far.
             force_emit: Whether this is the final forced-emission turn.
+            carried: One entry per exchange: the model turn it came from, sent
+                back in place of the rebuilt messages. The trace shows the
+                rebuilt messages: carried items never reach it.
 
         Returns:
             Read-tool call requests, a claims emission, or (on an open turn) the
@@ -1353,7 +1364,13 @@ class OpenAISynthesisBackend:
         Raises:
             RuntimeError: If the provider response violates the one-tool-call protocol.
         """
-        messages = self._section_messages(seed, transcript, force_emit=force_emit)
+        # The trace's copy is rebuilt, so carried items never reach a trace.
+        traced_messages = build_section_messages(seed, transcript, force_emit=force_emit)
+        messages = (
+            build_section_messages(seed, transcript, force_emit=force_emit, carried=carried)
+            if carried is not None
+            else traced_messages
+        )
         tools = section_request_tools(seed)
         turn_index = self._next_turn_index() if self._langfuse_client is not None else 0
 
@@ -1361,7 +1378,7 @@ class OpenAISynthesisBackend:
             turn, usage = result
             span.update(
                 usage_details=usage_details(usage),
-                input={"messages": messages},
+                input={"messages": traced_messages},
                 output=_turn_output(turn),
                 model=route().model_for("synthesise_section_turn"),
                 metadata={
@@ -1389,6 +1406,8 @@ class OpenAISynthesisBackend:
         self,
         seed: dict[str, Any],
         transcript: list[ToolExchange],
+        *,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Write the section as one streamed reply.
 
@@ -1423,6 +1442,9 @@ class OpenAISynthesisBackend:
         Args:
             seed: Section seed record.
             transcript: Executed tool exchanges so far.
+            carried: One entry per exchange: the model turn it came from, sent
+                back in place of the rebuilt messages (on the fallback too).
+                The trace shows the rebuilt messages.
 
         Returns:
             A parsed claims emission plus token usage.
@@ -1430,8 +1452,16 @@ class OpenAISynthesisBackend:
         step = "synthesise_section_emit"
         # ``streamed=True`` appends the write-turn message whatever
         # ``force_emit`` says, so the ready and the forced write send the same.
-        messages = build_section_messages(
+        # The trace's copy is rebuilt, so carried items never reach a trace.
+        traced_messages = build_section_messages(
             seed, transcript, force_emit=False, streamed=True
+        )
+        messages = (
+            build_section_messages(
+                seed, transcript, force_emit=False, streamed=True, carried=carried
+            )
+            if carried is not None
+            else traced_messages
         )
         tools = section_request_tools(seed)
         # Deltas are addressed to the page's section index (key findings first
@@ -1448,7 +1478,7 @@ class OpenAISynthesisBackend:
 
         def _stream(span: Any | None = None) -> UsageResult[SectionTurn]:
             if span is not None:
-                span.update(input={"messages": messages}, metadata=metadata)
+                span.update(input={"messages": traced_messages}, metadata=metadata)
             stream = stream_turn(
                 self._client,
                 label="synthesis section emit",
@@ -1504,7 +1534,8 @@ class OpenAISynthesisBackend:
                 publish_section_delta(index, "", mode="replace")
                 with self._lock:
                     self.stream_fallbacks += 1
-                result = self.section_turn(seed, transcript, force_emit=True)
+                carried_kwargs = {"carried": carried} if carried is not None else {}
+                result = self.section_turn(seed, transcript, force_emit=True, **carried_kwargs)
                 # The fallback's prose reaches the page at once, not at
                 # ``section_completed`` after the claim checks and the repair.
                 section = result[0]["claims"]
@@ -2310,6 +2341,7 @@ class StubSynthesisBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Return the next scripted turn, default tool call, or deterministic claims.
 
@@ -2317,6 +2349,7 @@ class StubSynthesisBackend:
             seed: Section seed record.
             transcript: Executed tool exchanges so far.
             force_emit: Whether this is the final forced-emission turn.
+            carried: Ignored: the stub has no model turn to send back.
 
         Returns:
             One tool call request or a deterministic claims emission, plus no
@@ -2325,6 +2358,7 @@ class StubSynthesisBackend:
         Raises:
             RuntimeError: If the failure sentinel is enabled.
         """
+        del carried
         self._raise_if_failed()
         scripted = self._scripted_turn(seed, transcript, force_emit=force_emit)
         if scripted is not None:

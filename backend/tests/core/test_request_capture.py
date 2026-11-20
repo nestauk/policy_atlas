@@ -96,6 +96,27 @@ _ALLOWED_KEYS = {
     "stream",
     "prompt_cache_options",
 }
+_LOW = {"effort": "low"}
+_LOW_RAISED_LIMIT = {"effort": "low", "limit": 18_432}
+#: The deliberate differences from the baseline, by step: the reasoning effort, output
+#: limit and timeout (seconds) the request must carry now. A step named here that sends
+#: tools also asks for its reasoning back (``include``). Any other difference still fails.
+_CHANGED: dict[str, dict[str, Any]] = {
+    "synthesise_section_turn": {"effort": "low", "timeout": 60.0},
+    "synthesise_section_emit": {"effort": "low", "timeout": 60.0},
+    "synthesise_write_key_findings": {"effort": "medium"},
+    "chat": {"effort": "low", "limit": 6_144},
+    "task_agent_scoping_turn": _LOW_RAISED_LIMIT,
+    "longlist_constrain": _LOW_RAISED_LIMIT,
+    "longlist_distinct": _LOW_RAISED_LIMIT,
+    "longlist_authority": _LOW_RAISED_LIMIT,
+    "option_profile_potential_impact": _LOW_RAISED_LIMIT,
+    "option_profile_ambition": _LOW_RAISED_LIMIT,
+    # These two share the option profile limit; nothing else about them changed.
+    "option_profile_line": {"limit": 18_432},
+    "option_profile_setting": {"limit": 18_432},
+}
+_INCLUDE = ["reasoning.encrypted_content"]
 #: Every top-level key a baseline request carries; each has its counterpart checked below.
 _BASELINE_KEYS = {
     "model",
@@ -208,7 +229,8 @@ def content_differences(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
     tools (with ``strict`` stated, ``False`` where the baseline tool had none), the
     tool choice, the answer schema, the model, effort, output limit, timeout and
     cache options must all carry over; ``store`` must be ``False``; and no key
-    outside the allowed list may appear.
+    outside the allowed list may appear. The one exception is the table of
+    deliberate changes above (:data:`_CHANGED`).
 
     Args:
         old: The baseline (chat-completions) capture entry.
@@ -220,6 +242,7 @@ def content_differences(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
     """
     where = f"{old['step']}/{old['variant'] or '(default)'}"
     then, now = old["body"], new["body"]
+    changed = _CHANGED.get(old["step"], {})
     problems: list[str] = []
 
     def check(ok: bool, what: str) -> None:
@@ -228,7 +251,13 @@ def content_differences(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
 
     check(new["path"].endswith("/responses"), f"path is {new['path']}")
     check(set(then) <= _BASELINE_KEYS, f"baseline key not compared: {set(then) - _BASELINE_KEYS}")
-    check(set(now) <= _ALLOWED_KEYS, f"key outside the allowed list: {set(now) - _ALLOWED_KEYS}")
+    extra = set(now) - _ALLOWED_KEYS - {"include"}
+    check(not extra, f"key outside the allowed list: {extra}")
+    asks_reasoning_back = "effort" in changed and "tools" in then
+    check(
+        now.get("include") == (_INCLUDE if asks_reasoning_back else None),
+        f"include is {now.get('include')!r}",
+    )
     check(now.get("store") is False, f"store is {now.get('store')!r}, not false")
     # Messages and tool history, in order.
     old_items = _old_items(then["messages"])
@@ -258,13 +287,20 @@ def content_differences(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
         check("text" not in now, "text sent where the baseline had no response format")
     # Scalars.
     check(now.get("model") == then["model"], "model differs")
-    check(now.get("reasoning") == {"effort": then["reasoning_effort"]}, "reasoning effort differs")
+    effort = changed.get("effort", then["reasoning_effort"])
+    check(now.get("reasoning") == {"effort": effort}, f"reasoning is {now.get('reasoning')!r}")
+    limit = then.get("max_completion_tokens")
+    if limit is not None:
+        limit = changed.get("limit", limit)
     check(
-        now.get("max_output_tokens") == then.get("max_completion_tokens"),
+        now.get("max_output_tokens") == limit,
         f"output limit {then.get('max_completion_tokens')} became {now.get('max_output_tokens')}",
     )
     check(bool(now.get("stream")) == bool(then.get("stream")), "streaming differs")
-    check(new["timeout"] == old["timeout"], f"timeout {old['timeout']} became {new['timeout']}")
+    timeout = old["timeout"]
+    if "timeout" in changed:
+        timeout = dict.fromkeys(timeout, changed["timeout"])
+    check(new["timeout"] == timeout, f"timeout {old['timeout']} became {new['timeout']}")
     check(
         now.get("prompt_cache_options") == then.get("prompt_cache_options"),
         "prompt cache options differ",

@@ -120,6 +120,51 @@ lint and build were therefore run on a clean checkout of the same commit
   text (Terra) and an image part with detail `auto` (Sol, strict schema). Both accepted;
   usage read back.
 
+## Phase 3 (stage 1c and request ids)
+
+- **M10:** `AnswerCutOff` and `ModelRefusal` (both `RuntimeError`s carrying the site's
+  label and the usage) are raised by all three calls from one check. A refusal is checked
+  before a cut-off. An answer stopped for any reason other than the token limit (the SDK
+  knows one, `content_filter`) is a `ModelRefusal`. Neither is retried. Each site does what
+  plan decision 4 says:
+  - `.parse` sites: raised to the caller.
+  - Section turn and repair: turned into the malformed-emission error; the key findings
+    fallback returns its empty emission.
+  - The six streams with a fallback: their existing `except Exception` path (checked site
+    by site).
+  - Chat reply: a cut-off keeps the text shown, marks the observation `WARNING` and goes
+    on to the parse; a refusal with no text raises. **A refusal after some text keeps the
+    text, like a cut-off:** the plan's table does not cover this case; flagged for review.
+  - No code matched the old SDK error names; two comments in hash-pinned prompt files
+    still name `LengthFinishReasonError` and were left.
+  - Tests: cut-off and refusal for each of the three calls; the chat reply keeping its
+    text; a cut-off section turn. Not tested: the key findings fallback's empty emission
+    and the repair turn on a cut-off (same helper as the section turn).
+- **M11:** the chat reply's tokens are added to the final parse's and reach the answer's
+  totals and trace; the reply has its own `chat:reply` generation for each attempt.
+- **M16:** two attempts; a retry only when no text piece has arrived and
+  `tracing._retryable` accepts the failure; the wait is `tracing._retry_wait_s`. The loop
+  mirrors the task agent's (site 19) and is not shared, because that site's tests pin its
+  own module's names. Tests: a retry before text, none after.
+- **S1:** `request_id_scope()` in `core/tracing.py`; `core/openai_client.py` has one
+  function that calls `client.responses.create` and notes the provider's request id from
+  the response, a stream's headers or a status error. `traced_attempts` opens a scope for
+  each attempt; the seven one-attempt observations open their own. An attempt with a
+  response records `request_id`; one with none records `started_at` (UTC). The header is
+  `x-request-id`: in the design probe it equalled `x-amzn-requestid` in 899 of 899 calls,
+  and 893 of 893 ids were found in the audit log.
+- **Existing tests changed in this phase** (4): the incomplete-stream test now expects
+  the raise (renamed; its text and usage assertions kept); three trace tests read one more
+  span update or metadata key (the request id or start time).
+- **M15:** spec change 1 applied in the three places of the Theory of change components
+  spec (the call-path bullet, the modules table row, the build-order row), with its line
+  in `docs/specs/log.md`.
+  - **For the owner (not applied):** a fourth line of the same spec, the import row of
+    the steps table, still says PDF pages "go through the existing
+    `chat.completions.parse` path". It names the old call too, but spec change 1 as
+    accepted lists three places. Proposed wording: "go through the existing
+    structured-answer call as image parts".
+
 ## Phase 4 (Part 2)
 
 - **Task 4.0, the probe before the code** (`research/probe3/`, 2026-11-20, Terra and Sol,

@@ -52,9 +52,9 @@ from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_
 
 CONSTRAIN_PROMPT_VERSION = "constrain_v4"
 
-CONSTRAIN_MAX_OUTPUT_TOKENS = 16_384
-DISTINCT_MAX_OUTPUT_TOKENS = 16_384
-AUTHORITY_MAX_OUTPUT_TOKENS = 16_384
+CONSTRAIN_MAX_OUTPUT_TOKENS = 18_432
+DISTINCT_MAX_OUTPUT_TOKENS = 18_432
+AUTHORITY_MAX_OUTPUT_TOKENS = 18_432
 # Options per call of the per-option prompt.
 CONSTRAIN_BATCH_SIZE = 10
 

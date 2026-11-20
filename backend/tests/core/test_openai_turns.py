@@ -131,6 +131,7 @@ def test_send_turn_translates_the_request_and_reads_text_tool_calls_and_usage() 
         text="thinking aloud",
         tool_calls=(ToolCall(name="lookup", arguments='{"q": "x"}', call_id="call_0"),),
         usage=_TOKENS,
+        carried=turn.carried,
     )
     assert sent == [
         {
@@ -153,6 +154,7 @@ def test_send_turn_translates_the_request_and_reads_text_tool_calls_and_usage() 
             "tool_choice": "required",
             "parallel_tool_calls": True,
             "max_output_tokens": 500,
+            "include": ["reasoning.encrypted_content"],
             "store": False,
             "prompt_cache_options": {"mode": "explicit"},
             "timeout": {"connect": 30, "read": 30, "write": 30, "pool": 30},
@@ -226,7 +228,7 @@ def test_a_completed_stream_yields_text_pieces_in_order_and_usage_after_the_loop
 
     assert list(stream) == ["Hel", "lo"]
     assert stream.usage == _TOKENS
-    assert stream.carried is None
+    assert stream.carried is not None
     assert sent[0]["stream"] is True
     assert sent[0]["store"] is False
     assert "stream_options" not in sent[0]

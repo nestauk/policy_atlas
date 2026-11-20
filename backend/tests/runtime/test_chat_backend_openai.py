@@ -11,6 +11,7 @@ import pytest
 
 from policy_atlas.core.usage import TokenUsage
 from policy_atlas.runtime import chat_backend_openai
+from policy_atlas.runtime.chat_backend import traceable_turn
 from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend, _chat_messages
 from policy_atlas.runtime.chat_prompt import ChatAnswerWire
 from tests.helpers import (
@@ -53,7 +54,8 @@ def test_live_adapter_uses_only_read_tools_for_non_terminal_turn(
         [{"role": "user", "content": "Question"}], [], force_emit=False, max_output_tokens=123
     )
 
-    assert result == {
+    # ``carried`` is the in-memory model turn the loop sends back; not part of this check.
+    assert traceable_turn(result) == {
         "answer": None,
         "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "q"}}],
     }
@@ -62,8 +64,7 @@ def test_live_adapter_uses_only_read_tools_for_non_terminal_turn(
         "search_chunks", "query_findings", "lookup"
     }
     assert call["max_completion_tokens"] == 123
-    # Pin regression: gpt-5.6-terra 400s on function tools without this (H3 live check).
-    assert call["reasoning_effort"] == "none"
+    assert call["reasoning_effort"] == "low"
 
 
 def test_live_adapter_streams_text_then_parses_atomic_answer(
@@ -87,10 +88,9 @@ def test_live_adapter_streams_text_then_parses_atomic_answer(
     assert len(calls["stream_turn"]) == 1
     assert cast("Any", backend._client).calls[0]["stream"] is True
     assert calls["parse_structured"][0]["response_format"] is ChatAnswerWire
-    # Pin regression: gpt-5.6-terra 400s on function tools without this (H3 live check) —
-    # both the streamed-prose call and the structured-parse call carry the pin.
-    assert calls["stream_turn"][0]["reasoning_effort"] == "none"
-    assert calls["parse_structured"][0]["reasoning_effort"] == "none"
+    # The reply and the parse share the tool turn's cached prompt start, so its effort too.
+    assert calls["stream_turn"][0]["reasoning_effort"] == "low"
+    assert calls["parse_structured"][0]["reasoning_effort"] == "low"
 
 
 def test_tool_transcript_is_json_data_not_message_instructions() -> None:

@@ -8,21 +8,32 @@ loop mechanics live in the shared bounded tool-loop kernel
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Protocol, TypedDict
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, NotRequired, Protocol, TypedDict
 
 from policy_atlas.core.usage import TokenUsage, UsageResult
-from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
+from policy_atlas.evidence_search.synthesis.synthesis_tools import CarriedCall, ToolExchange
 from policy_atlas.runtime.chat_prompt import ChatAnswerWire, ChatCitationWire, ChatClaimWire
 
 _NO_USAGE = TokenUsage(prompt=None, completion=None, total=None)
 
 
 class ChatTurn(TypedDict):
-    """One backend turn: exactly one of ``tool_calls`` or ``answer``."""
+    """One backend turn: exactly one of ``tool_calls`` or ``answer``.
+
+    ``carried`` (live backend only) is parallel to ``tool_calls``: for each
+    call, the model turn it came from, which the answer's loop keeps in memory
+    to send back on its next request. Traces leave it out (:func:`traceable_turn`).
+    """
 
     answer: ChatAnswerWire | None
     tool_calls: list[dict[str, Any]]
+    carried: NotRequired[list[CarriedCall]]
+
+
+def traceable_turn(turn: Mapping[str, object]) -> dict[str, object]:
+    """The turn without its ``carried`` entries: the form a trace may record."""
+    return {key: value for key, value in turn.items() if key != "carried"}
 
 
 class ChatBackend(Protocol):
@@ -41,6 +52,7 @@ class ChatBackend(Protocol):
         force_emit: bool,
         max_output_tokens: int | None = None,
         on_delta: Callable[[str], None] | None = None,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[ChatTurn]:
         """Produce one loop turn: read-tool calls, or the answer emission.
 
@@ -52,6 +64,10 @@ class ChatBackend(Protocol):
                 must honour (plan pin 4096); the stub records it only.
             on_delta: Optional provider-neutral prose callback for the final
                 emission only.
+            carried: One entry per exchange: the model turn it came from, to
+                send back instead of the rebuilt messages on the next tool
+                turn, the reply and its parse (a backend with no model may
+                ignore it).
 
         Returns:
             The turn plus token usage.
@@ -78,8 +94,9 @@ class StubChatBackend:
         force_emit: bool,
         max_output_tokens: int | None = None,
         on_delta: Callable[[str], None] | None = None,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[ChatTurn]:
-        del max_output_tokens, on_delta  # recorded by test doubles; no provider to cap
+        del max_output_tokens, on_delta, carried  # no provider to cap or send back to
         question = messages[-1]["content"] if messages else ""
         if not transcript and not force_emit:
             return (

@@ -35,7 +35,7 @@ from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_
 
 OPTION_PROFILE_PROMPT_VERSION = "option_profile_v5"
 
-OPTION_PROFILE_MAX_OUTPUT_TOKENS = 16_384
+OPTION_PROFILE_MAX_OUTPUT_TOKENS = 18_432
 
 #: The ceiling on one Potential impact sentence.
 #: Checked in code after the call, not on the wire: a ``max_length`` on the
