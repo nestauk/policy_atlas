@@ -31,8 +31,11 @@ from tests.unit.test_synth import (
 )
 
 STAGING_CSP = (
-    "default-src 'self'; script-src 'self' https://*.captcha-sdk.awswaf.com; "
-    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
+    "default-src 'self'; "
+    "script-src 'self' https://*.captcha.awswaf.com https://*.token.awswaf.com; "
+    "style-src 'self' 'unsafe-inline' https://static.captcha.awswaf.com; "
+    "img-src 'self' data: blob:; font-src 'self' https://static.captcha.awswaf.com; "
+    "media-src 'self' data:; "
     "connect-src 'self' https://api.v3.policyatlas.uk "
     "https://cognito-idp.eu-west-2.amazonaws.com "
     "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com https://auth.v3.policyatlas.uk "
@@ -134,7 +137,8 @@ def test_s1_to_s4_report_only_properties_match_each_environment_config():
         }
         assert "ContentSecurityPolicy" not in security
         assert ("https://*.awswaf.com" in csp) is waf_captcha
-        assert ("https://*.captcha-sdk.awswaf.com" in csp.split("; ")[1]) is waf_captcha
+        assert ("https://*.captcha.awswaf.com" in csp.split("; ")[1]) is waf_captcha
+        assert ("media-src 'self' data:" in csp) is waf_captcha
 
 
 def test_s3_enforce_uses_the_built_in_csp_header_only():

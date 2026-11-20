@@ -37,18 +37,25 @@ def content_security_policy(
     Returns:
         The complete CSP header value in the contract's directive order.
     """
-    # The CAPTCHA script comes from <id>.<region>.captcha-sdk.awswaf.com (read
-    # from staging 2026-11-19); its own network calls may use other awswaf.com hosts.
-    waf_script_source = " https://*.captcha-sdk.awswaf.com" if waf_captcha else ""
+    # The CAPTCHA loads jsapi.js from <id>.<region>.captcha.awswaf.com, which loads
+    # challenge.js from <id>.<region>.token.awswaf.com and a font stylesheet (and its
+    # fonts) from static.captcha.awswaf.com; the audio puzzle plays a data: clip. Its
+    # own network calls may use other awswaf.com hosts.
+    waf_script_source = (
+        " https://*.captcha.awswaf.com https://*.token.awswaf.com" if waf_captcha else ""
+    )
+    waf_static_source = " https://static.captcha.awswaf.com" if waf_captcha else ""
     waf_source = " https://*.awswaf.com" if waf_captcha else ""
     cognito_issuer = f"https://cognito-idp.{cognito_region}.amazonaws.com"
     hosted_domains = " ".join(cognito_hosted_domains)
+    media = ("media-src 'self' data:",) if waf_captcha else ()
     return "; ".join((
         "default-src 'self'",
         f"script-src 'self'{waf_script_source}",
-        "style-src 'self' 'unsafe-inline'",
+        f"style-src 'self' 'unsafe-inline'{waf_static_source}",
         "img-src 'self' data: blob:",
-        "font-src 'self'",
+        f"font-src 'self'{waf_static_source}",
+        *media,
         (
             f"connect-src 'self' {api_origin} {cognito_issuer} "
             f"{hosted_domains}{waf_source}"
