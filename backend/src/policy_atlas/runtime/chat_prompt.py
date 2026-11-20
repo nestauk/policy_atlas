@@ -28,7 +28,7 @@ CHAT_MODEL = route().model_for("chat")
 CHAT_MESSAGE_MAX = 10_000          # user_message cap
 CHAT_WINDOW_CEILING = 32_000       # plan pin: whole thread, oldest-first truncation
 CHAT_FRAME_ARTEFACT_BUDGET = 40_000  # plan pin: non-entry artefact degradation threshold
-CHAT_MAX_OUTPUT_TOKENS = 6_144     # plan pin: generated-answer ceiling
+CHAT_MAX_OUTPUT_TOKENS = 4_096     # plan pin: generated-answer ceiling
 
 CHAT_SYSTEM_PROMPT = _SHARED_PREAMBLE.format(moment="chat") + """
 A run has completed and the user is reading its evidence base. Your job is to

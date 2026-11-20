@@ -162,7 +162,7 @@ def test_stub_turn_completes_durably_and_replays(
         assert replay.replayed is True
         assert replay.answer_payload == first.answer_payload
         assert backend.calls == 2
-        assert backend.output_caps == [6144, 6144]
+        assert backend.output_caps == [4096, 4096]
         with engine.connect() as conn:
             durable = (
                 conn.execute(select(chat_turn).where(chat_turn.c.id == first.id)).mappings().one()

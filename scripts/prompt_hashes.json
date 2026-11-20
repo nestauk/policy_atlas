@@ -35,7 +35,7 @@
   "backend/src/policy_atlas/options_scoping/suggest/suggest_prompt.py": "5c40e28fecaa47f6adf9d86cc608b9935ea7f78d4f84f6a97a2765a02eed8b55",
   "backend/src/policy_atlas/options_scoping/theme/theme_prompt.py": "909eb7892f07d4536256ab71d55470c8d5dd78bb5b9b4d5991a7350800b20a0d",
   "backend/src/policy_atlas/runtime/agent_prompt.py": "81fe741a453ffdd7db69f82ab4ae143f84213d70ca432227c7fbe85f6461de50",
-  "backend/src/policy_atlas/runtime/chat_prompt.py": "cee41786ca334aefcd971ff0bc11bab0cc99fc401a7b6c51526a0ece60d7c5d7",
+  "backend/src/policy_atlas/runtime/chat_prompt.py": "02210e15afc73be1694f822fa55afe759d491b2a07450df6a7386dee49f21bb5",
   "backend/src/policy_atlas/runtime/gate_sort_prompt.py": "2c0355536636919babf0b6e8a667d3798499224cd8df322c193f6f9efa1d0055",
   "backend/src/policy_atlas/runtime/longlist_verbs_prompt.py": "df927694f4a4c80f396abb58df23505ef57e62a14a06f0662febd47a1441dc45",
   "backend/src/policy_atlas/runtime/option_design_prompt.py": "c6b6f9de355d255b8555ef56189233b40bbcd55398dd2087cfa68fe38de20e58",

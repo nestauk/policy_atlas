@@ -425,9 +425,6 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   Options: a second bounded repair round, hedge-or-delete by default, a visible marker in the prose,
   or re-gather repair (tool turns inside repair). Each changes the grounding contract. Condition:
   synthesis refinement, with a judged set of sections.
-- The writer does not reason before it writes: `reasoning_effort="none"` is a provider limit on
-  tool-bearing chat-completions calls. The Responses endpoint may lift it; reasoning tokens cost
-  latency. Condition: the Responses API move.
 - Route the gather (tool-selection) turns to a cheaper model: they were about 43% of writer input
   tokens, an estimated 20 to 30% run-cost saving. A weaker gatherer can fetch worse evidence.
   Condition: synthesis refinement, with evals as the regression net.
@@ -809,9 +806,6 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Work to do
 
-- **Now** The chat prose stream has no retry: a connection error before the first token fails the
-  turn. Wrap the opening request in `traced_attempts`, as the planner stream does. Condition: the
-  next cleanup chore.
 - **Now** Chat turn citations still carry a per-citation verdict; the report moved it to the claim.
   Make the same move with the chat renderer. Condition: the next cleanup chore.
 
@@ -877,8 +871,27 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   grouping and retrieval, and the inactive Claude route for query generation. Compare with an
   overlay route file per experiment (`POLICY_ATLAS_MODEL_ROUTE_FILE`). Condition: synthesis
   refinement for the writer and judge; none recorded for the rest.
-- Bedrock hangs: invocation logging would show the provider side, but it stores request bodies.
-  Condition: the DPIA (data protection impact assessment) allows stored bodies.
+- Model calls from a laptop stall (4 to 6% of calls wait until the client timeout, then succeed on
+  a retry); the deployed apps do not. The delay sits on the laptop's side of the path; where
+  exactly is not known ([bedrock-route-facts](knowledge/bedrock-route-facts.md)). No remedy is
+  built. Bedrock invocation logging would show the provider side, but it stores request bodies.
+  Condition: a stall is seen on a deployed app, or the DPIA (data protection impact assessment)
+  allows stored bodies.
+- Account-level zero data retention on Bedrock is not set: with the setting on, Bedrock refused
+  every GPT-6 call, and AWS grants it for these models to an account on request. Every request
+  sends `store=false` instead. Option: ask AWS for the grant, then set the account's retention
+  mode and test it on one call first (one account serves production, staging and laptops).
+  Condition: an owner decision, or the DPIA asks for an account-level control.
+- Five options scoping judgement steps (`longlist_constrain`, `longlist_distinct`,
+  `longlist_authority`, `option_profile_potential_impact`, `option_profile_ambition`) were raised
+  from no reasoning to `low` with no prompt change and no live comparison, as an accepted exception
+  to [prompting.md](specs/system/prompting.md). Run the comparison (answers and cost at `none`
+  against `low`, on a judged set). Condition: task 059 reworks options scoping.
+- `extract_interventions` has a 35-second timeout on the `bedrock` route; on staging one answer
+  genuinely needed longer and failed all its attempts (2 timeouts in 10,367 calls over 14 days).
+  Re-size it by the rule of [ADR 0043](adr/0043-queued-ingest-document-store-sql-retrieval-step-timeouts.md)
+  (twice the healthy 99th percentile) from staging traces. Condition: the timeout re-sizing after
+  a week of staging data on the Responses endpoint.
 - The app's internal request language is still the Chat Completions shape (messages, `tools`,
   `response_format`), and `core/openai_client.py` translates it to the Responses endpoint at the
   edge. It is a stop-gap: it kept the prompt files untouched and made the endpoint move
@@ -913,9 +926,12 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - **Now** Three `Retry-After` parsers (`tracing._retry_wait_s`, `embeddings._retry_after_s`,
   `fetch_live.retry_after_seconds`); only the last reads the HTTP-date form. Use one parser in
   `core`. Condition: the next cleanup chore.
-- **Now** Record the response's request-id header on every traced attempt, and graph the free
-  `AWS/Bedrock` `Invocations` metric against Langfuse's attempts, to diagnose the hangs. Condition:
-  the next cleanup chore.
+- **Now** Three evaluation scripts are broken and were left so when the scripts moved to the
+  shared model-call module: `scripts/evals/search/experiments/snowball_recall.py` raises when a
+  reasoning effort is set; `scripts/evals/screening/checks/run_screen.py` ignores its effort
+  override; `scripts/feasibility_checks/options_scoping/run_checks_2_3.py` and
+  `run_extra_checks.py` pass `timeout=` and `max_retries=` to `resolve_openai_client`, which takes
+  neither. Fix or delete each. Condition: the next use of one of them.
 - **Now** Dependency direction: `core/tracing.py` imports Evidence search modules for its
   `*_score_summary` renderers (about 400 lines); the options scoping and API read models import each
   other. Move the renderers into their phase modules. Condition: the next cleanup chore.
@@ -1523,9 +1539,11 @@ The owner rules on each. Delete an entry here when the owner agrees; move it bac
 - Task Agent, plans and steering — Prompt caching on Task Agent turns: from the third turn on, 8,960
   of about 10,700 prompt tokens were served from the provider's cache (the system prompt and linked
   block).
-- Model routes and model calls — Bedrock hangs: the bare OpenAI SDK (software development kit) hangs
-  on 10 to 17% of serial judge-sized calls, some returning after 2 to 4 minutes. The client, the
-  pool and our wrapper are cleared; the cause is the provider's and unknown.
+- Model routes and model calls — Stalled model calls are a laptop-side effect. From a laptop, 4 to
+  6% of calls returned nothing until the client timeout (both endpoints alike: 6, 7 and 4 stalls
+  in 300 calls for each arm); Bedrock had finished each stalled call in 2 to 8 seconds, and the
+  stalls came in bursts across every open connection. Over 14 days production had 0 timeouts in
+  7,919 calls and staging 2 in 10,367. An earlier entry here blamed the provider; that was wrong.
 - Evaluations — Screening eval seed: the V2 baseline (13,740 documents; recall 0.836, precision
   0.634, work saved over sampling at 95% recall 0.187; recall 0.400 on hard corpora). Every deep run
   stores stage-1 and stage-2 label pairs. First calibration question: should a no-information

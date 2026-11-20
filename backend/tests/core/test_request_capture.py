@@ -105,7 +105,6 @@ _CHANGED: dict[str, dict[str, Any]] = {
     "synthesise_section_turn": {"effort": "low", "timeout": 60.0},
     "synthesise_section_emit": {"effort": "low", "timeout": 60.0},
     "synthesise_write_key_findings": {"effort": "medium"},
-    "chat": {"effort": "low", "limit": 6_144},
     "task_agent_scoping_turn": _LOW_RAISED_LIMIT,
     "longlist_constrain": _LOW_RAISED_LIMIT,
     "longlist_distinct": _LOW_RAISED_LIMIT,
