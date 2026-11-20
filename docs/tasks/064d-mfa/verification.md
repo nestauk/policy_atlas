@@ -12,6 +12,8 @@ Evidence for task 064d (contract revision 3, plan draft 3). Problem numbers and 
 | `make -C infra test` (Phase 3) | pass | 165 (16 new) |
 | `make -C backend verify-fast` (Phase 4) | pass | 4,941 passed, 1 skipped; mypy strict clean (575 files); ruff clean |
 | `make verify` (after Phases 3 to 5, 2026-11-20) | pass | backend 4,979 passed, 1 skipped; infra 165; frontend 2,025; all lint, type, drift and guard checks |
+| `make verify` (after the review fixes, 2026-11-20) | pass | infra 170; frontend 2,025 |
+| `make verify` (rebased on `dev` at e9b491c6, 2026-11-20) | pass | backend 4,985 passed, 1 skipped; infra 170; frontend 2,025; audit-paths and rules-check 0 violations |
 
 ## P0 and P0b (live tests on throwaway pools, 2026-11-19)
 
