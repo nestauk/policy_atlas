@@ -15,10 +15,11 @@ How it works, in plain terms:
   ``httpx.MockTransport``: nothing leaves the machine. The transport writes down
   each request's address path, its JSON body and its timeout, then sends back a
   made-up ("canned") answer shaped so the call site's own code runs to its end.
-- A canned answer is derived from the request itself: the smallest JSON object
-  that fits the request's answer schema, or one call of the tool the request
-  forces. Streamed requests get the same text as server-sent events (SSE), the
-  line-by-line format the provider streams in.
+- Requests go to the OpenAI Responses endpoint (``/responses``). A canned answer
+  is derived from the request itself: the smallest JSON object that fits the
+  request's answer schema, or one call of the tool the request forces. Streamed
+  requests get the same text as server-sent events (SSE), the line-by-line
+  format the provider streams in, ending with ``response.completed``.
 - Each entry below drives one call site with fixed inputs written in this file
   (no database, no outside text) and keeps one of the requests it made. The
   script fails if a driver makes a different number of requests than expected
@@ -163,8 +164,8 @@ def _minimal(schema: dict[str, Any], root: dict[str, Any]) -> Any:
 
 def _tool_parameters(body: dict[str, Any], name: str) -> dict[str, Any]:
     for tool in body.get("tools", []):
-        if tool["function"]["name"] == name:
-            parameters: dict[str, Any] = tool["function"].get("parameters", {})
+        if tool["name"] == name:
+            parameters: dict[str, Any] = tool.get("parameters") or {}
             return parameters
     raise AssertionError(f"tool {name!r} not offered")
 
@@ -180,70 +181,71 @@ def _answer(
         return None, [(name, json.dumps(arguments))]
     choice = body.get("tool_choice")
     if isinstance(choice, dict) and choice.get("type") == "function":
-        name = choice["function"]["name"]
+        name = choice["name"]
         parameters = _tool_parameters(body, name)
         return None, [(name, json.dumps(_minimal(parameters, parameters)))]
     if isinstance(choice, dict) or choice == "required":
         raise AssertionError("an open tool turn needs an override naming the tool to call")
-    response_format = body.get("response_format")
-    if isinstance(response_format, dict) and response_format.get("type") == "json_schema":
-        schema = response_format["json_schema"]["schema"]
+    text_format = body.get("text", {}).get("format")
+    if isinstance(text_format, dict) and text_format.get("type") == "json_schema":
+        schema = text_format["schema"]
         return json.dumps(_minimal(schema, schema)), []
     raise AssertionError("a request with no schema and no forced tool needs an override")
 
 
-_USAGE = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+_USAGE = {
+    "input_tokens": 10,
+    "input_tokens_details": {"cached_tokens": 0},
+    "output_tokens": 5,
+    "output_tokens_details": {"reasoning_tokens": 0},
+    "total_tokens": 15,
+}
 
 
-def _chat_completion(body: dict[str, Any], override: dict[str, Any] | None) -> httpx.Response:
-    text, calls = _answer(body, override)
-    tool_calls = [
-        {"id": f"call_{i}", "type": "function", "function": {"name": name, "arguments": args}}
+def _response(
+    body: dict[str, Any], text: str | None, calls: list[tuple[str, str]]
+) -> dict[str, Any]:
+    output: list[dict[str, Any]] = [
+        {"type": "function_call", "id": f"fc_{i}", "call_id": f"call_{i}", "name": name,
+         "arguments": args, "status": "completed"}
         for i, (name, args) in enumerate(calls)
     ]
+    if text is not None:
+        output.insert(0, {
+            "type": "message", "id": "msg_0", "role": "assistant", "status": "completed",
+            "content": [{"type": "output_text", "text": text, "annotations": []}],
+        })
+    return {
+        "id": "resp", "object": "response", "created_at": 0, "model": body["model"],
+        "status": "completed", "output": output, "usage": _USAGE,
+        "parallel_tool_calls": body.get("parallel_tool_calls", True),
+        "tool_choice": body.get("tool_choice", "auto"), "tools": body.get("tools", []),
+    }
+
+
+def _responses_answer(body: dict[str, Any], override: dict[str, Any] | None) -> httpx.Response:
+    text, calls = _answer(body, override)
+    response = _response(body, text, calls)
     if body.get("stream"):
         # No streamed site forces a tool, so a stream carries text only.
-        assert not tool_calls, "a streamed request with a forced tool"
-        delta = {"role": "assistant", "content": text}
-        chunks: list[dict[str, Any]] = [
-            {"choices": [{"index": 0, "delta": delta, "finish_reason": None}]},
-            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
-            {"choices": [], "usage": _USAGE},
+        assert not calls, "a streamed request with a forced tool"
+        events: list[dict[str, Any]] = [
+            {"type": "response.created", "response": {**response, "status": "in_progress",
+                                                       "output": [], "usage": None}},
+            {"type": "response.output_text.delta", "item_id": "msg_0", "output_index": 0,
+             "content_index": 0, "delta": text or "", "logprobs": []},
+            {"type": "response.completed", "response": response},
         ]
         lines = "".join(
-            "data: "
-            + json.dumps(
-                {"id": "c", "object": "chat.completion.chunk", "created": 0,
-                 "model": body["model"], **chunk}
-            )
+            f"event: {event['type']}\ndata: "
+            + json.dumps({**event, "sequence_number": number})
             + "\n\n"
-            for chunk in chunks
+            for number, event in enumerate(events)
         )
         return httpx.Response(
-            200,
-            content=(lines + "data: [DONE]\n\n").encode(),
-            headers={"content-type": "text/event-stream"},
+            200, content=lines.encode(), headers={"content-type": "text/event-stream"}
         )
-    message: dict[str, Any] = {"role": "assistant", "content": text}
-    if tool_calls:
-        message["tool_calls"] = tool_calls
-    return httpx.Response(
-        200,
-        json={
-            "id": "c",
-            "object": "chat.completion",
-            "created": 0,
-            "model": body["model"],
-            "choices": [
-                {
-                    "index": 0,
-                    "message": message,
-                    "finish_reason": "tool_calls" if tool_calls else "stop",
-                }
-            ],
-            "usage": _USAGE,
-        },
-    )
+    return httpx.Response(200, json=response)
 
 
 def _handle(request: httpx.Request) -> httpx.Response:
@@ -253,8 +255,8 @@ def _handle(request: httpx.Request) -> httpx.Response:
     )
     index = len(_REQUESTS) - 1
     override = _ANSWERS[index] if index < len(_ANSWERS) else None
-    if request.url.path.endswith("/chat/completions"):
-        return _chat_completion(body, override)
+    if request.url.path.endswith("/responses"):
+        return _responses_answer(body, override)
     raise AssertionError(f"no canned answer for {request.url.path}")
 
 

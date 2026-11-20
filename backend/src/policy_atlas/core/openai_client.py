@@ -1,10 +1,22 @@
-"""Shared OpenAI client resolution and structured-output guards for backend seams.
+"""The one module that sends model requests to the provider, and the guards around them.
 
-These helpers are provider-specific (OpenAI SDK types and error shapes) but
-generic across every live backend that calls the chat-completions or
-embeddings APIs: client construction from an explicit or environment API key,
-request kwargs shared across call sites, and the empty/unparsed-response
-guards used after a ``parse`` or ``create`` call.
+Every live backend sends its model requests through this module: a structured
+answer (:func:`parse_structured`), a tool turn (:func:`send_turn`) and a streamed
+answer (:func:`stream_turn`). The requests go to the OpenAI Responses endpoint
+(``client.responses``) on the route's address (Amazon Bedrock's OpenAI-compatible
+host on the Bedrock routes).
+
+In plain terms, call sites still write their requests in the older "chat
+completions" vocabulary (a list of ``messages``, ``tools`` in a nested
+``function`` block, ``response_format``, ``max_completion_tokens``). This module
+translates each request into the Responses vocabulary at the last moment, and
+reads the Responses answer back into the small result types below, so no call
+site needs to know which endpoint is used. Every request says ``store=False``:
+the provider keeps no copy of the input or the answer.
+
+It also holds client construction from an explicit or environment API key, the
+request keyword arguments shared across call sites, and the stream decoders that
+read one field of a streamed JSON answer.
 """
 
 from __future__ import annotations
@@ -15,7 +27,9 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+import openai
 from openai import OpenAI
+from openai.lib._parsing._completions import type_to_response_format_param
 from pydantic import BaseModel
 
 from policy_atlas.core.model_routes import live_api_key, route
@@ -110,7 +124,7 @@ def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
 def openai_kwargs(
     model: str, *, reasoning_effort: str, prompt_cache: PromptCache, timeout_s: float
 ) -> dict[str, Any]:
-    """Request kwargs shared by every OpenAI chat-completions call site.
+    """Request keyword arguments shared by every model call site.
 
     Every call site states its reasoning effort and its timeout:
     both come from the route file (``route().effort_for(step)``
@@ -129,7 +143,8 @@ def openai_kwargs(
             on it (sent as the SDK's per-request ``timeout`` option).
 
     Returns:
-        Keyword arguments for ``chat.completions.create`` / ``parse``.
+        Chat-style keyword arguments for :func:`send_turn` / :func:`stream_turn`
+        (this module translates them for the Responses endpoint).
     """
     kwargs: dict[str, Any] = {
         "model": model,
@@ -180,27 +195,6 @@ def with_system_breakpoint(messages: list[Any]) -> list[Any]:
     return rewritten
 
 
-def require_parsed(response: Any, *, label: str) -> Any:
-    """Return the response's parsed structured output or fail loud.
-
-    Shared by the live chat backends so the empty/unparsed-response checks
-    live in one place.
-
-    Args:
-        response: A chat-completions ``parse`` response.
-        label: Human-readable call label for the error message.
-
-    Raises:
-        RuntimeError: If the response has no choices or was not parsed.
-    """
-    if not response.choices:
-        raise RuntimeError(f"OpenAI {label} response had no choices.")
-    parsed = response.choices[0].message.parsed
-    if parsed is None:
-        raise RuntimeError(f"OpenAI {label} response was not parsed.")
-    return parsed
-
-
 def parse_structured[T: BaseModel](
     client: Any,
     *,
@@ -214,12 +208,13 @@ def parse_structured[T: BaseModel](
     timeout_s: float,
     **parse_kwargs: Any,
 ) -> UsageResult[T]:
-    """Run one ``chat.completions.parse`` call and apply the shared guards.
+    """Ask for one answer that fits a Pydantic class, and parse it.
 
-    Shared by every live backend that calls structured-output parsing: the
-    request, usage logging, and the no-choices/unparsed-response raises are
-    identical across call sites; only the model, extra request kwargs,
-    response schema, and error label vary.
+    Shared by every live backend that asks for a structured answer: the
+    request, usage logging and the no-answer / not-parsed raises are identical
+    across call sites; only the model, extra request keyword arguments, answer
+    schema and error label vary. The answer schema sent is the strict JSON schema
+    the OpenAI SDK derives from ``response_format`` (same name, same body, strict).
 
     Args:
         client: The OpenAI client.
@@ -233,29 +228,40 @@ def parse_structured[T: BaseModel](
             ``"breakpoint"`` sends the messages through
             :func:`with_system_breakpoint`.
         timeout_s: The step's request timeout (``route().timeout_for(step)``).
-        **parse_kwargs: Additional keyword arguments forwarded to
-            ``chat.completions.parse`` (``max_completion_tokens``, ...).
+        **parse_kwargs: Additional chat-style request keyword arguments
+            (``max_completion_tokens``, ...).
 
     Returns:
         The parsed structured output plus provider-neutral token usage.
 
     Raises:
-        RuntimeError: If the response has no choices or was not parsed.
+        RuntimeError: If the response holds no output at all, or no answer
+            text to parse (a refusal, or an answer cut off before any text).
+        pydantic.ValidationError: If the answer text does not fit the class
+            (for example JSON cut off at the output-token limit).
     """
-    response = client.chat.completions.parse(
-        messages=with_system_breakpoint(messages) if prompt_cache == "breakpoint" else messages,
-        response_format=response_format,
-        **openai_kwargs(
-            model,
-            reasoning_effort=reasoning_effort,
-            prompt_cache=prompt_cache,
-            timeout_s=timeout_s,
-        ),
-        **parse_kwargs,
+    response = client.responses.create(
+        **_responses_request(
+            messages=with_system_breakpoint(messages) if prompt_cache == "breakpoint" else messages,
+            response_format=type_to_response_format_param(response_format),
+            **openai_kwargs(
+                model,
+                reasoning_effort=reasoning_effort,
+                prompt_cache=prompt_cache,
+                timeout_s=timeout_s,
+            ),
+            **parse_kwargs,
+        )
     )
-    log_usage(usage_event, response.usage)
-    parsed: T = require_parsed(response, label=label)
-    return parsed, token_usage_from_provider(response.usage)
+    usage = token_usage_from_provider(getattr(response, "usage", None))
+    log_usage(usage_event, usage)
+    if not getattr(response, "output", None):
+        raise RuntimeError(f"OpenAI {label} response had no choices.")
+    text = _output_text(response)
+    if not text:
+        # A refusal, or an answer cut off before any text: nothing to parse.
+        raise RuntimeError(f"OpenAI {label} response was not parsed.")
+    return response_format.model_validate_json(text), usage
 
 
 def traced_parse[T: BaseModel](
@@ -360,7 +366,7 @@ def traced_parse[T: BaseModel](
 
 
 #: The request keys a call site may pass to :func:`send_turn` and :func:`stream_turn`:
-#: exactly the chat-completions keyword arguments the sites build today.
+#: exactly the chat-style keyword arguments the sites build.
 _REQUEST_KEYS = frozenset(
     {
         "model",
@@ -377,6 +383,148 @@ _REQUEST_KEYS = frozenset(
     }
 )
 
+
+def _check_request(request: Mapping[str, Any]) -> None:
+    unknown = sorted(set(request) - _REQUEST_KEYS)
+    if unknown:
+        raise TypeError(f"Unknown model request key(s): {', '.join(unknown)}")
+
+
+def _responses_request(**request: Any) -> dict[str, Any]:
+    """Translate one chat-style request into ``client.responses.create`` arguments.
+
+    In plain terms: the call sites speak the chat-completions vocabulary; the
+    provider is asked through the Responses endpoint. Each key maps one to one
+    (``messages`` to ``input``, ``reasoning_effort`` to ``reasoning.effort``,
+    ``max_completion_tokens`` to ``max_output_tokens``, ``response_format`` to
+    ``text.format``; tools and tool choices are flattened). ``extra_body`` (the
+    prompt-cache options) and ``timeout`` pass through unchanged and
+    ``stream_options`` is dropped (Responses always sends usage on its last
+    event). ``store=False`` is always added, so the provider keeps no copy.
+
+    Raises:
+        TypeError: If the request holds an unknown key, or a message, content
+            part, tool or tool choice of a kind this translation does not know.
+    """
+    _check_request(request)
+    out: dict[str, Any] = {"store": False}
+    for key, value in request.items():
+        if key == "messages":
+            out["input"] = [item for message in value for item in _input_items(message)]
+        elif key == "reasoning_effort":
+            out["reasoning"] = {"effort": value}
+        elif key == "max_completion_tokens":
+            out["max_output_tokens"] = value
+        elif key == "tools":
+            out["tools"] = [_flat_tool(tool) for tool in value]
+        elif key == "tool_choice":
+            out["tool_choice"] = _flat_tool_choice(value)
+        elif key == "response_format":
+            out["text"] = {"format": _text_format(value)}
+        elif key != "stream_options":
+            out[key] = value
+    return out
+
+
+def _input_items(message: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """One chat message as Responses input items (a message, tool calls, a tool result)."""
+    role = message.get("role")
+    if role == "tool":
+        return [
+            {
+                "type": "function_call_output",
+                "call_id": message["tool_call_id"],
+                "output": _require_str(message.get("content"), "a tool message's content"),
+            }
+        ]
+    if role not in ("system", "user", "assistant"):
+        raise TypeError(f"Unknown message role for the Responses endpoint: {role!r}")
+    items: list[dict[str, Any]] = []
+    content = message.get("content")
+    if content is not None:
+        if not isinstance(content, str):
+            content = [_content_part(part, role=role) for part in content]
+        items.append({"role": role, "content": content})
+    for call in message.get("tool_calls") or ():
+        function = call["function"]
+        items.append(
+            {
+                "type": "function_call",
+                "call_id": call["id"],
+                "name": function["name"],
+                "arguments": function["arguments"],
+            }
+        )
+    return items
+
+
+def _content_part(part: Mapping[str, Any], *, role: str) -> dict[str, Any]:
+    kind = part.get("type")
+    if kind == "text":
+        # Every other key (the prompt-cache breakpoint) stays on the same part.
+        return {**part, "type": "output_text" if role == "assistant" else "input_text"}
+    if kind == "image_url":
+        image = part["image_url"]
+        # "auto" is the chat-completions default detail when a part names none.
+        detail = image.get("detail", "auto")
+        return {"type": "input_image", "image_url": image["url"], "detail": detail}
+    raise TypeError(f"Unknown message content part for the Responses endpoint: {kind!r}")
+
+
+def _flat_tool(tool: Mapping[str, Any]) -> dict[str, Any]:
+    if tool.get("type") != "function":
+        raise TypeError(f"Unknown tool type for the Responses endpoint: {tool.get('type')!r}")
+    function = tool["function"]
+    flat: dict[str, Any] = {"type": "function", "name": function["name"]}
+    if "description" in function:
+        flat["description"] = function["description"]
+    flat["parameters"] = function.get("parameters")
+    # Stated every time: the endpoint reads a missing ``strict`` as true.
+    flat["strict"] = bool(function.get("strict", False))
+    return flat
+
+
+def _flat_tool_choice(choice: Any) -> Any:
+    if isinstance(choice, str):
+        return choice
+    kind = choice.get("type")
+    if kind == "function":
+        return {"type": "function", "name": choice["function"]["name"]}
+    if kind == "allowed_tools":
+        allowed = choice["allowed_tools"]
+        return {
+            "type": "allowed_tools",
+            "mode": allowed["mode"],
+            "tools": [
+                {"type": "function", "name": tool["function"]["name"]} for tool in allowed["tools"]
+            ],
+        }
+    raise TypeError(f"Unknown tool choice for the Responses endpoint: {kind!r}")
+
+
+def _text_format(response_format: Any) -> dict[str, Any]:
+    if response_format.get("type") != "json_schema":
+        raise TypeError(
+            f"Unknown response format for the Responses endpoint: {response_format.get('type')!r}"
+        )
+    return {"type": "json_schema", **response_format["json_schema"]}
+
+
+def _require_str(value: Any, what: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{what} must be text, not {type(value).__name__}")
+    return value
+
+
+def _output_text(response: Any) -> str:
+    """The answer's text: every ``output_text`` part of the output messages, joined."""
+    return "".join(
+        part.text
+        for item in getattr(response, "output", None) or ()
+        if getattr(item, "type", None) == "message"
+        for part in getattr(item, "content", None) or ()
+        if getattr(part, "type", None) == "output_text"
+    )
 
 
 @dataclass(frozen=True)
@@ -418,10 +566,23 @@ class TextStream:
     """A streamed model answer, read piece by piece.
 
     In plain terms: loop over it to get the answer's text in the order it
-    arrives. Once the loop ends (or stops early with an error), :attr:`usage`
-    holds the token counts the provider sent, or ``None`` when it sent none.
-    :meth:`close` cuts the stream off and may be called from another thread,
-    for example a watchdog that gives up waiting.
+    arrives (only text pieces are handed out, never the provider's progress
+    events, so the first piece is the first content). Once the loop ends (or
+    stops early with an error), :attr:`usage` holds the token counts the
+    provider sent, or ``None`` when it sent none. :meth:`close` cuts the stream
+    off and may be called from another thread, for example a watchdog that gives
+    up waiting; the loop then ends quietly.
+
+    How a stream ends:
+
+    - ``response.completed``: the loop ends normally, with usage.
+    - ``response.incomplete`` (the answer was cut off, usually at the output-token
+      limit): usage is recorded and the loop ends normally, keeping the text so far.
+    - ``response.failed`` or an ``error`` event: raises :class:`openai.APIError`
+      (a provider error that is not tried again, as a mid-stream error is not).
+    - no final event before the stream stops: raises
+      :class:`openai.APIConnectionError` (a dropped connection, which may be
+      tried again).
 
     Attributes:
         label: Human-readable call label.
@@ -431,77 +592,91 @@ class TextStream:
 
     def __init__(self, stream: Any, *, label: str) -> None:
         self._stream = stream
+        self._closed = False
         self.label = label
         self.usage: TokenUsage | None = None
         self.carried: object | None = None
 
     def __iter__(self) -> Iterator[str]:
-        for chunk in self._stream:
-            chunk_usage = getattr(chunk, "usage", None)
-            if chunk_usage is not None:
-                self.usage = token_usage_from_provider(chunk_usage)
-            choices = getattr(chunk, "choices", None)
-            if not choices:
-                continue
-            fragment = getattr(getattr(choices[0], "delta", None), "content", None)
-            if isinstance(fragment, str) and fragment:
-                yield fragment
+        ended = False
+        for event in self._stream:
+            kind = getattr(event, "type", None)
+            if kind == "response.output_text.delta":
+                if event.delta:
+                    yield event.delta
+            elif kind == "response.completed":
+                self.usage = token_usage_from_provider(getattr(event.response, "usage", None))
+                ended = True
+            elif kind == "response.incomplete":
+                # Cut off (usually at the output-token limit): the text so far is kept
+                # for now. The named cut-off error is to be raised here.
+                self.usage = token_usage_from_provider(getattr(event.response, "usage", None))
+                ended = True
+            elif kind == "response.failed":
+                error = getattr(event.response, "error", None)
+                self.usage = token_usage_from_provider(getattr(event.response, "usage", None))
+                raise self._provider_error(getattr(error, "message", None), error)
+            elif kind == "error":
+                raise self._provider_error(getattr(event, "message", None), event)
+        if not ended and not self._closed:
+            raise openai.APIConnectionError(
+                message=f"OpenAI {self.label} stream stopped before its final event.",
+                request=self._request(),
+            )
+
+    def _provider_error(self, message: Any, body: Any) -> openai.APIError:
+        text = message if isinstance(message, str) and message else "the provider failed the answer"
+        details = body.to_dict() if hasattr(body, "to_dict") else None
+        return openai.APIError(
+            f"OpenAI {self.label} stream failed: {text}", self._request(), body=details
+        )
+
+    def _request(self) -> Any:
+        # The SDK stream's HTTP request; ``None`` for a test double with no response.
+        return getattr(getattr(self._stream, "response", None), "request", None)
 
     def close(self) -> None:
         """Cancel the underlying stream (safe from another thread)."""
+        self._closed = True
         self._stream.close()
-
-
-def _check_request(request: Mapping[str, Any]) -> None:
-    unknown = sorted(set(request) - _REQUEST_KEYS)
-    if unknown:
-        raise TypeError(f"Unknown model request key(s): {', '.join(unknown)}")
 
 
 def send_turn(client: Any, *, label: str, **request: Any) -> ModelTurn:
     """Send one model request and read its text, tool calls and token usage.
 
-    The request goes to the provider exactly as the call site built it; the
-    site applies any prompt-cache breakpoint itself.
+    The request is translated for the Responses endpoint (see the module
+    docstring) and otherwise goes out as the call site built it; the site
+    applies any prompt-cache breakpoint itself.
 
     Args:
         client: The OpenAI client.
         label: Human-readable call label.
-        **request: The chat-completions keyword arguments the site builds
+        **request: The chat-style keyword arguments the site builds
             (``model``, ``messages``, ``reasoning_effort``, ``timeout``,
             ``extra_body``, and where used ``tools``, ``tool_choice``,
             ``parallel_tool_calls``, ``response_format``,
             ``max_completion_tokens``, ``stream_options``).
 
     Returns:
-        The answer's text, tool calls and token usage.
+        The answer's text, tool calls and token usage. An answer cut off at the
+        output-token limit comes back as far as it got.
 
     Raises:
         TypeError: If the request holds a key outside the list above.
-        RuntimeError: If the response holds no answer at all (no choices).
+        RuntimeError: If the response holds no output at all.
     """
-    _check_request(request)
-    response = client.chat.completions.create(**request)
-    choices = getattr(response, "choices", None)
-    if not choices:
+    response = client.responses.create(**_responses_request(**request))
+    output = getattr(response, "output", None)
+    if not output:
         raise RuntimeError(f"OpenAI {label} response had no choices.")
-    message = getattr(choices[0], "message", None)
-    content = getattr(message, "content", None)
-    calls = []
-    for index, call in enumerate(getattr(message, "tool_calls", None) or ()):
-        function = getattr(call, "function", None)
-        name = getattr(function, "name", None)
-        arguments = getattr(function, "arguments", None)
-        calls.append(
-            ToolCall(
-                name=name if isinstance(name, str) else "",
-                arguments=arguments if isinstance(arguments, str) else "{}",
-                call_id=getattr(call, "id", None) or f"call_{index}",
-            )
-        )
+    calls = tuple(
+        ToolCall(name=item.name, arguments=item.arguments, call_id=item.call_id)
+        for item in output
+        if getattr(item, "type", None) == "function_call"
+    )
     return ModelTurn(
-        text=content if isinstance(content, str) else "",
-        tool_calls=tuple(calls),
+        text=_output_text(response),
+        tool_calls=calls,
         usage=token_usage_from_provider(getattr(response, "usage", None)),
     )
 
@@ -509,8 +684,7 @@ def send_turn(client: Any, *, label: str, **request: Any) -> ModelTurn:
 def stream_turn(client: Any, *, label: str, **request: Any) -> TextStream:
     """Send one model request as a stream.
 
-    The request goes to the provider exactly as the call site built it, plus
-    ``stream=True``.
+    The request is translated as in :func:`send_turn`, plus ``stream=True``.
 
     Args:
         client: The OpenAI client.
@@ -523,8 +697,9 @@ def stream_turn(client: Any, *, label: str, **request: Any) -> TextStream:
     Raises:
         TypeError: If the request holds an unknown key (``stream`` included).
     """
-    _check_request(request)
-    return TextStream(client.chat.completions.create(stream=True, **request), label=label)
+    return TextStream(
+        client.responses.create(stream=True, **_responses_request(**request)), label=label
+    )
 
 
 _SIMPLE_ESCAPES = {

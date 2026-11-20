@@ -3,7 +3,6 @@
 import inspect
 import json
 import uuid
-from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -28,7 +27,7 @@ from policy_atlas.core.schema import (
     source_tag,
     task_source_snapshot,
 )
-from policy_atlas.core.usage import UsageResult
+from policy_atlas.core.usage import TokenUsage, UsageResult
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_search.corpus import theme_grouping
@@ -57,6 +56,7 @@ from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.helpers import (
+    FakeResponsesClient,
     delete_task_data,
     executed_calls_for,
     now,
@@ -65,6 +65,8 @@ from tests.helpers import (
     seed_screening_result,
     seed_source,
     seed_task_and_run,
+    spy_calls,
+    structured_response,
 )
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
@@ -1368,36 +1370,6 @@ class _InstructionThemeBackend:
         return {doc["id"]: self.theme_name for doc in batch}, None
 
 
-class _ParsedAssignment:
-    def __init__(self, doc_id: str, theme: str) -> None:
-        self.doc_id = doc_id
-        self.theme = theme
-
-
-class _ParsedAssignments:
-    def __init__(self, assignments: list[tuple[str, str]]) -> None:
-        self.assignments = [
-            _ParsedAssignment(doc_id, theme) for doc_id, theme in assignments
-        ]
-
-
-class _ParsedMessage:
-    def __init__(self, parsed: _ParsedAssignments) -> None:
-        self.parsed = parsed
-
-
-class _ParsedChoice:
-    def __init__(self, parsed: _ParsedAssignments) -> None:
-        self.message = _ParsedMessage(parsed)
-
-
-class _ParsedResponse:
-    usage = None
-
-    def __init__(self, assignments: list[tuple[str, str]]) -> None:
-        self.choices = [_ParsedChoice(_ParsedAssignments(assignments))]
-
-
 def test_judgment_invented_assignment_ids_are_dropped_without_repair(
     conn: Connection,
 ) -> None:
@@ -1574,17 +1546,21 @@ def test_judgment_duplicate_same_theme_deduped_at_openai_grouping_seam(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = OpenAIThemeGroupingBackend(api_key="test-key-not-real")
-    calls: list[dict[str, Any]] = []
-
-    def fake_parse(*args: Any, **kwargs: Any) -> _ParsedResponse:
-        calls.append(kwargs)
-        return _ParsedResponse([
-            ("doc-1", "Housing"),
-            ("doc-1", "Housing"),
-            ("doc-2", "Health"),
-        ])
-
-    monkeypatch.setattr(backend._client.chat.completions, "parse", fake_parse)
+    client = FakeResponsesClient(
+        structured_response(
+            {
+                "assignments": [
+                    {"doc_id": doc_id, "theme": theme}
+                    for doc_id, theme in [
+                        ("doc-1", "Housing"),
+                        ("doc-1", "Housing"),
+                        ("doc-2", "Health"),
+                    ]
+                ]
+            }
+        )
+    )
+    monkeypatch.setattr(backend, "_client", client)
 
     assignments, usage = backend.assign(
         [
@@ -1594,30 +1570,27 @@ def test_judgment_duplicate_same_theme_deduped_at_openai_grouping_seam(
         themes=_valid_themes(),
     )
 
-    assert usage is None
+    assert usage == TokenUsage(prompt=10, completion=5, total=15, cached=0, reasoning=0)
     assert assignments == {"doc-1": "Housing", "doc-2": "Health"}
-    assert len(calls) == 1
+    assert len(client.calls) == 1
 
 
 # --- B5 characterise.guidance: live discovery prompt composition ---
 
 
-def _fake_theme_response(themes: list[tuple[str, str]]) -> Any:
-    parsed = SimpleNamespace(
-        themes=[
-            SimpleNamespace(name=name, description=description) for name, description in themes
-        ]
-    )
-    return SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(parsed=parsed))], usage=None
+def _theme_client(themes: list[tuple[str, str]]) -> FakeResponsesClient:
+    return FakeResponsesClient(
+        structured_response(
+            {"themes": [{"name": name, "description": description} for name, description in themes]}
+        )
     )
 
 
 def _system_text(content: Any) -> str:
     """The system message's text, whether sent as a string or as content parts.
 
-    The discover step sends its system message as content parts that carry the
-    prompt-cache breakpoint (task 056), so the text sits inside the parts.
+    A step in the breakpoint cache mode sends its system message as content parts
+    that carry the prompt-cache breakpoint, so the text may sit inside the parts.
     """
     if isinstance(content, str):
         return content
@@ -1628,13 +1601,8 @@ def test_discover_absent_guidance_is_byte_identical_to_as_built(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = OpenAIThemeGroupingBackend(api_key="test-key-not-real")
-    calls: list[dict[str, Any]] = []
-
-    def fake_parse(*args: Any, **kwargs: Any) -> Any:
-        calls.append(kwargs)
-        return _fake_theme_response([("Housing", "D")])
-
-    monkeypatch.setattr(backend._client.chat.completions, "parse", fake_parse)
+    calls = spy_calls(monkeypatch, theme_grouping, "parse_structured")
+    monkeypatch.setattr(backend, "_client", _theme_client([("Housing", "D")]))
 
     docs: list[GroupingDoc] = [{"id": "d1", "title": "T", "abstract": None}]
     backend.discover(docs, intent="Housing policy", min_themes=1, max_themes=5)
@@ -1654,13 +1622,8 @@ def test_discover_with_guidance_splices_system_and_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     backend = OpenAIThemeGroupingBackend(api_key="test-key-not-real")
-    calls: list[dict[str, Any]] = []
-
-    def fake_parse(*args: Any, **kwargs: Any) -> Any:
-        calls.append(kwargs)
-        return _fake_theme_response([("Housing", "D")])
-
-    monkeypatch.setattr(backend._client.chat.completions, "parse", fake_parse)
+    calls = spy_calls(monkeypatch, theme_grouping, "parse_structured")
+    monkeypatch.setattr(backend, "_client", _theme_client([("Housing", "D")]))
 
     guidance = ["organise around policy instruments"]
     backend.discover(

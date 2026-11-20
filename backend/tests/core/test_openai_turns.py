@@ -1,4 +1,4 @@
-"""The two shared model calls, ``send_turn`` and ``stream_turn``, on a real SDK client.
+"""The shared model calls on a real SDK client, against the Responses endpoint.
 
 The client's network layer is an ``httpx.MockTransport``: nothing leaves the machine,
 and each test sees the exact request body the SDK sent, with its timeout.
@@ -13,29 +13,35 @@ from typing import Any
 import httpx
 import openai
 import pytest
+from pydantic import BaseModel
 
+from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import (
     ModelTurn,
     ToolCall,
+    parse_structured,
     send_turn,
     stream_turn,
 )
 from policy_atlas.core.usage import TokenUsage
+from tests.helpers import (
+    response_usage,
+    structured_response,
+    text_response,
+    text_stream_events,
+    tool_call_response,
+)
 
-_USAGE = {
-    "prompt_tokens": 11,
-    "completion_tokens": 7,
-    "total_tokens": 18,
-    "prompt_tokens_details": {"cached_tokens": 4},
-    "completion_tokens_details": {"reasoning_tokens": 3},
-}
+_USAGE = response_usage(input_tokens=11, output_tokens=7, cached=4, cache_write=2, reasoning=3)
+_TOKENS = TokenUsage(prompt=11, completion=7, total=18, cached=4, cache_write=2, reasoning=3)
+_PARAMETERS = {"type": "object", "properties": {"q": {"type": "string"}}}
 _TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "lookup",
             "description": "Look a thing up.",
-            "parameters": {"type": "object", "properties": {"q": {"type": "string"}}},
+            "parameters": _PARAMETERS,
         },
     }
 ]
@@ -52,8 +58,7 @@ class _Wire(httpx.SyncByteStream):
         for event in self._events:
             if self._closed:
                 return
-            yield f"data: {json.dumps(event)}\n\n".encode()
-        yield b"data: [DONE]\n\n"
+            yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode()
 
     def close(self) -> None:
         self._closed = True
@@ -65,7 +70,13 @@ def _client(
     sent: list[dict[str, Any]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
-        sent.append({**json.loads(request.content), "timeout": request.extensions["timeout"]})
+        sent.append(
+            {
+                "path": request.url.path,
+                **json.loads(request.content),
+                "timeout": request.extensions["timeout"],
+            }
+        )
         return respond()
 
     client = openai.OpenAI(
@@ -77,60 +88,30 @@ def _client(
     return client, sent
 
 
-def _chunk(content: str | None, usage: dict[str, Any] | None = None) -> dict[str, Any]:
-    choices = [] if content is None else [{"index": 0, "delta": {"content": content}}]
-    return {
-        "id": "chunk",
-        "object": "chat.completion.chunk",
-        "created": 0,
-        "model": "gpt-test",
-        "choices": choices,
-        "usage": usage,
-    }
-
-
-def _streaming(events: list[dict[str, Any]]) -> Callable[[], httpx.Response]:
+def _streaming(events: list[Any]) -> Callable[[], httpx.Response]:
+    wire = [event if isinstance(event, dict) else event.to_dict() for event in events]
     return lambda: httpx.Response(
-        200, headers={"content-type": "text/event-stream"}, stream=_Wire(events)
+        200, headers={"content-type": "text/event-stream"}, stream=_Wire(wire)
     )
 
 
-def test_send_turn_reads_text_tool_calls_and_usage_and_sends_the_request_unchanged() -> None:
-    completion = {
-        "id": "cmpl",
-        "object": "chat.completion",
-        "created": 0,
-        "model": "gpt-test",
-        "choices": [
-            {
-                "index": 0,
-                "finish_reason": "tool_calls",
-                "message": {
-                    "role": "assistant",
-                    "content": "thinking aloud",
-                    "tool_calls": [
-                        {
-                            "id": "call_abc",
-                            "type": "function",
-                            "function": {"name": "lookup", "arguments": '{"q": "x"}'},
-                        }
-                    ],
-                },
-            }
-        ],
-        "usage": _USAGE,
-    }
-    client, sent = _client(lambda: httpx.Response(200, json=completion))
-    messages = [
-        {"role": "system", "content": "be brief"},
-        {"role": "user", "content": "find x"},
-    ]
+def _stream(events: list[Any]) -> Any:
+    client, _sent = _client(_streaming(events))
+    return stream_turn(client, label="test stream", model="gpt-test", messages=[])
+
+
+def test_send_turn_translates_the_request_and_reads_text_tool_calls_and_usage() -> None:
+    answer = tool_call_response(("lookup", {"q": "x"}), text="thinking aloud", usage=_USAGE)
+    client, sent = _client(lambda: httpx.Response(200, json=answer.to_dict()))
 
     turn = send_turn(
         client,
         label="test turn",
         model="gpt-test",
-        messages=messages,
+        messages=[
+            {"role": "system", "content": "be brief"},
+            {"role": "user", "content": "find x"},
+        ],
         reasoning_effort="low",
         timeout=30,
         extra_body={"prompt_cache_options": {"mode": "explicit"}},
@@ -142,27 +123,90 @@ def test_send_turn_reads_text_tool_calls_and_usage_and_sends_the_request_unchang
 
     assert turn == ModelTurn(
         text="thinking aloud",
-        tool_calls=(ToolCall(name="lookup", arguments='{"q": "x"}', call_id="call_abc"),),
-        usage=TokenUsage(prompt=11, completion=7, total=18, cached=4, reasoning=3),
+        tool_calls=(ToolCall(name="lookup", arguments='{"q": "x"}', call_id="call_0"),),
+        usage=_TOKENS,
     )
     assert sent == [
         {
+            "path": "/v1/responses",
             "model": "gpt-test",
-            "messages": messages,
-            "reasoning_effort": "low",
-            "tools": _TOOLS,
+            "input": [
+                {"role": "system", "content": "be brief"},
+                {"role": "user", "content": "find x"},
+            ],
+            "reasoning": {"effort": "low"},
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "lookup",
+                    "description": "Look a thing up.",
+                    "parameters": _PARAMETERS,
+                    "strict": False,
+                }
+            ],
             "tool_choice": "required",
             "parallel_tool_calls": True,
-            "max_completion_tokens": 500,
+            "max_output_tokens": 500,
+            "store": False,
             "prompt_cache_options": {"mode": "explicit"},
             "timeout": {"connect": 30, "read": 30, "write": 30, "pool": 30},
         }
     ]
 
 
-def test_stream_turn_yields_text_pieces_in_order_and_usage_after_the_loop() -> None:
-    events = [_chunk("Hel"), _chunk(""), _chunk("lo"), _chunk(None, usage=_USAGE)]
-    client, sent = _client(_streaming(events))
+class _Answer(BaseModel):
+    text: str
+
+
+def test_parse_structured_sends_the_class_schema_and_parses_the_answer_text() -> None:
+    client, sent = _client(
+        lambda: httpx.Response(200, json=structured_response(_Answer(text="hi")).to_dict())
+    )
+
+    parsed, usage = parse_structured(
+        client,
+        messages=[{"role": "user", "content": "say hi"}],
+        response_format=_Answer,
+        usage_event="test.usage",
+        label="test parse",
+        model="gpt-test",
+        reasoning_effort="none",
+        prompt_cache="auto",
+        timeout_s=20,
+        max_completion_tokens=100,
+    )
+
+    assert parsed == _Answer(text="hi")
+    assert usage == TokenUsage(prompt=10, completion=5, total=15, cached=0, reasoning=0)
+    text_format = sent[0]["text"]["format"]
+    assert (text_format["type"], text_format["name"], text_format["strict"]) == (
+        "json_schema",
+        "_Answer",
+        True,
+    )
+    assert text_format["schema"]["properties"] == {"text": {"title": "Text", "type": "string"}}
+    assert sent[0]["store"] is False
+
+
+def test_parse_structured_with_no_answer_text_is_not_parsed() -> None:
+    client, _sent = _client(lambda: httpx.Response(200, json=text_response("").to_dict()))
+
+    with pytest.raises(RuntimeError, match="test parse response was not parsed"):
+        parse_structured(
+            client,
+            messages=[{"role": "user", "content": "say hi"}],
+            response_format=_Answer,
+            usage_event="test.usage",
+            label="test parse",
+            model="gpt-test",
+            reasoning_effort="none",
+            prompt_cache="auto",
+            timeout_s=20,
+        )
+
+
+def test_a_completed_stream_yields_text_pieces_in_order_and_usage_after_the_loop() -> None:
+    client, sent = _client(_streaming(text_stream_events(["Hel", "", "lo"], usage=_USAGE)))
 
     stream = stream_turn(
         client,
@@ -175,10 +219,45 @@ def test_stream_turn_yields_text_pieces_in_order_and_usage_after_the_loop() -> N
     )
 
     assert list(stream) == ["Hel", "lo"]
-    assert stream.usage == TokenUsage(prompt=11, completion=7, total=18, cached=4, reasoning=3)
+    assert stream.usage == _TOKENS
     assert stream.carried is None
     assert sent[0]["stream"] is True
-    assert sent[0]["stream_options"] == {"include_usage": True}
+    assert sent[0]["store"] is False
+    assert "stream_options" not in sent[0]
+
+
+def test_an_incomplete_stream_keeps_its_text_and_records_usage() -> None:
+    stream = _stream(text_stream_events(["cut ", "off"], ending="incomplete", usage=_USAGE))
+
+    assert list(stream) == ["cut ", "off"]
+    assert stream.usage == _TOKENS
+
+
+@pytest.mark.parametrize(
+    "final",
+    [
+        text_stream_events([], ending="failed")[-1],
+        {"type": "error", "code": "server_error", "message": "boom", "sequence_number": 1},
+    ],
+    ids=["failed", "error"],
+)
+def test_a_failed_stream_raises_a_provider_error_that_is_not_tried_again(final: Any) -> None:
+    stream = _stream([*text_stream_events(["Hel"])[:-1], final])
+    pieces = iter(stream)
+
+    assert next(pieces) == "Hel"
+    with pytest.raises(openai.APIError) as caught:
+        next(pieces)
+    assert not isinstance(caught.value, openai.APIConnectionError)
+    assert not tracing._retryable(caught.value)
+
+
+def test_a_stream_with_no_final_event_raises_a_connection_error() -> None:
+    stream = _stream(text_stream_events(["Hel", "lo"])[:-1])
+
+    with pytest.raises(openai.APIConnectionError) as caught:
+        list(stream)
+    assert tracing._retryable(caught.value)
 
 
 @pytest.mark.parametrize("call", [send_turn, stream_turn])
@@ -190,9 +269,8 @@ def test_an_unknown_request_key_raises_type_error(call: Callable[..., Any]) -> N
     assert sent == []
 
 
-def test_close_stops_a_stream() -> None:
-    client, _sent = _client(_streaming([_chunk(piece) for piece in "abcdef"]))
-    stream = stream_turn(client, label="test stream", model="gpt-test", messages=[])
+def test_close_stops_a_stream_quietly() -> None:
+    stream = _stream(text_stream_events(list("abcdef")))
     pieces = iter(stream)
 
     assert next(pieces) == "a"

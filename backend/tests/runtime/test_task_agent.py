@@ -26,7 +26,14 @@ from policy_atlas.runtime.task_agent_prompt import (
     PlannerTurnWire,
 )
 from policy_atlas.runtime.task_plan import TaskPlan, compose
-from tests.helpers import fake_parse_client
+from tests.helpers import (
+    FakeResponsesClient,
+    FakeStream,
+    response_usage,
+    spy_calls,
+    structured_response,
+    text_stream_events,
+)
 
 
 def _turn(text: str, role: str = "user") -> dict[str, str]:
@@ -378,7 +385,7 @@ def test_openai_task_agent_turn_propagates_session_before_opening_the_span(
         return original_start(name=name, as_type=as_type)
 
     fake_langfuse.start_as_current_observation = recording_start  # type: ignore[method-assign]
-    cast("Any", backend)._client = fake_parse_client(parsed=parsed)
+    cast("Any", backend)._client = FakeResponsesClient(structured_response(parsed))
     cast("Any", backend)._langfuse_client = fake_langfuse
 
     backend.plan_turn([_turn("Q?")], None, session_id=session_id)
@@ -481,8 +488,6 @@ class _RecordingLangfuse:
 
 def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
     """The scoping turn goes through the shared backend, so Langfuse gets its tokens."""
-    from openai.types.completion_usage import CompletionUsage
-
     from policy_atlas.runtime.task_agent_scoping import (
         OPTIONS_SCOPING_TASK_AGENT,
         ScopingInputs,
@@ -499,9 +504,8 @@ def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
     )
     backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
     langfuse = _RecordingLangfuse()
-    cast("Any", backend)._client = fake_parse_client(
-        parsed=parsed,
-        usage=CompletionUsage(prompt_tokens=120, completion_tokens=30, total_tokens=150),
+    cast("Any", backend)._client = FakeResponsesClient(
+        structured_response(parsed, usage=response_usage(input_tokens=120, output_tokens=30))
     )
     cast("Any", backend)._langfuse_client = langfuse
 
@@ -531,36 +535,13 @@ def test_scoping_turns_trace_usage_details_under_a_static_name() -> None:
 # --- The streamed turn (task 058, N9) ------------------------------------------
 
 
-def _chunk(content: str | None = None, usage: Any = None) -> Any:
-    from types import SimpleNamespace
-
-    choices = [] if content is None else [SimpleNamespace(delta=SimpleNamespace(content=content))]
-    return SimpleNamespace(choices=choices, usage=usage)
-
-
-class _StreamingCompletions:
-    """Fake ``chat.completions``: each ``create`` plays the next scripted attempt."""
-
-    def __init__(self, attempts: list[Any]) -> None:
-        self._attempts = list(attempts)
-        self.requests: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> Any:
-        self.requests.append(kwargs)
-        attempt = self._attempts.pop(0)
-        if isinstance(attempt, BaseException):
-            raise attempt
-        return attempt
-
-
-def _streaming_backend(attempts: list[Any]) -> tuple[OpenAITaskAgentBackend, _StreamingCompletions]:
-    from types import SimpleNamespace
-
-    completions = _StreamingCompletions(attempts)
+def _streaming_backend(attempts: list[Any]) -> tuple[OpenAITaskAgentBackend, FakeResponsesClient]:
+    """A backend whose client plays one scripted attempt per request."""
+    client = FakeResponsesClient(*attempts)
     backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
-    cast("Any", backend)._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    cast("Any", backend)._client = client
     cast("Any", backend)._langfuse_client = None
-    return backend, completions
+    return backend, client
 
 
 @pytest.fixture
@@ -606,26 +587,35 @@ def _wire_json() -> str:
     return json.dumps(wire.model_dump(mode="json"))
 
 
-def _pieces(text: str, size: int = 3) -> Iterator[Any]:
-    from openai.types.completion_usage import CompletionUsage
-
-    for start in range(0, len(text), size):
-        yield _chunk(text[start : start + size])
-    yield _chunk(usage=CompletionUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15))
+def _pieces(text: str, size: int = 3) -> FakeStream:
+    pieces = [text[start : start + size] for start in range(0, len(text), size)]
+    return FakeStream(text_stream_events(pieces, usage=response_usage(input_tokens=10)))
 
 
-def test_streamed_turn_sends_a_strict_schema_stream_and_deltas_join_to_the_reply() -> None:
+def _drops_after(pieces: list[str]) -> FakeStream:
+    """A stream that sends ``pieces`` and then loses its connection."""
+    events = text_stream_events(pieces)
+    # Event 0 opens the stream; the drop comes after the pieces.
+    return FakeStream(events, fail_after=1 + len(pieces), error=_connection_error())
+
+
+def test_streamed_turn_sends_a_strict_schema_stream_and_deltas_join_to_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.runtime import task_agent as task_agent_module
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 
-    backend, completions = _streaming_backend([_pieces(_wire_json())])
+    stream_calls = spy_calls(monkeypatch, task_agent_module, "stream_turn")
+    backend, client = _streaming_backend([_pieces(_wire_json())])
     deltas: list[str] = []
     turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
 
     assert len(deltas) > 1
     assert "".join(deltas) == turn.reply == 'Line one\nsaid "hi" é 😀'
     assert turn.question == "What decision?"
-    (request,) = completions.requests
-    assert request["stream"] is True
+    (sent,) = client.calls
+    assert sent["stream"] is True
+    (request,) = stream_calls
     assert request["stream_options"] == {"include_usage": True}
     schema = request["response_format"]
     assert schema["type"] == "json_schema"
@@ -648,15 +638,11 @@ def test_streamed_turn_retries_once_on_a_connection_error_before_the_first_piece
         lambda event, **kwargs: warnings.append((event, kwargs)),
     )
 
-    def _drops_before_content() -> Iterator[Any]:
-        raise _connection_error()
-        yield  # pragma: no cover
-
-    backend, completions = _streaming_backend([_drops_before_content(), _pieces(_wire_json())])
+    backend, client = _streaming_backend([_drops_after([]), _pieces(_wire_json())])
     deltas: list[str] = []
     turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
 
-    assert len(completions.requests) == 2
+    assert len(client.calls) == 2
     assert "".join(deltas) == turn.reply
     assert [event for event, _ in warnings] == ["task_agent.turn.pre_token_retry"]
     assert warnings[0][1]["attempt"] == 1
@@ -665,31 +651,29 @@ def test_streamed_turn_retries_once_on_a_connection_error_before_the_first_piece
 def test_streamed_turn_is_not_retried_after_the_first_piece() -> None:
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 
-    def _drops_mid_reply() -> Iterator[Any]:
-        yield _chunk('{"reply": "Hal')
-        raise _connection_error()
-
-    backend, completions = _streaming_backend([_drops_mid_reply(), _pieces(_wire_json())])
+    backend, client = _streaming_backend(
+        [_drops_after(['{"reply": "Hal']), _pieces(_wire_json())]
+    )
     deltas: list[str] = []
     import openai
 
     with pytest.raises(openai.APIConnectionError):
         backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
-    assert len(completions.requests) == 1
+    assert len(client.calls) == 1
     assert deltas == ["Hal"]
 
 
 def test_streamed_turn_retries_at_most_once(retry_waits: list[float]) -> None:
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 
-    backend, completions = _streaming_backend(
+    backend, client = _streaming_backend(
         [_connection_error(), _connection_error(), _pieces(_wire_json())]
     )
     import openai
 
     with pytest.raises(openai.APIConnectionError):
         backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=lambda _t: None)
-    assert len(completions.requests) == 2
+    assert len(client.calls) == 2
 
 
 @pytest.mark.parametrize("code", [429, 503], ids=["rate-limited", "server-error"])
@@ -699,11 +683,11 @@ def test_streamed_turn_retries_a_passing_status_error_before_the_first_piece(
     """Task 058 review: the same failures every other model call retries."""
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 
-    backend, completions = _streaming_backend([_status_error(code), _pieces(_wire_json())])
+    backend, client = _streaming_backend([_status_error(code), _pieces(_wire_json())])
     deltas: list[str] = []
     turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
 
-    assert len(completions.requests) == 2
+    assert len(client.calls) == 2
     assert "".join(deltas) == turn.reply
     assert retry_waits == [1.0]
 
@@ -713,10 +697,10 @@ def test_streamed_turn_does_not_retry_a_bad_request(retry_waits: list[float]) ->
 
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 
-    backend, completions = _streaming_backend([_status_error(400), _pieces(_wire_json())])
+    backend, client = _streaming_backend([_status_error(400), _pieces(_wire_json())])
     with pytest.raises(openai.APIStatusError):
         backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=lambda _t: None)
-    assert len(completions.requests) == 1
+    assert len(client.calls) == 1
     assert retry_waits == []
 
 
@@ -726,17 +710,13 @@ def test_streamed_turn_retries_a_drop_before_the_first_word_of_the_reply(
     """Pieces that carried no reply text showed the user nothing, so a retry is safe."""
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 
-    def _drops_before_the_reply_text() -> Iterator[Any]:
-        yield _chunk('{"reply": "')
-        raise _connection_error()
-
-    backend, completions = _streaming_backend(
-        [_drops_before_the_reply_text(), _pieces(_wire_json())]
+    backend, client = _streaming_backend(
+        [_drops_after(['{"reply": "']), _pieces(_wire_json())]
     )
     deltas: list[str] = []
     turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
 
-    assert len(completions.requests) == 2
+    assert len(client.calls) == 2
     assert "".join(deltas) == turn.reply
 
 
@@ -745,7 +725,7 @@ def test_turn_without_on_delta_keeps_the_parse_path() -> None:
 
     parsed = PlannerTurnWire(reply="Hi", plan_draft=PlanDraftWire(question="Q?"), ready=False)
     backend: OpenAITaskAgentBackend = object.__new__(OpenAITaskAgentBackend)
-    cast("Any", backend)._client = fake_parse_client(parsed=parsed)
+    cast("Any", backend)._client = FakeResponsesClient(structured_response(parsed))
     cast("Any", backend)._langfuse_client = None
     assert backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None).reply == "Hi"
 

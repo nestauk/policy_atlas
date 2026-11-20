@@ -32,6 +32,7 @@ from tests.evidence_search.synthesis.test_live_citations_and_cards import (
     _completed,
     _run,
 )
+from tests.helpers import spy_calls
 
 # --- B2, B3, B4 through a whole synthesis run -----------------------------------------
 
@@ -197,10 +198,11 @@ def live(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
 
 @pytest.mark.parametrize("size", [1, 4, 23, 100_000])
 def test_key_findings_stream_into_the_slot_and_parse_as_the_forced_call(
-    size: int, live: dict[str, list[Any]]
+    size: int, live: dict[str, list[Any]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     text = json.dumps(_KF)
-    backend, completions = _backend(text, size)
+    calls = spy_calls(monkeypatch, sb, "stream_turn")
+    backend, client = _backend(text, size)
     section, _usage = backend.write_key_findings_stream(_KF_SEED, index=0, sources=_SOURCES)
 
     # The parse is the forced call's parse of the same arguments.
@@ -218,8 +220,9 @@ def test_key_findings_stream_into_the_slot_and_parse_as_the_forced_call(
         (0, prose.index(second), prose.index(second) + len(second), [("tss-2", UNTITLED_SOURCE)]),
     ]
     # The same messages as the forced call, as a strict structured reply; no tools.
-    [call] = completions.calls
-    assert call["stream"] is True
+    [sent] = client.calls
+    assert sent["stream"] is True
+    [call] = calls
     assert "tools" not in call and "tool_choice" not in call
     schema = call["response_format"]["json_schema"]
     assert call["response_format"]["type"] == "json_schema"
@@ -231,7 +234,7 @@ def test_key_findings_stream_into_the_slot_and_parse_as_the_forced_call(
 
 
 def test_key_findings_stream_without_sources_marks_nothing(live: dict[str, list[Any]]) -> None:
-    backend, _completions = _backend(json.dumps(_KF), 7)
+    backend, _client = _backend(json.dumps(_KF), 7)
     backend.write_key_findings_stream(_KF_SEED, index=0)
     assert live["claims"] == []
     assert live["deltas"]
@@ -241,7 +244,7 @@ def test_a_reply_that_is_not_a_section_resets_the_slot_and_falls_back_once(
     live: dict[str, list[Any]],
 ) -> None:
     text = '{"prose": "- A headline: stated.\\n", "claims": [{"claim_type"'
-    backend, _completions = _backend(text, 5)
+    backend, _client = _backend(text, 5)
     fallback = SectionProseWire(prose="- Fallback.", claims=[])
     calls: list[dict[str, Any]] = []
 
@@ -268,31 +271,33 @@ _INTRO_SEED: dict[str, Any] = {"intent": "What helps?", "sections": []}
 @pytest.fixture
 def intro_backend(monkeypatch: pytest.MonkeyPatch) -> Any:
     def make(text: str, size: int) -> tuple[Any, Any]:
-        backend, completions = _backend(text, size)
+        backend, client = _backend(text, size)
         # The intro call resolves its own client; give it the stream too.
         monkeypatch.setattr(
             sb,
             "resolve_openai_client",
             lambda _key, *, backend_name: cast("Any", backend)._client,
         )
-        return backend, completions
+        return backend, client
 
     return make
 
 
 @pytest.mark.parametrize("size", [1, 6, 100_000])
 def test_the_intro_streams_into_its_slot_and_parses_as_the_structured_call(
-    size: int, live: dict[str, list[Any]], intro_backend: Any
+    size: int, live: dict[str, list[Any]], intro_backend: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     text = json.dumps(_INTRO)
-    backend, completions = intro_backend(text, size)
+    calls = spy_calls(monkeypatch, sb, "stream_turn")
+    backend, client = intro_backend(text, size)
     wire, _usage = backend.write_full_report_intro_stream(_INTRO_SEED, index=7)
     assert wire == IntroWire.model_validate_json(text)
     assert {index for index, _t, _m in live["deltas"]} == {7}
     assert "".join(t for _i, t, _m in live["deltas"]) == _INTRO["intro"]
     assert backend.stream_fallbacks == 0
-    [call] = completions.calls
-    assert call["stream"] is True
+    [sent] = client.calls
+    assert sent["stream"] is True
+    [call] = calls
     assert call["response_format"]["json_schema"]["name"] == "IntroWire"
     assert call["response_format"]["json_schema"]["strict"] is True
 
@@ -300,7 +305,7 @@ def test_the_intro_streams_into_its_slot_and_parses_as_the_structured_call(
 def test_a_broken_intro_resets_the_slot_and_falls_back_once(
     live: dict[str, list[Any]], intro_backend: Any
 ) -> None:
-    backend, _completions = intro_backend('{"intro": "The report fir', 4)
+    backend, _client = intro_backend('{"intro": "The report fir', 4)
     fallback = IntroWire(intro="Fallback.")
     calls: list[dict[str, Any]] = []
 
