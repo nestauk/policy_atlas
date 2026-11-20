@@ -78,9 +78,10 @@ frontend brief to any other agent needs a reason in the plan. Polish passes: tas
 
 - **Identity** lives only in the branch name `task/NNN-slug` and the `Status` line of its
   `contract.md`. A fresh conversation re-grounds from `docs/tasks/<newest>/contract.md`.
-- **Read the deferred work for the parts the slice touches**: the matching sections of
-  `docs/deferred.md` (it is ordered by part of the system). State in the contract which
-  entries the slice takes in. An entry is read only when its part is opened, so this is
+- **Read the deferred work and the verified facts for the parts the slice touches**: the
+  matching sections of `docs/deferred.md` and the matching groups of
+  `docs/knowledge/index.md` (both are ordered by part of the system). State in the contract
+  which deferred entries the slice takes in. An entry is read only when its part is opened, so this is
   the point where it is picked up or left on purpose.
 - If the request is unclear (why, for whom, what "done" means), load
   `agent-skills:interview-me` with the Skill tool and clarify with the user before you
