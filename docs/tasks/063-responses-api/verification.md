@@ -4,16 +4,17 @@ Evidence for the build of [contract.md](contract.md) (revision 5.2) by [plan.md]
 (draft 2). Ids (M, E, S, D, O) and terms are the contract's. Figures from live runs are
 read from saved result files in the task's gitignored `research/live/` folder.
 
-> **Status:** build complete through step 6, except one acceptance check that waits on an
-> AWS sign-in (§ Token counts against the audit log). The review stack has not run.
+> **Status:** build complete through step 6. The review stack has not run.
 
 **Read this first (owner):**
 
 1. **Chat is back at no reasoning** (nine steps raised, not ten). At `low` a live answer
    failed and the next took 118 s to its first words; the fallback ruled in plan item P1
    was applied (§ The run after Part 2).
-2. **The token match against the audit log is not done.** The `pa-prod` sign-in expired
-   mid-build. Two commands finish it after a sign-in.
+2. **Token counts match the audit log on all 2,289 non-streamed calls, but the log holds no
+   counts for streamed calls,** so the contract's check for the 27 streamed calls (the chat
+   reply among them) was replaced by a same-request comparison (§ Token counts against the
+   audit log).
 3. **O14's premise does not hold:** the chat reply and final parse share no cache with
    the tool turns (§ The run after Part 1).
 4. **A fourth stale line in the Theory of change spec** is proposed, not applied (§ Phase 3).
@@ -359,23 +360,46 @@ Served from a checkout of the Part 2 commit (`d5db3e9f`), `bedrock` route, 2026-
   write turn carried it back, and both were accepted (22,178 of 23,355 input tokens read
   from the cache with the reasoning item in the history). 15 calls in all.
 
-### Token counts against the audit log (M9, M11, S1): **not done, blocked on a sign-in**
+### Token counts against the audit log (M9, M11, S1)
 
-The AWS production read-only sign-in (`pa-prod`) expired during the build and signing in
-is interactive. The join script is ready (`research/live/token_join.py`) and the app's
-side is saved: 2,369 model calls in the four sessions of the run after Part 1, 2,316 with
-a request id and 53 without (all 53 are attempts that got no response: 47 timeouts and 6
-connection errors, each with its start time, as S1 specifies). The chat reply stream has
-a request id and its token counts (2 input, 27,008 cache-write, 189 output). To finish,
-after `aws sso login --profile pa-prod`, from `backend/`:
+Run on 2026-11-21 after the owner signed in again (`research/live/token_join.py`, results in
+`research/live/after1-token-join.md`; read-only lookups with the production sign-in). The
+run joined is the run after Part 1: four sessions, 2,369 model calls.
 
-```bash
-uv run python ../docs/tasks/063-responses-api/research/live/token_join.py ct
-uv run python ../docs/tasks/063-responses-api/research/live/token_join.py join
-```
+| | Calls |
+|---|---:|
+| With a request id | 2,316 |
+| With no request id (no response: 47 timeouts, 6 connection errors; each has its start time) | 53 |
+| Request id found in the audit log | 2,316 of 2,316 |
+| Non-streamed, token counts equal on every field the log holds | 2,289 of 2,289 |
+| Streamed: found (request event and stream-end event), but the log holds no counts | 27 |
 
-What S1 has without it: a unit test shows each attempt's own id (or start time) on its
-trace, and the design probe found 893 of 893 ids of this header in the audit log.
+- **M9 holds for every non-streamed call.** The audit log's `inputTokens` equals the app's
+  uncached input, and its `outputTokens` equals the app's output plus reasoning tokens (the
+  app keeps reasoning apart; the log counts it inside output). The log has no cached,
+  cache-write or reasoning fields, so those three are not compared.
+- **S1 holds.** Every id leads to its call (2,316 of 2,316); the 53 attempts with no
+  response carry a start time and no id.
+- **The contract's check for streamed calls cannot be done as written.** It says streamed
+  calls are matched "through their stream-end event". The audit log holds **no token
+  counts for a streamed call**, on its request event or its stream-end event: all 79
+  streamed events in the two-hour window have none. The design-stage join had used the
+  stream-end event for timing only. So the 27 streamed calls, the chat reply among them
+  (M11), are shown to exist in the log but their counts cannot be matched there.
+- **What stands in for it** (`research/live/probe_stream_usage.py`, six live calls on the
+  final code): the same request sent non-streamed and streamed through the module reports
+  the same tokens. Three request shapes: the input count is equal in all three (32, 6,837
+  and 20 tokens); the output count is equal in the two with no reasoning (5 and 12) and
+  differs by one reasoning token in the third (17 against 18, the model thought for 10
+  tokens once and 11 the other time; the visible answer is the same). The non-streamed
+  reading is the one the audit log confirms on 2,289 calls, and both readings use the same
+  usage fields of the same response object. In the live run the chat reply's count is
+  also consistent with the parse that follows it (27,010 prompt tokens, then 27,610 for
+  the same prompt plus the 189-token reply and one instruction).
+- **For the owner:** rubric row 15 says the chat reply stream is matched against the audit
+  log. It is matched by this substitute, not by the log. A per-call record of streamed
+  counts on AWS's side would need Bedrock invocation logging, which stores request bodies
+  (already on the deferred list).
 
 ## Diff summary
 
@@ -496,8 +520,10 @@ is live: a server's start-up marks running runs as interrupted.
 
 ## Known unverified items
 
-- **Token counts against the audit log** (M9, M11, S1's "the id finds the call"): blocked
-  on the sign-in, see above. Rubric rows 15 and 25 are open until it runs.
+- **Streamed calls' token counts against the audit log** (the chat reply, M11): the log
+  holds none; shown by a same-request comparison instead (§ Token counts against the audit
+  log). Cached, cache-write and reasoning counts are in no audit-log field, so they are
+  matched for no call; they come from the same usage block as the two fields that match.
 - **The legacy `openai-direct` route** was not called live (owner ruling O3: unit tests
   only). It now sends the Responses endpoint and the raised efforts too.
 - **Staging and production keys** were not exercised; a staging smoke comes before
@@ -576,6 +602,14 @@ is live: a server's start-up marks running runs as interrupted.
   - Parallel Theory of change child runs can collide on the event sequence number and
     fail a child (seen once live; already on the deferred list).
   - `uv run --env-file` does not override a variable already set in the shell.
+  - The AWS audit log (CloudTrail) records `inputTokens` (uncached input only) and
+    `outputTokens` (reasoning included) for non-streamed Responses calls, and no token
+    counts at all for streamed calls; a streamed call has a request event and a stream-end
+    event, joined by `parentRequestId`.
+  - Langfuse's `output` excludes reasoning tokens (each token is in one bucket); the first
+    version of the join compared it to the log's output and "failed" 1,813 calls.
+  - An SSO sign-in can expire in the middle of a long build; do the checks that need it
+    early, or check the sign-in before starting them.
   - Requests on Bedrock that keep `status` on carried function-call items, or drop the
     reasoning item's `id`, were accepted (the design probe had found `status` refused).
   - `docs/knowledge/pydantic-docstrings-in-tool-schemas-are-prompt-text.md` names the
