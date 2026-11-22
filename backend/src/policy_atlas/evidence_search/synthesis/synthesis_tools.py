@@ -338,13 +338,22 @@ class CarriedHistory:
         self._pending: list[CarriedCall | None] = []
 
     def catch_up(self, transcript: Sequence[ToolExchange]) -> None:
-        """Line the last turn's entries up with the exchanges the loop added."""
+        """Line the last turn's entries up with the exchanges the loop added.
+
+        Args:
+            transcript: The loop's exchanges so far, the last turn's included.
+        """
         added = len(transcript) - len(self._links)
         self._links.extend(self._pending if len(self._pending) == added else [None] * added)
         self._pending = []
 
     def expect(self, links: Sequence[CarriedCall | None] | None, *, calls: int) -> None:
-        """Note a turn's entries (``None``: it has none) for its ``calls`` tool calls."""
+        """Note a turn's entries, to line up with its exchanges on the next turn.
+
+        Args:
+            links: One entry per tool call, or ``None`` when the turn has none.
+            calls: The number of tool calls the turn made.
+        """
         self._pending = list(links) if links is not None else [None] * calls
 
     def kwargs(self) -> dict[str, Any]:
@@ -352,6 +361,9 @@ class CarriedHistory:
 
         Nothing is passed when there is nothing to carry, so a backend that
         returns no entries is called exactly as it always was.
+
+        Returns:
+            The keyword arguments to add to the backend call.
         """
         return {"carried": list(self._links)} if any(self._links) else {}
 

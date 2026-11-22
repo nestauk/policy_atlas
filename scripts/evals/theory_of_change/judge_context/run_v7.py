@@ -16,7 +16,7 @@ def one(job):
     p, u = parse_structured(h.client, messages=msgs, response_format=JP.JudgeResponse, usage_event="judge_experiment", label="judge", model="gpt-6.1-terra", reasoning_effort="none", prompt_cache="auto", timeout_s=120.0, max_completion_tokens=4000)
     sup = p.support
     if sup != "not_about" and not shared.quote_found(d["abstract"], p.quote): sup = "not_about*"
-    return dict(lid=lid, doi=doi, rep=rep, support=sup, rel=p.relevance, why=p.relevance_reason, usd=(u.prompt*1.0+u.completion*5.0)/1e6)
+    return dict(lid=lid, doi=doi, rep=rep, support=sup, rel=p.relevance, why=p.relevance_reason, usd=(u.prompt*1.0+u.completion*5.0)/1e6 if u else 0.0)
 jobs = [(l, d, r) for l, labs in LABELS.items() for d in labs for r in range(3)]
 with ThreadPoolExecutor(8) as ex: res = list(ex.map(one, jobs))
 json.dump(res, open(f"{D}/res_v7.json", "w"), indent=1)

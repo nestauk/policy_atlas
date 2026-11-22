@@ -79,12 +79,15 @@ class AnswerCutOff(RuntimeError):
         label: The call's human-readable label.
         usage: Token counts the provider sent for the cut-off answer (they are
             billed all the same), or ``None`` when it sent none.
+        turn: From :func:`send_turn` only, what the cut-off answer held so far
+            (its tool calls may have unfinished arguments); ``None`` otherwise.
     """
 
     def __init__(self, label: str, usage: TokenUsage | None = None) -> None:
         super().__init__(f"OpenAI {label} answer was cut off at the output-token limit.")
         self.label = label
         self.usage = usage
+        self.turn: ModelTurn | None = None
 
 
 class ModelRefusal(RuntimeError):
@@ -112,8 +115,12 @@ def _check_finished(response: Any, *, label: str, usage: TokenUsage | None) -> N
     A refusal content part, or an answer the provider stopped for any reason other
     than the output-token limit (``content_filter`` today), is a
     :class:`ModelRefusal`; an answer stopped at the output-token limit is an
-    :class:`AnswerCutOff`.
+    :class:`AnswerCutOff`; a failed answer is an :class:`openai.APIError` carrying
+    the provider's error message (not tried again, as for a failed stream).
     """
+    if getattr(response, "status", None) == "failed":
+        error = getattr(response, "error", None)
+        raise _provider_error(f"{label} answer", getattr(error, "message", None), error, None)
     if _has_refusal(response):
         raise ModelRefusal(label, usage)
     if getattr(response, "status", None) != "incomplete":
@@ -122,6 +129,13 @@ def _check_finished(response: Any, *, label: str, usage: TokenUsage | None) -> N
     if reason == "max_output_tokens":
         raise AnswerCutOff(label, usage)
     raise ModelRefusal(label, usage, why=f"stopped by the provider ({reason or 'no reason given'})")
+
+
+def _provider_error(subject: str, message: Any, body: Any, request: Any) -> openai.APIError:
+    """The error for an answer the provider failed, with its message when it sent one."""
+    text = message if isinstance(message, str) and message else "the provider failed the answer"
+    details = body.to_dict() if hasattr(body, "to_dict") else None
+    return openai.APIError(f"OpenAI {subject} failed: {text}", request, body=details)
 
 
 def _has_refusal(response: Any) -> bool:
@@ -343,6 +357,7 @@ def parse_structured[T: BaseModel](
             still logged).
         ModelRefusal: If the model refused, or the provider stopped the answer
             for another reason.
+        openai.APIError: If the provider failed the answer.
         RuntimeError: If the response holds no output at all, or no answer
             text to parse.
         pydantic.ValidationError: If the answer text does not fit the class.
@@ -496,6 +511,11 @@ def _check_request(request: Mapping[str, Any]) -> None:
     unknown = sorted(set(request) - _REQUEST_KEYS)
     if unknown:
         raise TypeError(f"Unknown model request key(s): {', '.join(unknown)}")
+    # The SDK merges ``extra_body`` over the body, so any other key could undo
+    # ``store=False``; only the prompt-cache options :func:`openai_kwargs` adds pass.
+    unknown_extra = sorted(set(request.get("extra_body") or {}) - {"prompt_cache_options"})
+    if unknown_extra:
+        raise TypeError(f"Unknown model request extra_body key(s): {', '.join(unknown_extra)}")
 
 
 def _responses_request(**request: Any) -> dict[str, Any]:
@@ -517,8 +537,9 @@ def _responses_request(**request: Any) -> dict[str, Any]:
     (``include=["reasoning.encrypted_content"]``), so a later turn can carry it.
 
     Raises:
-        TypeError: If the request holds an unknown key, or a message, content
-            part, tool or tool choice of a kind this translation does not know.
+        TypeError: If the request holds an unknown key (in ``extra_body``, any
+            key but ``prompt_cache_options``), or a message, content part, tool
+            or tool choice of a kind this translation does not know.
         ValueError: If a carried turn in ``messages`` has a tool call with no
             result (it did not go through :meth:`CarriedTurn.with_results`).
     """
@@ -743,10 +764,16 @@ class CarriedTurn:
 
 
 def _carried(response: Any) -> CarriedTurn | None:
-    """The response's output items as a :class:`CarriedTurn` (``None`` when there are none)."""
+    """The response's output items as a :class:`CarriedTurn` (``None`` when there are none).
+
+    A reasoning item without its encrypted content is left out: with
+    ``store=False`` the provider cannot look it up by its id on the next turn.
+    """
     items: list[dict[str, Any]] = []
     for item in getattr(response, "output", None) or ():
         plain = item.model_dump(exclude_none=True)
+        if plain.get("type") == "reasoning" and not plain.get("encrypted_content"):
+            continue
         if plain.get("type") != "message":
             plain.pop("status", None)
         items.append(plain)
@@ -816,6 +843,7 @@ class TextStream:
         ended = False
         refused = False
         final: Any = None
+        subject = f"{self.label} stream"
         for event in self._stream:
             kind = getattr(event, "type", None)
             if kind == "response.output_text.delta":
@@ -830,9 +858,13 @@ class TextStream:
             elif kind == "response.failed":
                 error = getattr(event.response, "error", None)
                 self.usage = token_usage_from_provider(getattr(event.response, "usage", None))
-                raise self._provider_error(getattr(error, "message", None), error)
+                raise _provider_error(
+                    subject, getattr(error, "message", None), error, self._request()
+                )
             elif kind == "error":
-                raise self._provider_error(getattr(event, "message", None), event)
+                raise _provider_error(
+                    subject, getattr(event, "message", None), event, self._request()
+                )
         if not ended:
             if self._closed:
                 return
@@ -845,13 +877,6 @@ class TextStream:
         if final is not None:
             _check_finished(final, label=self.label, usage=self.usage)
             self.carried = _carried(final)
-
-    def _provider_error(self, message: Any, body: Any) -> openai.APIError:
-        text = message if isinstance(message, str) and message else "the provider failed the answer"
-        details = body.to_dict() if hasattr(body, "to_dict") else None
-        return openai.APIError(
-            f"OpenAI {self.label} stream failed: {text}", self._request(), body=details
-        )
 
     def _request(self) -> Any:
         # The SDK stream's HTTP request; ``None`` for a test double with no response.
@@ -884,25 +909,34 @@ def send_turn(client: Any, *, label: str, **request: Any) -> ModelTurn:
 
     Raises:
         TypeError: If the request holds a key outside the list above.
-        AnswerCutOff: If the answer stopped at the output-token limit.
+        AnswerCutOff: If the answer stopped at the output-token limit (its
+            ``turn`` holds what the answer held so far).
         ModelRefusal: If the model refused, or the provider stopped the answer
             for another reason.
+        openai.APIError: If the provider failed the answer.
         RuntimeError: If the response holds no output at all.
     """
     response = _create(client, **_responses_request(**request))
     usage = token_usage_from_provider(getattr(response, "usage", None))
-    _check_finished(response, label=label, usage=usage)
-    output = getattr(response, "output", None)
+    output = getattr(response, "output", None) or ()
+    turn = ModelTurn(
+        text=_output_text(response),
+        tool_calls=tuple(
+            ToolCall(name=item.name, arguments=item.arguments, call_id=item.call_id)
+            for item in output
+            if getattr(item, "type", None) == "function_call"
+        ),
+        usage=usage,
+        carried=_carried(response),
+    )
+    try:
+        _check_finished(response, label=label, usage=usage)
+    except AnswerCutOff as exc:
+        exc.turn = turn
+        raise
     if not output:
         raise RuntimeError(f"OpenAI {label} response had no choices.")
-    calls = tuple(
-        ToolCall(name=item.name, arguments=item.arguments, call_id=item.call_id)
-        for item in output
-        if getattr(item, "type", None) == "function_call"
-    )
-    return ModelTurn(
-        text=_output_text(response), tool_calls=calls, usage=usage, carried=_carried(response)
-    )
+    return turn
 
 
 def stream_turn(client: Any, *, label: str, **request: Any) -> TextStream:

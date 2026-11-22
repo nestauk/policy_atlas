@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from typing import Any
 
 import structlog
@@ -160,18 +161,24 @@ class OpenAIChatBackend(ChatBackend):
     def _tool_turn_once(
         self, messages: list[Any], max_output_tokens: int | None
     ) -> UsageResult[ChatTurn]:
-        # The reasoning-effort pin the chat model needs (Terra refuses function
-        # tools without it) comes from the route file.
-        turn = send_turn(
-            self._client,
-            label="chat tool turn",
-            **_chat_kwargs(),
-            messages=messages,
-            tools=_CHAT_READ_TOOL_SCHEMAS,
-            parallel_tool_calls=True,
-            tool_choice="required",
-            max_completion_tokens=max_output_tokens,
-        )
+        try:
+            turn = send_turn(
+                self._client,
+                label="chat tool turn",
+                **_chat_kwargs(),
+                messages=messages,
+                tools=_CHAT_READ_TOOL_SCHEMAS,
+                parallel_tool_calls=True,
+                tool_choice="required",
+                max_completion_tokens=max_output_tokens,
+            )
+        except AnswerCutOff as exc:
+            if exc.turn is None or not exc.turn.tool_calls:
+                raise
+            # A cut call's unfinished arguments read as ``{}`` below, as malformed
+            # arguments always have. The turn is not carried, so no unfinished
+            # JSON goes back to the provider: its exchanges are sent rebuilt.
+            turn = replace(exc.turn, carried=None)
         if not turn.tool_calls:
             raise RuntimeError("OpenAI chat tool turn returned no tool calls.")
         parsed_calls: list[dict[str, Any]] = []

@@ -73,6 +73,26 @@ sources:
   text, so "first content" must mean the first text piece. The request id is in the
   `x-request-id` header (equal to `x-amzn-requestid`) and finds the call in the AWS audit
   log (CloudTrail `requestID`).
+- **An error while a stream is being read is a raw `httpx` error.** The SDK wraps a
+  failure at request open (`APIConnectionError`, `APITimeoutError`) but not one raised while
+  the body is read (`ReadError`, `ReadTimeout`, `RemoteProtocolError`), so a retry rule
+  written against the SDK's errors does not see a dropped stream.
+- **What the AWS audit log (CloudTrail) holds for a Responses call.** A non-streamed call
+  has `inputTokens` (uncached input only) and `outputTokens` (reasoning included); there
+  are no cached, cache-write or reasoning fields. A streamed call has a request event and a
+  stream-end event, joined by `parentRequestId`, and **no token counts at all**. Langfuse
+  keeps reasoning tokens apart from output, so a join compares the log's output with
+  output plus reasoning.
+- **Carried items are accepted in more forms than first seen.** Requests that keep `status`
+  on function-call items, or drop a reasoning item's `id`, were accepted on Terra and Sol.
+  A reasoning item with no encrypted content cannot be sent back with `store=false`.
+- **Effort `low` buys little reasoning on these steps.** 58 reasoning tokens over 74
+  section turns on Terra; Sol produced a reasoning item on the first tool turn only. The
+  exception is a loop that forces tool turns: chat at `low` spent about 5,000 reasoning
+  tokens on each late turn.
+- **Parallel first calls each write the same prompt start to the cache.** A burst of
+  calls that start together cannot read one another's write, so the cached share of a
+  small step differs between two runs for no other reason; compare the calls in order.
 - **Stalled calls are a laptop-side effect, not the provider's.** From a laptop 4 to 6% of
   calls return nothing until the client timeout and succeed on a retry, on both endpoints
   alike. Bedrock had finished each stalled call in 2 to 8 seconds; stalls came in bursts

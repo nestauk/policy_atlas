@@ -4,7 +4,9 @@ Evidence for the build of [contract.md](contract.md) (revision 5.2) by [plan.md]
 (draft 2). Ids (M, E, S, D, O) and terms are the contract's. Figures from live runs are
 read from saved result files in the task's gitignored `research/live/` folder.
 
-> **Status:** build complete through step 6. The review stack has not run.
+> **Status:** build complete; the review stack ran on 2026-11-22 and its fixes are in
+> (§ Review findings). Three rubric rows wait for the owner's ruling (§ Review findings,
+> For the owner).
 
 **Read this first (owner):**
 
@@ -31,9 +33,11 @@ read from saved result files in the task's gitignored `research/live/` folder.
 | Part 2 (`d5db3e9f`) | `make verify` on the snapshot | pass | Backend 4,976 passed. |
 | Chat fallback and documents (`8461fd36`) | `make verify` on the snapshot | pass | Backend 4,976 passed; okf-validate 189 concepts; prompt-guard 58 files. |
 | Step-6 exit, on the simplified code (`0f0616de`) | `make verify` on the snapshot | pass | Backend 4,977 passed (8 min 58 s); mypy 583 files; okf-validate 189 concepts; prompt-guard 58 files; drift-check OK; frontend 2,025 tests. This row was added after that gate, in a commit that changes this file only. |
+| Review stack, before the lanes (merge of `origin/dev`, `919c4aca`) | `make verify` in the working tree | pass | Backend 4,978 passed; mypy 583 files; frontend 2,025 tests. |
+| Review stack, after the fixes | `make verify` in the working tree | pass | Backend 4,990 passed (7 min 53 s); mypy 583 files; okf-validate 189 concepts; prompt-guard 58 files unchanged; infra 170 tests; frontend 2,025 tests. |
 
 Every gate: mypy and ruff clean, build, eval-check, infra tests, audit-paths, rules-check,
-prompt-guard, font-guard, drift-check OK, frontend 147 files / 2,025 tests. Each ran in
+prompt-guard, font-guard, drift-check OK, frontend 147 files / 2,025 tests. Each build gate ran in
 `../policy_atlas-gate` on a commit made from the index (`git write-tree`), and the commit
 was made only when the index still equalled the gated tree.
 
@@ -158,8 +162,8 @@ lint and build were therefore run on a clean checkout of the same commit
   - The six streams with a fallback: their existing `except Exception` path (checked site
     by site).
   - Chat reply: a cut-off keeps the text shown, marks the observation `WARNING` and goes
-    on to the parse; a refusal with no text raises. **A refusal after some text keeps the
-    text, like a cut-off:** the plan's table does not cover this case; flagged for review.
+    on to the parse; a refusal with no text raises. A refusal after some text keeps the
+    text, like a cut-off, as plan decision 4 says.
   - No code matched the old SDK error names; two comments in hash-pinned prompt files
     still name `LengthFinishReasonError` and were left.
   - Tests: cut-off and refusal for each of the three calls; the chat reply keeping its
@@ -274,26 +278,27 @@ and `research/live/compare-before-after1.md` (written by `step_stats.py --compar
   |---|---|---|---|
   | `synthesise_section_turn`, `synthesise_section_emit` | `none` → `low` | none sent | 25 s → 60 s |
   | `synthesise_write_key_findings` | `none` → `medium` | none sent | 120 s |
-  | `chat` (tool turn, reply, parse) | `none` → `low` | 4,096 → 6,144 | 120 s |
   | `task_agent_scoping_turn` | `none` → `low` | 16,384 → 18,432 | 60 s |
   | `longlist_constrain`, `longlist_distinct`, `longlist_authority` | `none` → `low` | 16,384 → 18,432 | 60 s |
   | `option_profile_potential_impact`, `option_profile_ambition` | `none` → `low` | 16,384 → 18,432 | 60 s |
   | `option_profile_line` (`none`), `option_profile_setting` (`high`) | unchanged | 16,384 → 18,432 (shared constant) | unchanged |
 
-  The regenerated capture differs from the Part 1 capture in exactly these entries and
-  keys (19 entries: effort, limit, timeout, and `include` on the entries that send tools).
+  `chat` is not in the table: it was raised to `low` (limit 6,144) in the Part 2 commit and
+  put back to `none` and 4,096 after the live run (§ The run after Part 2), so it ships
+  unchanged. The committed capture differs from the Part 1 capture in exactly the entries
+  and keys of this table (16 entries: effort, limit, timeout, and `include` on the entries
+  that send tools).
   The efforts sit in the route file's shared `[steps]` table, so the legacy
   `openai-direct` route gets them too.
-- **Prompt-hash re-pins in Part 2** (5 files): `section_prompt.py` (code, plus the one
+- **Prompt-hash re-pins in Part 2** (4 files): `section_prompt.py` (code, plus the one
   constant `NOT_USED_TOOL_RESULT`, written by the lead: "Not used: this call was not run
   in this turn. If it is still needed, make it again."), and one number each in
-  `chat_prompt.py`, `task_agent_scoping_prompt.py`, `constrain_prompt.py` and
-  `option_profile_prompt.py`.
+  `task_agent_scoping_prompt.py`, `constrain_prompt.py` and `option_profile_prompt.py`.
+  `chat_prompt.py` was re-pinned for its limit and is back at its earlier hash.
 - **Tests that pinned the old values** were updated to the new ones: the step table in
-  `test_model_routes.py` (10 rows), three assertions in `test_chat_backend_openai.py`,
-  two in `test_synthesis_backend.py`, one in `test_chat_turns.py`. Three of them carried a
-  comment that the `none` pin guarded against Terra refusing tools; that guard belonged to
-  Chat Completions and the comments went with it.
+  `test_model_routes.py` (9 rows) and two assertions in `test_synthesis_backend.py`. The
+  chat pins (`test_chat_backend_openai.py`, `test_chat_turns.py`) were changed and then put
+  back with the chat fallback.
 
 ### The run after Part 2 (task 4.7)
 
@@ -314,8 +319,11 @@ Served from a checkout of the Part 2 commit (`d5db3e9f`), `bedrock` route, 2026-
 | `option_profile_ambition` | 2 | 6.51 s, 4.63 s, 6.56 s | 6.56 s | $0.0116 ($0.0139) | none | 0 |
 | `chat` | see below | | | | | |
 
-- **Stop rules (§ Efforts).** No answer was cut at its output limit and none failed its
-  schema (the server log holds no `AnswerCutOff`, `ModelRefusal` or malformed emission).
+- **Stop rules (§ Efforts).** No answer of a raised step was cut at its output limit and
+  none failed its schema (the server log holds no `AnswerCutOff` or `ModelRefusal`; the
+  section writer's repair turns number 14, against 13 before and 11 after Part 1; the
+  three `option_profile.call_malformed` warnings are on steps that were not raised, and
+  the before run had three too).
   No raised step's median is three times its earlier value and over 10 s. The writer
   steps' cached share is at or above the before value. So no rule is met for the nine
   steps above. The models reason very little at these efforts (58 reasoning tokens over
@@ -538,6 +546,143 @@ is live: a server's start-up marks running runs as interrupted.
   built from the SDK's types.
 - The before run and the run after Part 2 ran on a busy laptop; their latencies are upper
   estimates. Timeouts are to be sized from staging (E5).
+
+## Review findings
+
+The review stack ran on 2026-11-22 in a fresh conversation, on the branch merged with
+`origin/dev` (`919c4aca`), against `git diff origin/dev...HEAD` with the two request
+captures left out. The lead adjudicated; reviewers and a `deep-reasoner` did the reading
+and the fixes.
+
+| Lane | Reader | Result |
+|---|---|---|
+| Contract verifier | `contract-verifier` (Opus) | Rubric walked row by row; 10 findings. It ran the prompt-hash guard and the request comparison itself (88 entries, 0 problems). |
+| Code review | `/code-review medium` | 8 findings. |
+| Security | `agent-skills:security-auditor` (Opus) | No critical, high or medium finding; 2 low, 7 notes. |
+| Adversarial | **A Claude reader stood in for Codex.** The Codex job failed in 9 seconds on the workspace spend cap; a `deep-reasoner` (Opus) in a fresh context ran the same read-only brief. No second model family read this diff. | 4 medium, 8 low. |
+| Lean and missing tests | `ponytail-review`, run by a fresh Opus agent | 3 findings. |
+| Live traces | The lead, from the saved observations and server logs | Below. |
+| Re-review of the fixes | `agent-skills:code-reviewer` (Opus), on the fix diff only | 2 required, 3 optional, 3 small. One further round closed them. |
+
+**Found by more than one lane** (high confidence):
+
+- *A cut-off chat tool turn failed the whole answer* (code review, contract verifier,
+  adversarial). Before the move the loop went on with empty arguments. **Fixed:** the
+  cut-off error from `send_turn` carries the turn it could read; the chat tool turn goes on
+  with it, not carried. A cut-off with no tool call, and a refusal, still raise.
+- *A stream that ends cut off or refused lost its billed tokens* (code review, contract
+  verifier, adversarial; M8 says usage is still recorded). **Fixed** at the four synthesis
+  streams (logged, on the generation, added to the usage returned after the fallback) and
+  the planning stream (logged, on the generation).
+- *A connection dropped while a stream is read is not tried again* (adversarial, contract
+  verifier, and the build's own note). The SDK lets raw `httpx` errors through, and the
+  retry rule does not accept them, so M16 covers a failure at request open only.
+  **Adopted, then not applied:** the fix needs an `httpx` import in `core/openai_client.py`,
+  which the zero-egress guard test forbids outside the approved network modules. Changing
+  that guard is the owner's decision. On the deferred list; the tested patch is kept
+  outside the repository.
+- *`extra_body` could override `store=false`* (security, adversarial). **Fixed:** any
+  `extra_body` key but the cache options raises.
+- *No second try with rebuilt history when the provider rejects a carried request* (code
+  review, adversarial). **Deferred:** none of 38 probe requests and no live call was
+  rejected; a second try on every 400 costs more than it saves until one is seen.
+
+**Found by one lane, fixed:**
+
+- A non-streamed answer with status `failed` read as "had no choices" and lost the
+  provider's message (code review): it now raises `openai.APIError` with the message.
+- A reasoning item with no encrypted content could be carried back, where `store=false`
+  cannot resolve it (adversarial): such items are not carried.
+- `scripts/fixed_questions.py` read the conversation id from the wrong level of the
+  streamed reply and took a failed turn for a success (code review).
+- Missing tests (ponytail, security): the request id of a streamed call; a content-filter
+  stop as a refusal; the chat reply refused with and without text; `store=false` on a
+  request that carries turns.
+- `usage_metadata` and `log_usage` accepted a raw provider object no caller sends
+  (ponytail): typed `TokenUsage | None`.
+- Three eval scripts crashed on a missing usage (adversarial). Stale text: the
+  `_step_kwargs` docstring and a chat comment described Chat Completions' tool limit
+  (code review, contract verifier). Docstring sections on five public functions.
+- This file described `chat` as raised (contract verifier): corrected (16 changed capture
+  entries, 4 re-pins, 9 route rows). ADR 0050 cites contract revision 5.2.
+
+**Declined, with the reason:**
+
+- *Raised steps keep timeouts sized with reasoning off* (code review): E5 was applied as
+  written (the larger of the present value and 60 s); re-sizing from staging is on the
+  deferred list.
+- *A cut-off or refused section turn is recorded as a bad `emit_section` call* (code
+  review, adversarial): plan decision 4 fixed this mapping.
+- *A failure event inside a stream is not tried again* (adversarial): M8 keeps a
+  mid-stream provider error not retryable, as before.
+- *The one-way-in test checks attribute names only* (security, adversarial): it is the
+  test the contract defines, and nothing in the tree uses a gap. Recorded as a limit.
+- *An output item of a type the SDK does not know would break `_carried`*, and *a
+  double cache marker in `parse_structured`* (adversarial): no such input exists today.
+- *The eval scripts price a call with no usage at zero*; *`fixed_questions.py` assumes
+  the route streams* (re-review): scripts, and true of the route.
+
+**Deferred** (entries in `docs/deferred.md`): the dropped-stream retry; the second try for
+a rejected carried request; token counts lost on four other error paths; the limits of
+the one-way-in test; no carried request in the capture; the timeouts of the raised steps;
+a cut `query_findings` call reading as an unfiltered read (as malformed arguments did
+before the move); the Theory of change watchdog leaving an abandoned request running; the
+tool-loop tidy-up of step 5c; chat's forced tool turns and its unshared cache.
+
+**Flagged deviations and adjudication items, each confirmed:**
+
+- Carried entries for each tool call, and the `carried` key inside the turn dictionaries:
+  adopted as built. The security lane traced every path and found no carried item in the
+  database, a trace, a log line or the browser; the tidy-up is deferred.
+- `section_emit_stream` off the protocol; `ModelRefusal` carrying usage; usage typed
+  `TokenUsage | None`; the five small stage-1a differences; the 120 s timeout in the eval
+  scripts; the folded gates: adopted as built.
+- The chat reply keeping its text on a refusal: plan decision 4 says so; now tested.
+- The private SDK import: accepted. It is a pure function behind the pinned
+  `openai>=2.44,<3`; a move would fail at import, and the request comparison would show a
+  changed schema.
+- The efforts reaching `openai-direct`: accepted (O3: unit tests only on that route).
+- The changed-form assertions and the deleted request-shape test (rubric row 5): the
+  contract verifier confirmed each behaviour is still covered. Two things the deleted
+  test pinned are not re-homed: the trace observation name open at each request, and
+  captures on the `openai-direct` route.
+- `api/answer_core.py` is edited though § Scope does not list it: plan decision 10 names it.
+
+**Live traces, read for content:**
+
+- *The grounding judge's ten timeouts in the run after Part 2* are the laptop stall
+  pattern, not long answers: healthy judge calls took at most 9.6 s in all three runs,
+  every failure sits at the 80 s limit, and 56 failed attempts on ten steps overlap them.
+- *Schema failures:* the section writer's repair turns are level (13, 11, 14); the
+  `option_profile.call_malformed` warnings (3, 1, 3) are on steps that were not raised.
+- *The chat answer that failed at `low`* was one connection error after 96 ms, then two
+  attempts that ran to the 120 s limit with no response. **Not root-caused:** the traces
+  cannot tell a stall from reasoning that needed longer, and the AWS sign-in had expired,
+  so the audit log was not read. The answer that completed spent 5,094 and 4,947
+  reasoning tokens on its last two tool turns (46 s and 38 s).
+- *In that answer the fifth tool turn read nothing from the cache* (the fourth read
+  16,088 tokens). One case, unexplained; chat is back at `none`.
+- *The saved observations hold no effort for `chat` calls* (the title call has one), so
+  the step tables show none for it.
+
+**Fake-done checks:** no test deleted, skipped or weakened in the fix rounds (one
+assertion added to an existing test); no swallowed error; no stub return.
+
+**For the owner** (three rubric rows fail as written; each needs a ruling):
+
+1. **Row 15:** the 27 streamed calls are matched by the same-request comparison, not by
+   the audit log, which holds no counts for them.
+2. **Row 17:** four steps are below nine tenths of their cached share after Part 1
+   (`option_profile_place_sentences`, `longlist_type`, `agent_suggest`, `chat`); each is
+   explained in § The run after Part 1 as not an effect of the endpoint.
+3. **Row 21:** `chat` is at `none` under plan item P1's fallback; the contract's § Efforts
+   still says `low`.
+4. Whether `core/openai_client.py` may name `httpx` exception classes (the dropped-stream
+   retry).
+5. Rubric row 7 says "two broken scripts"; the contract says three and the entry names
+   four files.
+6. For the DPIA notes (D3): `store=false` stops the stored response; abuse-monitoring
+   logs and the prompt cache are still held by the provider.
 
 ## Public safety
 

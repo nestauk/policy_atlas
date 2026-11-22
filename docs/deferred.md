@@ -679,6 +679,9 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Limits in the code
 
+- If the first-content watchdog fires while a streamed request is still waiting for its response
+  headers, there is no stream to close yet, so the abandoned request runs on, and is billed,
+  beside the fallback. Condition: its owner's next change to the stream path.
 - `core/schema.py`: `toc_proposal`, `task_upload` and `toc_figure` have no `UNIQUE(id, task_id)`.
   Condition: a foreign key needs the pair.
 - `frontend/src/views/toc/`: on the canvas, a link's verdict and its pending, unchecked, suggested
@@ -796,6 +799,19 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Limits in the code
 
+- Every chat answer forces five tool turns (`tool_choice="required"`), so chat runs with no
+  reasoning: at effort `low` one live answer in two failed and the other took 118 seconds to its
+  first words, with about 5,000 reasoning tokens on each of the late turns. Option: let the model
+  say it is ready, as the section writer does, then raise the effort. Condition: chat is to
+  reason.
+- A chat tool call whose arguments are malformed or cut at the output limit is read as `{}`. For
+  `search_chunks` and `lookup` that is a tool error the model can correct; `query_findings` accepts
+  `{}` and runs an unfiltered read the model did not ask for. Option: hand the loop a rejected
+  exchange that says the call was cut off. Condition: a cut-off chat tool turn is seen in traces.
+- The chat reply and the final parse send no `tools`, so they read nothing from the tool turns'
+  cached prompt start and each writes the whole prompt (about 27,000 tokens) to the cache again.
+  Option: send the tools with `tool_choice="none"` on both, as the section emit does. Condition:
+  chat cost is looked at, or the chat loop is reworked.
 - `api/chat_scope.py`: All chat read tools are bounded to the terminal completed run, so on a re-run
   task earlier runs' text is not searchable from chat. Condition: the workspace cluster widens the
   read models.
@@ -886,7 +902,7 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   `longlist_authority`, `option_profile_potential_impact`, `option_profile_ambition`) were raised
   from no reasoning to `low` with no prompt change and no live comparison, as an accepted exception
   to [prompting.md](specs/system/prompting.md). Run the comparison (answers and cost at `none`
-  against `low`, on a judged set). Condition: task 059 reworks options scoping.
+  against `low`, on a judged set). Condition: the options scoping assessment reworks that area.
 - `extract_interventions` has a 35-second timeout on the `bedrock` route; on staging one answer
   genuinely needed longer and failed all its attempts (2 timeouts in 10,367 calls over 14 days).
   Re-size it by the rule of [ADR 0043](adr/0043-queued-ingest-document-store-sql-retrieval-step-timeouts.md)
@@ -898,10 +914,37 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   provable, but features of Responses that the old shape cannot express need a special case
   each (carried reasoning is the first). Option: the app's own request types for messages, tool
   calls and results, built by every call site, with the module translating them. Condition:
-  after the task 059 analyst is built, or when a second special case is needed.
+  after the assessment's analyst is built, or when a second special case is needed.
 
 ### Limits in the code
 
+- A connection dropped while a stream is being read surfaces as a raw `httpx` error, which the
+  retry rule does not accept, so the "try again before the first text" rule of the chat reply and
+  the planning stream covers a failure at request open only. The fix is to turn those errors into
+  the SDK's connection and timeout errors in `core/openai_client.py`'s stream reader; it needs an
+  `httpx` import there, which the zero-egress guard (`test_acquire_module_has_no_http_client`)
+  forbids. Condition: the owner allows that module to name `httpx` exception classes.
+- A tool loop has no second try with rebuilt history when the provider rejects a request that
+  carries earlier turns (a 400 is not retried, so the section or chat answer fails, and the trace
+  shows the rebuilt messages, not what was sent). No request was rejected in the probes or the live
+  runs. Condition: a carried request is rejected on staging, or a model or route changes.
+- Token counts are lost on four error paths: a section turn that ends as a malformed emission is
+  logged but not added to the loop's totals; an attempt that ends cut off or refused under
+  `traced_attempts` has no usage on its trace generation; a stream the provider fails
+  (`response.failed`) raises an error that carries no usage; and a case-studies or introduction
+  stream that completes but does not parse is logged but not added to its fallback's usage.
+  Condition: run costs are reconciled against the bill.
+- The one-way-in test (`tests/core/test_one_way_in.py`) checks attribute names (`.responses`,
+  `.chat.completions`). Dynamic access, the SDK's generic `post`, and other SDK resources that keep
+  state at the provider would pass it; nothing in the tree uses any of them. Condition: a second
+  SDK surface is used, or a review finds a bypass.
+- The request capture holds no request with carried turns (the frozen baseline has none); their
+  wire form is pinned by module tests on SDK-built objects and by the live probe only. Condition: a
+  carried request is rejected, or the SDK is upgraded.
+- The raised steps other than the two section steps keep the timeouts they had with reasoning off
+  (60 or 120 seconds on `bedrock`). Re-size each by the rule of
+  [ADR 0043](adr/0043-queued-ingest-document-store-sql-retrieval-step-timeouts.md). Condition: a
+  week of staging traces at the new efforts.
 - `core/model_routes.py`: overlay routes may name only the two committed key variables
   (`API_KEY_ENVS`). Condition: an experiment needs a third provider.
 - `evidence_search/sourcing/search_generation.py`: There is one Claude backend; the shared Converse
@@ -917,6 +960,17 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Work to do
 
+- Tool-loop tidy-up: keep the carried turns inside `run_tool_loop` beside the transcript and return
+  them beside the turn (the `carried` key in the turn dictionaries, `CarriedHistory` and its count
+  matching then go); one helper for the two "try again before the first text" loops; one helper
+  for the seven hand-opened trace generations, so request ids are recorded in one place; a neutral
+  home for the loop that chat and the section writer share, which sits under the section writer's
+  hash-pinned prompt file. Condition: the next change to either tool loop.
+- `stream_options` is a dead request key (the send module drops it; six sites still pass it).
+  Removing it changes the Theory of change request builder. Condition: its owner's next change.
+- Two comments in hash-pinned prompt files (`classify_prompt.py`, `iof_prompt.py`) name the SDK's
+  `LengthFinishReasonError`, which no longer exists on this path (the error is `AnswerCutOff`).
+  Condition: the next deliberate edit of either file.
 - **Now** The `boto3` region for Cohere and Claude comes from `AWS_REGION` alone (default
   `eu-west-2`), so a shell with another region sends the EU (European Union) profiles to the wrong
   region. Read the region from the route file. Condition: the next cleanup chore.
@@ -1409,6 +1463,8 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Work to do
 
+- `scripts/fixed_questions.py` has no test against the Task Agent route's streamed reply; it went
+  stale once without notice. Condition: the script is next changed, or it fails again.
 - **Now** `test_option_search.py`: a thread-join test stalls at 0% CPU under load and has cost
   40-minute CI (continuous integration) runs. Put a timeout on that join, and capture a stack dump
   (`pytest -o faulthandler_timeout=110`) if it recurs. Condition: the next cleanup chore.

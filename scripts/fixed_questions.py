@@ -157,8 +157,12 @@ class Api:
     def call(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
         """Send one request and return the decoded JSON (``None`` in a dry run).
 
+        A streamed (NDJSON, one JSON event per line) answer returns its last
+        event, the ``completed`` one.
+
         Raises:
-            RuntimeError: On an HTTP error, with the status and the API's detail.
+            RuntimeError: On an HTTP error, with the status and the API's detail,
+                or when a streamed answer ends with a ``failed`` event.
         """
         url = f"{self.base_url}{path}"
         if self.dry_run:
@@ -173,12 +177,21 @@ class Api:
         try:
             with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
                 raw = response.read()
+                ndjson = response.headers.get_content_type() == "application/x-ndjson"
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")[:500]
             raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from None
-        # The Task Agent route streams one JSON object per line; the last is the result.
-        lines = raw.decode().strip().splitlines()
-        return json.loads(lines[-1]) if lines else None
+        text = raw.decode().strip()
+        if not text:
+            return None
+        if not ndjson:
+            return json.loads(text)
+        # The Task Agent route streams one JSON event per line; the last is the
+        # outcome: ``{"type": "completed", "turn": {...}}`` or a ``failed`` event.
+        last = json.loads(text.split("\n")[-1])
+        if last.get("type") == "failed":
+            raise RuntimeError(f"{method} {path} -> turn failed: {last.get('error')}")
+        return last
 
 
 def mint_dev_token() -> str:
@@ -247,7 +260,7 @@ def start_question(api: Api, q: FixedQuestion, *, steering: str, max_turns: int)
             },
         )
         if reply:
-            out["conversation_id"] = reply.get("conversation_id")
+            out["conversation_id"] = reply["turn"].get("conversation_id")
         plan = api.call("GET", f"{base}/plan")
         if api.dry_run or (plan and plan.get("status") == "approved"):
             break

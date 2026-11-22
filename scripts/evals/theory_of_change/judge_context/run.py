@@ -125,8 +125,8 @@ def call(v, l, policy, chain, doc):
     schema = V3Response if v == "V3" else JP.JudgeResponse
     t = time.time()
     p, u = parse_structured(h.client, messages=messages(v, l, policy, chain, doc), response_format=schema, usage_event="judge_experiment", label="judge", model=MODEL, reasoning_effort="none", prompt_cache="auto", timeout_s=120.0, max_completion_tokens=4000)
-    cached = u.cached or 0
-    usd = ((u.prompt - cached) * PRICE[0] + cached * PRICE[1] + u.completion * PRICE[2]) / 1e6
+    cached = (u.cached or 0) if u else 0
+    usd = ((u.prompt - cached) * PRICE[0] + cached * PRICE[1] + u.completion * PRICE[2]) / 1e6 if u else 0.0
     out = {"usd": usd, "s": time.time() - t, "reading": p.reading.model_dump() if v == "V3" else None}
     for name, w in (("e", p.worked_elsewhere), ("h", p.holds_here)):
         st = w.stance

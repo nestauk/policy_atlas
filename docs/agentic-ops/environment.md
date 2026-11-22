@@ -45,6 +45,8 @@ After you pull a change:
 - User and password are `policy_atlas`. These are local values, not secrets.
 - Databases on the one container:
   - `policy_atlas`: the dev database (`make dev`, `make dev-seed`).
+    Run one API server on it at a time: a server's start-up marks every running run as
+    interrupted, so a second server (or a restart) ends the live runs of the first.
   - `policy_atlas_test`: the test base. `make test` and `make test-fast` drop and recreate it at
     the start of each run, then each test worker makes its own copy (`backend/tests/conftest.py`).
   - `policy_atlas_smoke`: a disposable database for `make fe-api-smoke`.
@@ -103,7 +105,8 @@ groups:
 Where the variables are read:
 
 - `make dev` and `make -C backend dev` load `backend/.env` through `uv run --env-file`. The
-  application settings read only the process environment.
+  application settings read only the process environment. `--env-file` does not replace a
+  variable that is already set in the shell.
 - The tests load `backend/.env` (for `DATABASE_URL`), then remove the model, search and Langfuse
   keys (`backend/tests/conftest.py`). So a key in your `.env` never turns a test live.
 

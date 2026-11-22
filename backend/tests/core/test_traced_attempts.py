@@ -22,8 +22,8 @@ import pytest
 from structlog.testing import capture_logs
 
 from policy_atlas.core import liveness, tracing
-from policy_atlas.core.openai_client import send_turn
-from tests.helpers import text_response
+from policy_atlas.core.openai_client import send_turn, stream_turn
+from tests.helpers import text_response, text_stream_events
 
 _REQUEST = httpx.Request("POST", "https://provider.test/v1/chat/completions")
 
@@ -431,6 +431,27 @@ def test_each_attempt_records_its_own_request_id_or_its_start_time() -> None:
     assert datetime.fromisoformat(cut["started_at"]).utcoffset() == timedelta(0)
     assert answered["request_id"] == "req_ok"
     assert "started_at" not in answered
+
+
+def test_a_streamed_call_records_the_request_id_of_its_response_headers() -> None:
+    events = "".join(
+        f"event: {event.type}\ndata: {event.to_json(indent=None)}\n\n"
+        for event in text_stream_events(["hi"])
+    )
+    client = _provider(
+        lambda: httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream", "x-request-id": "req_stream"},
+            content=events.encode(),
+        )
+    )
+
+    with tracing.request_id_scope() as holder:
+        assert list(stream_turn(client, label="test stream", model="gpt-test", messages=[])) == [
+            "hi"
+        ]
+
+    assert holder.request_id == "req_stream"
 
 
 def test_a_request_id_noted_on_a_copied_context_thread_reaches_the_scope() -> None:

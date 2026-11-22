@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import openai
 import pytest
+from openai.types.responses.response import IncompleteDetails
 from pydantic import BaseModel
 from structlog.testing import capture_logs
 
@@ -350,3 +351,30 @@ def test_close_stops_a_stream_quietly() -> None:
     assert next(pieces) == "a"
     stream.close()
     assert list(pieces) == []
+
+
+def test_a_failed_answer_raises_a_provider_error_with_its_message() -> None:
+    failed = cast(Any, text_stream_events([], ending="failed")[-1]).response
+    client, _sent = _client(lambda: httpx.Response(200, json=failed.to_dict()))
+
+    with pytest.raises(openai.APIError, match="The model failed") as caught:
+        send_turn(client, label="test turn", model="gpt-test", messages=[])
+    assert not tracing._retryable(caught.value)
+
+
+def test_an_answer_stopped_by_the_content_filter_raises_model_refusal() -> None:
+    answer = cut_off_response("half").model_copy(
+        update={"incomplete_details": IncompleteDetails(reason="content_filter")}
+    )
+    client, _sent = _client(lambda: httpx.Response(200, json=answer.to_dict()))
+
+    with pytest.raises(ModelRefusal, match="content_filter"):
+        send_turn(client, label="test turn", model="gpt-test", messages=[])
+
+
+def test_extra_body_keys_other_than_the_prompt_cache_options_raise_type_error() -> None:
+    client, sent = _client(lambda: httpx.Response(500))
+
+    with pytest.raises(TypeError, match="store"):
+        send_turn(client, label="test", model="gpt-test", messages=[], extra_body={"store": True})
+    assert sent == []

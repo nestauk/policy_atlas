@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import httpx
 import openai
 import pytest
+from openai.types.responses.response import IncompleteDetails
 
+from policy_atlas.core.openai_client import AnswerCutOff, ModelRefusal
 from policy_atlas.core.usage import TokenUsage
 from policy_atlas.runtime import chat_backend_openai
 from policy_atlas.runtime.chat_backend import traceable_turn
@@ -17,6 +19,7 @@ from policy_atlas.runtime.chat_prompt import ChatAnswerWire
 from tests.helpers import (
     FakeResponsesClient,
     FakeStream,
+    refusal_stream_events,
     response_usage,
     spy_calls,
     structured_response,
@@ -209,3 +212,76 @@ def test_the_answer_counts_the_reply_tokens_beside_the_parse_tokens(
 
     # The parse answer's usage is the builder's default: 10 in, 5 out.
     assert usage == TokenUsage(prompt=110, completion=45, total=155, cached=60, reasoning=0)
+
+
+def _stopped_tool_turn(
+    reason: Literal["max_output_tokens", "content_filter"],
+    *calls: tuple[str, str],
+    text: str = "",
+) -> Any:
+    """A tool turn the provider stopped for ``reason``, its items left incomplete."""
+    answer = tool_call_response(*calls, text=text)
+    return answer.model_copy(
+        update={
+            "status": "incomplete",
+            "incomplete_details": IncompleteDetails(reason=reason),
+            "output": [item.model_copy(update={"status": "incomplete"}) for item in answer.output],
+        }
+    )
+
+
+def test_a_tool_turn_cut_off_at_the_token_limit_returns_its_call_with_empty_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cut = _stopped_tool_turn("max_output_tokens", ("search_chunks", '{"query": "unfini'))
+    backend, _waits = _live(FakeResponsesClient(cut), monkeypatch)
+
+    result, usage = backend.chat_turn(_QUESTION, [], force_emit=False, max_output_tokens=123)
+
+    # The turn does not raise: the cut call comes back with empty arguments, and
+    # with no ``carried`` entry.
+    assert result == {"answer": None, "tool_calls": [{"tool": "search_chunks", "arguments": {}}]}
+    assert usage == TokenUsage(prompt=10, completion=5, total=15, cached=0, reasoning=0)
+
+
+def test_a_tool_turn_cut_off_before_any_tool_call_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cut = _stopped_tool_turn("max_output_tokens", text="Let me")
+    backend, _waits = _live(FakeResponsesClient(cut), monkeypatch)
+
+    with pytest.raises(AnswerCutOff):
+        backend.chat_turn(_QUESTION, [], force_emit=False, max_output_tokens=123)
+
+
+def test_a_tool_turn_stopped_by_the_content_filter_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stopped = _stopped_tool_turn("content_filter", ("search_chunks", '{"query": "q'))
+    backend, _waits = _live(FakeResponsesClient(stopped), monkeypatch)
+
+    with pytest.raises(ModelRefusal):
+        backend.chat_turn(_QUESTION, [], force_emit=False, max_output_tokens=123)
+
+
+def test_a_reply_refused_before_any_text_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend, _waits = _live(_replying(refusal_stream_events()), monkeypatch)
+
+    with pytest.raises(ModelRefusal):
+        backend.chat_turn(_QUESTION, [], force_emit=True, max_output_tokens=123)
+
+
+def test_a_reply_refused_after_its_first_piece_keeps_that_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = [*text_stream_events(["Hello "])[:-1], *refusal_stream_events()[1:]]
+    backend, _waits = _live(_replying(events), monkeypatch)
+    deltas: list[str] = []
+
+    result, _usage = backend.chat_turn(
+        _QUESTION, [], force_emit=True, max_output_tokens=123, on_delta=deltas.append
+    )
+
+    assert deltas == ["Hello "]
+    assert result["answer"] is not None
+    assert result["answer"].prose == "Hello "

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted — 2026-11-20 (owner, task 063 plan gate).
 - **Date:** 2026-11-20
-- **Task:** [063-responses-api](../tasks/063-responses-api/contract.md) (contract revision 5.1
+- **Task:** [063-responses-api](../tasks/063-responses-api/contract.md) (contract revision 5.2
   and plan draft 2, both approved 2026-11-20)
 - **Builds on:** [ADR 0041](0041-bedrock-inference-route-and-model-route-file.md) (the route
   file and the `bedrock` route) ·

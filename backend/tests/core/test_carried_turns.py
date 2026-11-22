@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from openai.types.responses import Response
 
 from policy_atlas.core.openai_client import send_turn, stream_turn
 from tests.helpers import FakeResponsesClient, text_stream_events, tool_call_response
@@ -71,6 +72,7 @@ def test_an_entry_expands_to_the_carried_items_then_one_result_per_call_in_place
         {"type": "function_call_output", "call_id": "call_1", "output": "result b"},
         {"role": "user", "content": "now write"},
     ]
+    assert client.calls[0]["store"] is False
 
 
 @pytest.mark.parametrize(
@@ -125,3 +127,19 @@ def test_the_repr_of_a_carried_turn_shows_only_the_item_count() -> None:
     assert repr(carried) == "CarriedTurn(3 items)"
     assert repr(entry) == "CarriedTurn(5 items)"
     assert "let me look" not in f"{carried} {entry}"
+
+
+def test_a_reasoning_item_without_encrypted_content_is_not_carried() -> None:
+    answer = tool_call_response(("lookup", {"q": "a"}))
+    reasoning = [
+        {"type": "reasoning", "id": "rs_bare", "summary": []},
+        {"type": "reasoning", "id": "rs_sealed", "summary": [], "encrypted_content": "opaque"},
+    ]
+    client = FakeResponsesClient(
+        Response.construct(**{**dict(answer), "output": [*reasoning, *answer.output]})
+    )
+
+    turn = _tool_turn(client, messages=[{"role": "user", "content": "hi"}])
+
+    assert turn.carried is not None
+    assert [item.get("id") for item in turn.carried.items] == ["rs_sealed", "fc_0"]

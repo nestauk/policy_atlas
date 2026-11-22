@@ -665,6 +665,24 @@ def test_streamed_turn_is_not_retried_after_the_first_piece() -> None:
     assert deltas == ["Hal"]
 
 
+def test_streamed_turn_cut_off_logs_its_tokens_and_fails() -> None:
+    from structlog.testing import capture_logs
+
+    from policy_atlas.core.openai_client import AnswerCutOff
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    cut = text_stream_events(
+        ['{"reply": "Hal'], ending="incomplete", usage=response_usage(input_tokens=30)
+    )
+    backend, client = _streaming_backend([FakeStream(cut)])
+
+    with capture_logs() as logs, pytest.raises(AnswerCutOff):
+        backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=lambda _t: None)
+    assert len(client.calls) == 1
+    [logged] = [e for e in logs if e["event"] == EVIDENCE_SEARCH_TASK_AGENT.usage_event]
+    assert logged["prompt_tokens"] == 30
+
+
 def test_streamed_turn_retries_at_most_once(retry_waits: list[float]) -> None:
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 

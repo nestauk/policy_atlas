@@ -26,7 +26,9 @@ from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTAT
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    AnswerCutOff,
     JsonStringFieldDecoder,
+    ModelRefusal,
     openai_kwargs,
     resolve_openai_client,
     stream_turn,
@@ -395,12 +397,22 @@ class OpenAITaskAgentBackend:
             )
             decoder = JsonStringFieldDecoder("reply")
             pieces: list[str] = []
-            for fragment in stream:
-                pieces.append(fragment)
-                text = scrub_nul(decoder.feed(fragment))
-                if text:
-                    started.append(True)
-                    on_delta(text)
+            try:
+                for fragment in stream:
+                    pieces.append(fragment)
+                    text = scrub_nul(decoder.feed(fragment))
+                    if text:
+                        started.append(True)
+                        on_delta(text)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                # The turn fails, but its tokens are billed: log them and trace them.
+                log_usage(profile.usage_event, exc.usage)
+                if span is not None:
+                    span.update(
+                        usage_details=usage_details(exc.usage),
+                        metadata={**metadata, **usage_metadata(exc.usage)},
+                    )
+                raise
             usage = stream.usage
             log_usage(profile.usage_event, usage)
             try:

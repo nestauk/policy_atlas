@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
-from openai.types.responses import ResponseUsage
 
 log = structlog.get_logger()
 
@@ -198,17 +197,15 @@ def _token_usage_metadata(usage: TokenUsage | None) -> dict[str, int | None]:
     }
 
 
-def usage_metadata(usage: ResponseUsage | TokenUsage | None) -> dict[str, int | None]:
+def usage_metadata(usage: TokenUsage | None) -> dict[str, int | None]:
     """Token usage as log/span metadata; all-``None`` when the API omitted usage.
 
     Shared by the live chat backends so the usage shape lives in one place.
 
     Args:
-        usage: The response's usage block, provider-neutral usage, or ``None``.
+        usage: Provider-neutral usage, or ``None``.
     """
-    if isinstance(usage, TokenUsage):
-        return _token_usage_metadata(usage)
-    return _token_usage_metadata(token_usage_from_provider(usage))
+    return _token_usage_metadata(usage)
 
 
 def usage_details(usage: TokenUsage | None) -> dict[str, Any] | None:
@@ -259,12 +256,12 @@ def usage_details(usage: TokenUsage | None) -> dict[str, Any] | None:
     return details
 
 
-def log_usage(event: str, usage: ResponseUsage | TokenUsage | None) -> None:
+def log_usage(event: str, usage: TokenUsage | None) -> None:
     """Log one model call's token usage (``None``-safe).
 
     Args:
         event: The structlog event name.
-        usage: The response's usage block, or ``None``.
+        usage: Provider-neutral usage, or ``None``.
     """
     log.info(event, **usage_metadata(usage))
 

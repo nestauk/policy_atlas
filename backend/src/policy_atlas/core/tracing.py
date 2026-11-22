@@ -267,6 +267,9 @@ class RequestIdHolder:
 
         An attempt cut before any response has no id; its start time lets it be
         found in AWS's audit log (CloudTrail) by time.
+
+        Returns:
+            ``{"request_id": ...}``, or ``{"started_at": ...}`` when there is no id.
         """
         if self.request_id is not None:
             return {"request_id": self.request_id}

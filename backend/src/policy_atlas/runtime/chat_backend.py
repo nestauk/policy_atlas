@@ -32,7 +32,14 @@ class ChatTurn(TypedDict):
 
 
 def traceable_turn(turn: Mapping[str, object]) -> dict[str, object]:
-    """The turn without its ``carried`` entries: the form a trace may record."""
+    """The turn without its ``carried`` entries: the form a trace may record.
+
+    Args:
+        turn: One chat turn as a backend returned it.
+
+    Returns:
+        A copy of the turn with no ``carried`` key.
+    """
     return {key: value for key, value in turn.items() if key != "carried"}
 
 

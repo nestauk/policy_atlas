@@ -1092,6 +1092,28 @@ def test_section_emit_stream_unparseable_text_falls_back_once(
     assert section_deltas[-2:] == [(0, "", "replace"), (0, "Fallback prose.", "replace")]
 
 
+def test_section_emit_stream_cut_off_counts_its_tokens_with_the_fallbacks(
+    monkeypatch: pytest.MonkeyPatch, section_deltas: list[tuple[int, str, str]]
+) -> None:
+    pieces = [_STREAM_JSON[:20], _STREAM_JSON[20:40]]
+    events = text_stream_events(pieces, ending="incomplete", usage=_STREAM_USAGE)
+    backend = _streaming_backend(FakeResponsesClient(events))
+    fallback_turn: SectionTurn = {"tool_calls": [], "claims": None}
+    fallback_usage = TokenUsage(prompt=1, completion=2, total=3)
+    monkeypatch.setattr(
+        backend, "section_turn", lambda *_args, **_kwargs: (fallback_turn, fallback_usage)
+    )
+
+    with capture_logs() as logs:
+        turn, usage = backend.section_emit_stream(_seed(), [])
+
+    assert turn is fallback_turn
+    assert usage is not None
+    assert (usage.prompt, usage.completion, usage.total) == (121, 42, 163)
+    [logged] = [e for e in logs if e["event"] == "synthesis.section_emit_stream.usage"]
+    assert logged["total_tokens"] == 160
+
+
 def _open_calls(task_id: uuid.UUID) -> int:
     from policy_atlas.core import liveness
 

@@ -69,7 +69,9 @@ from policy_atlas.core.openai_client import (
     with_system_breakpoint,
 )
 from policy_atlas.core.usage import (
+    TokenUsage,
     UsageResult,
+    add_token_usage,
     log_usage,
     usage_details,
     usage_metadata,
@@ -153,15 +155,14 @@ FULL_REPORT_INTRO_MODEL = route().model_for("synthesise_write_intro")
 def _step_kwargs(step: str) -> dict[str, Any]:
     """Return the model, reasoning effort and request timeout for one synthesis call site.
 
-    All three come from the route file: Terra needs
-    ``"none"`` or tool-bearing and structured-parse calls return 400,
-    and the route file says so on the writer steps.
+    All three come from the route file.
 
     Args:
         step: A step name from the route file's ``[steps]`` table.
 
     Returns:
-        Kwargs suitable for ``chat.completions.create`` / ``parse``.
+        Chat-style keyword arguments, which the model-call module translates for
+        the provider's endpoint.
     """
     return openai_kwargs(
         route().model_for(step),
@@ -956,6 +957,22 @@ def _emission_turn(client: Any, *, usage_event: str, **request: Any) -> ModelTur
         raise MalformedEmissionError(str(exc)) from exc
 
 
+def _record_failed_stream(
+    usage_event: str, usage: TokenUsage | None, span: Any | None, metadata: dict[str, Any]
+) -> None:
+    """Log a stream's tokens, and put them on its generation, when it ended cut off or refused."""
+    log_usage(usage_event, usage)
+    if span is not None:
+        span.update(
+            usage_details=usage_details(usage), metadata={**metadata, **usage_metadata(usage)}
+        )
+
+
+def _failed_stream_usage(exc: BaseException) -> TokenUsage | None:
+    """The tokens billed for a stream that ended cut off or refused (``None`` for other errors)."""
+    return exc.usage if isinstance(exc, AnswerCutOff | ModelRefusal) else None
+
+
 def _first_named_tool_call(
     turn: ModelTurn, *, name: str, label: str
 ) -> tuple[ToolCall, list[str]]:
@@ -1491,12 +1508,18 @@ class OpenAISynthesisBackend:
             decoder = JsonStringFieldDecoder("prose")
             markers = StreamedClaimMarker(index, seed, transcript)
             text = ""
-            for fragment in stream:
-                text += fragment
-                decoded = decoder.feed(fragment)
-                if decoded:
-                    publish_section_delta(index, decoded)
-                markers.feed(fragment, decoded)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    decoded = decoder.feed(fragment)
+                    if decoded:
+                        publish_section_delta(index, decoded)
+                    markers.feed(fragment, decoded)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream(
+                    "synthesis.section_emit_stream.usage", exc.usage, span, metadata
+                )
+                raise
             log_usage("synthesis.section_emit_stream.usage", stream.usage)
             section, malformed = _salvage_section(_strip_code_fence(text))
             turn: SectionTurn = {"tool_calls": [], "claims": section}
@@ -1541,7 +1564,7 @@ class OpenAISynthesisBackend:
                 section = result[0]["claims"]
                 if section is not None and section.prose:
                     publish_section_delta(index, section.prose, mode="replace")
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
     def _repair_once(
         self,
@@ -1766,12 +1789,16 @@ class OpenAISynthesisBackend:
                 index, seed, [], sources=sources if sources is not None else ({}, {})
             )
             text = ""
-            for fragment in stream:
-                text += fragment
-                decoded = decoder.feed(fragment)
-                if decoded:
-                    publish_section_delta(index, decoded)
-                markers.feed(fragment, decoded)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    decoded = decoder.feed(fragment)
+                    if decoded:
+                        publish_section_delta(index, decoded)
+                    markers.feed(fragment, decoded)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream("synthesis.key_findings.usage", exc.usage, span, metadata)
+                raise
             log_usage("synthesis.key_findings.usage", stream.usage)
             section, _malformed = _salvage_section(_strip_code_fence(text))
             usage = stream.usage
@@ -1809,7 +1836,7 @@ class OpenAISynthesisBackend:
                 result = self.write_key_findings(seed)
                 if result[0].prose:
                     publish_section_delta(index, result[0].prose, mode="replace")
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
     def _write_case_studies_once(
         self,
@@ -1912,9 +1939,13 @@ class OpenAISynthesisBackend:
             )
             cards = StreamedCardPublisher(index)
             text = ""
-            for fragment in stream:
-                text += fragment
-                cards.feed(fragment)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    cards.feed(fragment)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream("synthesis.case_studies.usage", exc.usage, span, metadata)
+                raise
             log_usage("synthesis.case_studies.usage", stream.usage)
             wire = CaseStudyWire.model_validate_json(_strip_code_fence(text))
             usage = stream.usage
@@ -1953,7 +1984,7 @@ class OpenAISynthesisBackend:
                 for card in result[0].cards:
                     if card.title.strip() and card.prose.strip():
                         publish_section_card(index, card.title, card.prose)
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
     def write_source_note(
         self, seed: dict[str, Any]
@@ -2127,11 +2158,17 @@ class OpenAISynthesisBackend:
             )
             decoder = JsonStringFieldDecoder("intro")
             text = ""
-            for fragment in stream:
-                text += fragment
-                decoded = decoder.feed(fragment)
-                if decoded:
-                    publish_section_delta(index, decoded)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    decoded = decoder.feed(fragment)
+                    if decoded:
+                        publish_section_delta(index, decoded)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream(
+                    "synthesis.full_report_intro.usage", exc.usage, span, metadata
+                )
+                raise
             log_usage("synthesis.full_report_intro.usage", stream.usage)
             wire = IntroWire.model_validate_json(_strip_code_fence(text))
             usage = stream.usage
@@ -2169,7 +2206,7 @@ class OpenAISynthesisBackend:
                 result = self.write_full_report_intro(seed)
                 if result[0].intro:
                     publish_section_delta(index, result[0].intro, mode="replace")
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
 
 class StubSynthesisBackend:
