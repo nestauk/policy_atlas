@@ -31,12 +31,17 @@ from tests.unit.test_synth import (
 )
 
 STAGING_CSP = (
-    "default-src 'self'; script-src 'self' https://*.captcha-sdk.awswaf.com; "
-    "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
+    "default-src 'self'; "
+    "script-src 'self' https://*.eu-west-2.captcha-sdk.awswaf.com "
+    "https://*.eu-west-2.captcha.awswaf.com https://*.eu-west-2.token.awswaf.com; "
+    "style-src 'self' 'unsafe-inline' https://static.captcha.awswaf.com; "
+    "img-src 'self' data: blob:; font-src 'self' https://static.captcha.awswaf.com; "
+    "media-src 'self' data:; "
     "connect-src 'self' https://api.v3.policyatlas.uk "
     "https://cognito-idp.eu-west-2.amazonaws.com "
     "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com https://auth.v3.policyatlas.uk "
-    "https://*.awswaf.com; "
+    "https://*.eu-west-2.captcha-sdk.awswaf.com https://*.eu-west-2.captcha.awswaf.com "
+    "https://*.eu-west-2.token.awswaf.com; "
     "frame-src 'self' https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com "
     "https://auth.v3.policyatlas.uk; "
     "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'"
@@ -133,8 +138,14 @@ def test_s1_to_s4_report_only_properties_match_each_environment_config():
             "Header": "Permissions-Policy", "Value": PERMISSIONS_POLICY, "Override": True,
         }
         assert "ContentSecurityPolicy" not in security
-        assert ("https://*.awswaf.com" in csp) is waf_captcha
-        assert ("https://*.captcha-sdk.awswaf.com" in csp.split("; ")[1]) is waf_captcha
+        directives = dict(d.split(" ", 1) for d in csp.split("; "))
+        for host in ("captcha-sdk", "captcha", "token"):
+            source = f"https://*.eu-west-2.{host}.awswaf.com"
+            for name in ("script-src", "connect-src"):
+                assert (source in directives[name]) is waf_captcha
+        for name in ("style-src", "font-src"):
+            assert ("https://static.captcha.awswaf.com" in directives[name]) is waf_captcha
+        assert (directives.get("media-src") == "'self' data:") is waf_captcha
 
 
 def test_s3_enforce_uses_the_built_in_csp_header_only():
@@ -202,7 +213,16 @@ def test_s2_function_adds_waf_source_only_when_captcha_is_enabled():
         "cognito_region": "eu-west-2",
         "cognito_hosted_domains": ["https://sign-in.example.test"],
     }
-    assert "https://*.awswaf.com" in content_security_policy(**common, waf_captcha=True)
+    directives = dict(
+        d.split(" ", 1)
+        for d in content_security_policy(**common, waf_captcha=True).split("; ")
+    )
+    for host in ("captcha-sdk", "captcha", "token"):
+        for name in ("script-src", "connect-src"):
+            assert f"https://*.eu-west-2.{host}.awswaf.com" in directives[name]
+    for name in ("style-src", "font-src"):
+        assert "https://static.captcha.awswaf.com" in directives[name]
+    assert directives["media-src"] == "'self' data:"
     assert "awswaf.com" not in content_security_policy(**common, waf_captcha=False)
 
 

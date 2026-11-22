@@ -355,9 +355,10 @@ synth-time context query and must not run before the VPC exists.
      takes **no password**: Cognito emails the invitation. The former
      `make staging-user` / `make prod-user` / `make cognito-user` targets are
      **deleted** — they suppressed the invitation, set a password from argv, and
-     left the account unenrolled. For prod, use `--env prod`, the
-     `PA_OPS_*_PROD` variables and prod-account credentials, not
-     `AWS_PROFILE=pa-dev`.
+     left the account unenrolled. For prod, use `ENV=prod` and
+     `PA_OPS_ACCOUNT_PROD` with the make wrappers (`--env prod` and the
+     `PA_OPS_*_PROD` variables with the direct form) and prod-account
+     credentials, not `AWS_PROFILE=pa-dev`.
 
      **When the invitation email does not arrive**, add `INVITE=manual` (CLI:
      `--invite manual`): the email is
@@ -378,9 +379,10 @@ synth-time context query and must not run before the VPC exists.
      the same action as "Deactivate…" on People.
 
      ```bash
-     uv run python -m policy_atlas.ops --env staging user deactivate --email <user-email>
-     # or: ... user deactivate --sub <cognito-subject>
-     # to undo: ... user reactivate --email <user-email>
+     export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+     make user-deactivate ENV=staging EMAIL=<user-email>
+     # or: make user-deactivate ENV=staging SUB=<cognito-subject>
+     # to undo: make user-reactivate ENV=staging EMAIL=<user-email>
      ```
 
      Deactivate runs these steps in this order and prints each one: (1) in Cognito,
@@ -503,7 +505,8 @@ database role.
 3. Grant the first ops role from your machine:
 
    ```bash
-   uv run python -m policy_atlas.ops --env staging ops grant --email <email>
+   export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+   make ops-grant ENV=staging EMAIL=<email>
    ```
 
    Only the CLI can grant `is_ops`; no web page can.
@@ -518,8 +521,9 @@ database role.
 Nesta organisation exists and has its domain:
 
 ```bash
-uv run python -m policy_atlas.ops --env staging org create --name Nesta
-uv run python -m policy_atlas.ops --env staging org domain add --domain nesta.org.uk --org Nesta
+export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+make org-create ENV=staging NAME=Nesta
+make org-domain-add ENV=staging DOMAIN=nesta.org.uk ORG=Nesta
 ```
 
 Then set `enabled` to true and deploy. On production, do this only after the
@@ -1030,11 +1034,12 @@ app's own host.
 | Directive | Sources | Where each source comes from |
 | --- | --- | --- |
 | `default-src` | `'self'` | Anything not listed below. |
-| `script-src` | `'self'`, plus `https://*.captcha-sdk.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script, which loads from `<id>.<region>.captcha-sdk.awswaf.com` (`backend.waf.captcha`). Never `'unsafe-inline'` or `'unsafe-eval'`. |
-| `style-src` | `'self' 'unsafe-inline'` | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. |
+| `script-src` | `'self'`, plus `https://*.<aws_region>.captcha-sdk.awswaf.com https://*.<aws_region>.captcha.awswaf.com https://*.<aws_region>.token.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script `jsapi.js` (`backend.waf.captcha`). The page asks for it at the integration URL `<id>.<region>.captcha-sdk.awswaf.com`, which redirects (307) to `<id>.<id>.<region>.captcha.awswaf.com`; a CSP checks both. `jsapi.js` loads `challenge.js` from `<id>.<id>.<region>.token.awswaf.com`. Never `'unsafe-inline'` or `'unsafe-eval'`. |
+| `style-src` | `'self' 'unsafe-inline'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. The CAPTCHA's font stylesheet. |
 | `img-src` | `'self' data: blob:` | Upload previews (`blob:`) and theory-of-change image exports (`data:`). |
-| `font-src` | `'self'` | The self-hosted fonts under `/fonts/`. |
-| `connect-src` | `'self'`, `https://<backend_subdomain>.<domain_name>`, `https://cognito-idp.<aws_region>.amazonaws.com`, `https://<cognito_domain_prefix>.auth.<aws_region>.amazoncognito.com`, plus `https://*.awswaf.com` when the CAPTCHA is on | The API (including the progress stream); the Cognito sign-in settings; the Cognito token exchange and refresh; the CAPTCHA's own calls. |
+| `font-src` | `'self'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The self-hosted fonts under `/fonts/`; the font files that the CAPTCHA stylesheet names. |
+| `media-src` | `'self' data:`, only when the CAPTCHA is on | The audio puzzle plays its clip from a `data:` address. Without the CAPTCHA, `default-src` covers media. |
+| `connect-src` | `'self'`, `https://<backend_subdomain>.<domain_name>`, `https://cognito-idp.<aws_region>.amazonaws.com`, `https://<cognito_domain_prefix>.auth.<aws_region>.amazoncognito.com`, plus the same three regional CAPTCHA hosts as `script-src` when the CAPTCHA is on | The API (including the progress stream); the Cognito sign-in settings; the Cognito token exchange and refresh; the CAPTCHA's own calls (`problem` and `verify` on the captcha host; `inputs`, `mp_verify`, `telemetry` and `voucher` on the token host; `captcha-sdk` in case the script fetches from its own address). |
 | `frame-src` | `'self'`, the Cognito hosted domain | The sign-in library's hidden-frame fallback: the frame opens the Cognito domain, which sends it back to our own address. |
 | `frame-ancestors` | `'self'` | Who may show our page in a frame (same as `X-Frame-Options`). |
 | `form-action` | `'self'` | Where a form may post. |
@@ -1059,8 +1064,11 @@ synth`, which the deploy runs before it changes anything in AWS.
 **The manual pass.** There is no report collector, so the browser console is
 the only place a violation shows. Run the pass after the first deploy in
 report-only mode, again after the switch to enforce, and again whenever a
-change adds a third-party library, script or host. In Chrome, open the
-developer console, turn on "Preserve log", and sign in.
+change adds a third-party library, script or host. In Chrome, open an
+Incognito window (browser extensions add their own `font-src` lines in a
+normal profile), open the developer console, turn on "Preserve log", and
+sign in. To keep the whole log, right-click in the console and select
+"Save as…".
 
 1. **First, the proof.** In the console, run `fetch("https://example.com")`.
    In report-only mode it must print a "[Report Only]" line naming

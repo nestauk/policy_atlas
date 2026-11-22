@@ -62,7 +62,7 @@ After you pull a change:
 - Local: `make dev` starts a local sign-in issuer (`backend/.dev-issuer`, gitignored), creates a
   token for `dev-user` and gives it to the web app. A token lives 4 hours.
 - Cloud (staging and production): accounts live in Amazon Cognito (the cloud sign-in service).
-  Manage them with the `make user-*`, `org-create`, `rows-assign` and `admin-*` targets. The root
+  Manage them with the `make user-*`, `org-*`, `rows-assign`, `admin-*` and `ops-*` targets. The root
   `Makefile` comments explain the arguments.
 
 ## Local env vars

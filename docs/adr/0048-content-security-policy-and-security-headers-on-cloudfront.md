@@ -104,3 +104,23 @@ Two changes from decision 2, made in the review stack (owner ruling, 2026-11-19)
   because the hosts the CAPTCHA script calls are known only after the staging pass.
 
 The staging CSP is 476 characters and production's 429.
+
+## Amendment (2026-11-20, task 064e)
+
+The staging report-only console pass and the browser's network list showed the full set of
+CAPTCHA addresses. The page asks for `jsapi.js` at the WAF `ApplicationIntegrationURL`,
+`<id>.<region>.captcha-sdk.awswaf.com`, which redirects (307) to
+`<id>.<id>.<region>.captcha.awswaf.com`; a CSP checks both addresses. `jsapi.js` loads
+`challenge.js` from `<id>.<id>.<region>.token.awswaf.com` and a font stylesheet with its fonts
+from `static.captcha.awswaf.com`, and the audio puzzle plays a `data:` clip. Its calls go only
+to the captcha and token hosts. When the CAPTCHA is on, the policy now has:
+
+- `script-src https://*.<region>.captcha-sdk.awswaf.com https://*.<region>.captcha.awswaf.com
+  https://*.<region>.token.awswaf.com`, pinned to the stack's region;
+- `https://static.captcha.awswaf.com` in `style-src` and `font-src`;
+- `media-src 'self' data:`;
+- `connect-src` narrowed from `https://*.awswaf.com` to the same three regional hosts as
+  `script-src`.
+
+The staging CSP is now 814 characters. Production's CSP does not change (the CAPTCHA is off
+there). The decision itself stands.

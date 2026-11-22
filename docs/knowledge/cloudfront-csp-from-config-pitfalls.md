@@ -1,7 +1,7 @@
 ---
 type: Integration quirk
 title: A CloudFront CSP built from config — redirects, tokens, override flags and the CAPTCHA host
-description: Four traps found building the CloudFront security headers policy (064c) — frame-src is checked again on every redirect, so a sign-in frame that returns to our own address needs 'self'; the CSP needs plain strings, not CDK tokens; the managed SECURITY_HEADERS override flags are not uniform; the WAF CAPTCHA script host is <id>.<region>.captcha-sdk.awswaf.com.
+description: Four traps found building the CloudFront security headers policy (064c) — frame-src is checked again on every redirect, so a sign-in frame that returns to our own address needs 'self'; the CSP needs plain strings, not CDK tokens; the managed SECURITY_HEADERS override flags are not uniform; the WAF CAPTCHA script URL redirects from captcha-sdk to captcha.awswaf.com, so script-src needs both, plus token and static hosts and data-URI media.
 tags: [infra, cloudfront, csp, security-headers, cdk, cognito, waf]
 generated:
   by: process:okf-migrate
@@ -38,11 +38,18 @@ ADR 0048). Four things that were not obvious:
    `Referrer-Policy` and `X-XSS-Protection` do not. A replacement that sets every flag the
    same way silently changes behaviour. Read the managed policy with
    `aws cloudfront get-response-headers-policy` and pin the exact flags in a test.
-4. **The WAF CAPTCHA script host is `<id>.<region>.captcha-sdk.awswaf.com`.** AWS does not
-   document the shape (the docs say only "integration URL"); it was read from
-   `aws wafv2 list-api-keys` (`ApplicationIntegrationURL`) in staging on 2026-11-19. A CSP
-   `*.` wildcard matches any number of leading labels, so `https://*.captcha-sdk.awswaf.com`
-   covers it. The hosts the script then calls are not known yet.
+4. **The WAF CAPTCHA script address redirects, and only a browser shows the rest.** The
+   `ApplicationIntegrationURL` that `scripts/deploy.sh` reads is
+   `<id>.<region>.captcha-sdk.awswaf.com`, but it answers `jsapi.js` with a 307 redirect to
+   `<id>.<id>.<region>.captcha.awswaf.com`. A CSP checks every address in a redirect, so
+   `script-src` needs both hosts. The console showed only the second one, because the first
+   was already allowed; `curl -sI` on the integration URL shows the redirect. `jsapi.js` then
+   loads `challenge.js` from `<id>.<id>.<region>.token.awswaf.com`, a font stylesheet with its
+   fonts from `static.captcha.awswaf.com`, and the audio puzzle plays a `data:` clip
+   (`media-src`). Its calls go to the captcha and token hosts only (the browser's Network tab,
+   filtered on `awswaf`, lists them). Found on staging on 2026-11-20. A CSP `*.` wildcard
+   matches any number of leading labels. Run the console pass in an Incognito window, because
+   browser extensions add their own `font-src` lines.
 
 # Why
 

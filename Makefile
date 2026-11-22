@@ -48,6 +48,8 @@ setup:
 #     confirmation still reaches a human.
 # Usage: make user-create ENV=staging EMAIL=a@b.org NAME="A Name" [ORG="Org"]
 # Omit ORG to create the account in no organisation.
+#        make org-domain-add ENV=staging DOMAIN=b.org ORG="Org"
+#        make user-deactivate ENV=staging EMAIL=a@b.org   (or SUB=<cognito sub>, not both)
 # Optional on every target: OPERATOR="ticket-123" (an annotation; the STS ARN
 # is logged regardless).
 # The wrappers forward through scripts/ops_run.sh to the real CLI
@@ -57,10 +59,14 @@ setup:
 ops-require = $(foreach v,$(1),$(if $($(v)),,$(error $(v)=... is required for this target)))
 OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 
-.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke
+.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke ops-grant ops-revoke org-domain-add org-domain-remove user-deactivate user-reactivate
 
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
+org-domain-add:
+	@$(call ops-require,ENV DOMAIN ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org domain add --domain "$(DOMAIN)" --org "$(ORG)"
+org-domain-remove:
+	@$(call ops-require,ENV DOMAIN) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org domain remove --domain "$(DOMAIN)"
 user-create:
 	@$(call ops-require,ENV EMAIL NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" $(if $(ORG),--org "$(ORG)") $(if $(INVITE),--invite "$(INVITE)")
 user-enrol:
@@ -71,12 +77,20 @@ user-reissue:
 	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reissue --email "$(EMAIL)"
 user-de-enrol:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user de-enrol $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+user-deactivate:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user deactivate $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+user-reactivate:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reactivate $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 rows-assign:
 	@$(call ops-require,ENV ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) rows assign $(if $(TASK),--task "$(TASK)") $(if $(PROJECT),--project "$(PROJECT)") --org "$(ORG)"
 admin-grant:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 admin-revoke:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin revoke $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+ops-grant:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) ops grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+ops-revoke:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) ops revoke $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 
 # Run the whole app locally: API on :8000 + Vite on :5173, one Ctrl-C stops
 # both. Self-contained auth: initialises the dev issuer on first run
