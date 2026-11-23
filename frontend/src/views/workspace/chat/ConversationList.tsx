@@ -177,7 +177,7 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
           onBlur={() => {
             if (!cancelled.current) void onCommit(row.id);
           }}
-          className="w-full border border-line bg-paper px-2 py-1 text-meta text-navy focus:border-blue focus:outline-none"
+          className="w-full border border-line bg-paper px-2 py-1 text-meta text-navy"
         />
       </div>
     );

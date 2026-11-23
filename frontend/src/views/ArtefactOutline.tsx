@@ -842,7 +842,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
               sources' tables it introduces. */}
           <p className="max-w-prose-measure text-body text-grey">
             The rest of this section covers only the cited sources;{" "}
-            <Link to={`/tasks/${taskId}/sources/landscape`} className={LINK_CLASS}>
+            <Link to={`/tasks/${taskId}/sources/landscape`} className={cn(LINK_CLASS, "underline")}>
               the Landscape tab
             </Link>{" "}
             shows the whole search.

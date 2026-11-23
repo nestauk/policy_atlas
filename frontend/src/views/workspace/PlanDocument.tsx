@@ -1377,6 +1377,8 @@ export function PlanDocument({
       data-state={closing ? "closed" : "open"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
+        // The house ring is Electric Blue, 1.7:1 on Navy: controls here ring in white.
+        "[&_:focus-visible]:outline-white",
         // It arrives: docked, from the edge it docks to; centred,
         // rising in place. It leaves the way it came, faster, as a sheet
         // does. A cut under reduced motion.

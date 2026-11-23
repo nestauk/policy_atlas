@@ -572,7 +572,7 @@ export function Dialog({
           }}
           className={cn(
             "anim-centre-in fixed left-1/2 top-[12vh] z-50 flex max-h-[76vh] w-[min(34rem,calc(100vw-32px))] -translate-x-1/2 flex-col",
-            "border border-line-2 bg-paper shadow-overlay focus-visible:outline-none",
+            "border border-line-2 bg-paper shadow-overlay focus-visible:outline-hidden",
           )}
         >
           <DialogPrimitive.Title className="px-6 pt-5 font-sans text-lead font-bold text-navy">

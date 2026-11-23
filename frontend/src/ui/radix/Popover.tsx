@@ -26,7 +26,7 @@ export function PopoverContent({
         className={cn(
           "z-50 w-96 max-w-[92vw] border border-line-2 bg-paper p-4",
           "text-meta text-ink shadow-overlay",
-          "focus-visible:outline-none",
+          "focus-visible:outline-hidden",
           // Scales in from its trigger (never from nothing): 150ms, strong ease-out.
           "origin-[var(--radix-popover-content-transform-origin)] transition-[opacity,transform] duration-150 ease-out-strong starting:scale-[0.97] starting:opacity-0",
           className,

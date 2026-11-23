@@ -3867,7 +3867,7 @@ function ArtefactReport() {
             <h1
               ref={baseline && !swap.swapped ? baselineTitle : undefined}
               tabIndex={baseline ? -1 : undefined}
-              className={cn(REPORT_TITLE_CLASS, baseline && "outline-none")}
+              className={cn(REPORT_TITLE_CLASS, baseline && "outline-hidden")}
             >
               {scrub(baseline ? data.title : (question ?? data.title))}
             </h1>

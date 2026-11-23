@@ -153,7 +153,7 @@ export function CohortsView() {
                         <ul className="flex flex-col gap-0.5">
                           {cohort.links.map((link) => (
                             <li key={link} className="truncate">
-                              <a href={link} target="_blank" rel="noreferrer noopener" className="text-blue hover:underline" title={link}>
+                              <a href={link} target="_blank" rel="noreferrer noopener" className="text-blue underline underline-offset-[3px]" title={link}>
                                 {linkWords(link)}
                               </a>
                             </li>

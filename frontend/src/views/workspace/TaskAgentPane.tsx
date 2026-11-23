@@ -442,7 +442,7 @@ function TaskAgentBubble({
                 <li key={source.n}>
                   <span className="mr-1 text-grey">[{source.n}]</span>
                   {source.url ? (
-                    <a href={source.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                    <a href={source.url} target="_blank" rel="noreferrer" className="text-blue underline underline-offset-[3px]">
                       {scrub(source.title)}
                     </a>
                   ) : (

@@ -273,7 +273,7 @@ Nesta's core palette at tool density: one hero, a structural navy, warm-neutral 
 
 ### Neutral
 - **Ink** (#1c1c1e): body text.
-- **Grey** (#646363): secondary text, pane headings, meta and caption copy, disabled ghost labels. AAA on white.
+- **Grey** (#646363): secondary text, pane headings, meta and caption copy, disabled ghost labels. 5.99:1 on white (AA).
 - **Line** (#e4e4e7): dividers, nav and footer borders, tab rails, table frames.
 - **Line 2** (#d3d3d8): card and control borders, disabled fills, locked lifecycle tabs, placeholder bars.
 - **Ground** (#f4f4f5): the app background and the task-level nav bar.
@@ -437,7 +437,7 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 
 ### Inputs / Fields
 - **Style:** Paper fill, 1px Line 2 border, 12px by 10px padding, Lead size, square. The composer textarea grows with content (`field-sizing: content`) between 56px and 240px.
-- **Focus:** 2px Electric Blue outline. Splash fields instead turn their border blue.
+- **Focus:** 2px Electric Blue outline.
 - **Error / Disabled:** error border Red with a red Body-size message beneath; disabled is Ground fill with Grey text.
 - **Bare variant:** the New Task question field has no border or fill. It is Lead text on the paper card, its box holding the question alone.
 - **Dropdown:** the one select in the app, styled, never the browser default (owner ruling); no native `<select>` outside the Sources filter bar's own listboxes. The trigger is the field with the chevron, a Navy border while open, at 40px with Body words or 32px with Meta words in a card or panel. The list is the popover, 40px Meta rows, Blue Wash on hover and on the chosen one. A select-only combobox: Enter, Space or an arrow opens it; arrows, Home, End and a first letter move; Enter picks; Escape or a press outside closes and returns focus. On a phone it opens as the popover does, never the platform's picker.

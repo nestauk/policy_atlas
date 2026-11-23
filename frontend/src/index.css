@@ -1,6 +1,23 @@
 @import "tailwindcss";
 
 /*
+ * Keyboard focus gets what the mouse gets: every `hover:` utility also
+ * applies on `:focus-visible`, so a control's hover fill, colour or underline
+ * shows for a keyboard user too, beside the house focus ring. Hover itself
+ * keeps Tailwind's guard (devices that can hover only).
+ */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+  }
+  &:focus-visible {
+    @slot;
+  }
+}
+
+/*
  * Nesta brand layer (task 025 G.1) — distilled from
  * docs/specs/sources/evidence-base-ux/nesta-brand-tokens.md + hifi.css.
  * Electric blue is the hero colour; 0px radius everywhere; the 45° cut
@@ -96,7 +113,7 @@
   --color-green-pressed: #147a6c; /* the start button's hover */
   --color-navy: #0f294a; /* structural text */
   --color-navy-muted: #c8d6e6; /* body on navy (splash) */
-  --color-grey: #646363; /* secondary text (AAA on white) */
+  --color-grey: #646363; /* secondary text (5.99:1 on white: AA, not AAA) */
   --color-ink: #1c1c1e;
   --color-line: #e4e4e7;
   --color-line-2: #d3d3d8;

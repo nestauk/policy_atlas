@@ -230,7 +230,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
       {/* One header with the longlist's: "Shortlist" as the
           title, the plan's question under it in Lead Grey, no label over it. */}
       <header>
-        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none")}>
+        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-hidden")}>
           Shortlist
         </h1>
         {question !== "Longlist" && (

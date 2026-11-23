@@ -669,7 +669,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       {/* The first screen is the title, the question, one count line and the
           options. */}
       <header className="mb-4">
-        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none")}>
+        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-hidden")}>
           Longlist
         </h1>
         {question !== "Longlist" && (

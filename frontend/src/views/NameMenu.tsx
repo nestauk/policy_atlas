@@ -255,7 +255,7 @@ export function NameActionsMenu({
           </div>
         ) : confirming ? (
           <div role="group" aria-labelledby={confirmId} className="p-4">
-            <p id={confirmId} ref={sentence} tabIndex={-1} className="text-body text-ink focus-visible:outline-none">
+            <p id={confirmId} ref={sentence} tabIndex={-1} className="text-body text-ink focus-visible:outline-hidden">
               {archiveSentence}
             </p>
             {failed && (

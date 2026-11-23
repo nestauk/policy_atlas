@@ -569,7 +569,7 @@ export function OptionCard() {
             <OptionActionButton actions={actions} optionId={optionId} excluded={excluded} />
           </div>
         </div>
-        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none", excluded && "text-grey")}>
+        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-hidden", excluded && "text-grey")}>
           {scrub(item.name)}
         </h1>
         {/* What it is: the description at Body, then one
