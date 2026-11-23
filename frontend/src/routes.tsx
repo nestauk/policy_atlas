@@ -38,7 +38,7 @@ function LandscapeFallback() {
 }
 
 /** The Sources sub-tree, shared verbatim by the authenticated app and the
- *  public task view (task 037) — same paths, same components. */
+ *  public task view — same paths, same components. */
 const sourcesChildren = [
   { index: true, element: <SourcesIndex /> },
   {
@@ -54,7 +54,7 @@ const sourcesChildren = [
 ];
 
 /** Logged-out marketing + legal routes (no AppShell), plus the public task
- *  view (task 037): the same `/tasks/…` URLs render Result and Sources
+ *  view: the same `/tasks/…` URLs render Result and Sources
  *  for a public Task; anything else under the task redirects to Result,
  *  and a non-public Task falls through to stash-and-splash inside
  *  `PublicTaskShell`. */
@@ -69,9 +69,9 @@ export const publicRouter = createBrowserRouter([
       { index: true, element: <RedirectToPath suffix="/result" /> },
       { path: "result", element: <ArtefactView /> },
       { path: "sources", element: <SourcesLayout />, children: sourcesChildren },
-      // A longlist option's card, read-only on the public link (round 12).
+      // A longlist option's card, read-only on the public link.
       { path: "options/:optionId", element: <OptionCard /> },
-      // `preserveOriginal` (task 037 review fix): this can fire on a
+      // `preserveOriginal`: this can fire on a
       // read that was public when it resolved but is unshared before a
       // stashed refetch settles — carry the original deep link so
       // `StashAndSplashRedirect` never stashes the rewritten `/result`
@@ -101,7 +101,7 @@ export const authenticatedRouter = createBrowserRouter([
             path: "/tasks/:taskId",
             element: (
               // Agent is open at every run state; the wrapper exists for the
-              // public-leg gate (task 037) — a signed-in outsider on a
+              // public-leg gate — a signed-in outsider on a
               // public Task lands on Result, never the Agent tab.
               <LifecycleRoute tab="agent">
                 <WorkspaceView />
@@ -117,7 +117,7 @@ export const authenticatedRouter = createBrowserRouter([
             ),
           },
           {
-            // Task 045 phase 6.2: the option card, one longlist option's
+            // The option card, one longlist option's
             // full read. Result-tab gated, same as the longlist itself.
             path: "/tasks/:taskId/options/:optionId",
             element: (

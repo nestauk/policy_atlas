@@ -15,8 +15,8 @@ export interface SelectOption<V extends string = string> {
 const MOVE_KEYS = new Set(["ArrowDown", "ArrowUp", "Home", "End"]);
 
 /**
- * The app's one dropdown (round 12, owner: "make sure we use the custom
- * styling and not the browser default"): the field's skin as the trigger
+ * The app's one dropdown (custom styling, never the browser default): the
+ * field's skin as the trigger
  * (Paper, a 1 px Line 2 border, square, the 12 px chevron at the right) and
  * the popover's tokens for the list, the Sources filter bar's listbox made
  * shared. No native `<select>` and no phone picker: the list opens as a
@@ -39,7 +39,7 @@ const MOVE_KEYS = new Set(["ArrowDown", "ArrowUp", "Home", "End"]);
  *   id: The trigger's id, so a visible `<label htmlFor>` can point at it.
  *   className: Width and placement of the trigger.
  *   renderTrigger: A trigger of the caller's own in place of the field's
- *     (round 12: the Sources filter bar's outline box and applied chip). It
+ *     (the Sources filter bar's outline box and applied chip). It
  *     gets the open state and the chosen option, and must be one element
  *     that forwards its ref and props to a button (the popover's trigger
  *     merges its own onto it). Omitted, the field's trigger shows.

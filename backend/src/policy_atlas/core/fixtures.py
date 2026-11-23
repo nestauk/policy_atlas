@@ -18,7 +18,7 @@ class SourceFixture:
 # Synthetic sources seeded into every agent run's corpus.
 # syn-001: originally the walking-skeleton echo source (echo + its grounded-block
 # leg retired in 023); retained as a plain synthetic upload fixture.
-# syn-002: the on-topic appraised seed for the synthesise demo (task 013) — an
+# syn-002: the on-topic appraised seed for the synthesise demo — an
 # uploaded full-text document about the skeleton scope's intent, sentinel-
 # classified so appraise scores it; its chunks are what the chunk lane can
 # honestly cite on the fixture corpus (the acquired fixture docs classify

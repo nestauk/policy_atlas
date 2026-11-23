@@ -3,7 +3,9 @@ type: Convention
 title: A listwise model call that gets short ids will use them in its free-text output unless told the reader never sees them
 description: Task 055's shortlist call labels candidates o1…oN, kept places k1…, set-asides s1… so the model never sees or returns a real id; on the tuning set one note then read "o12 and o17 remain …". One prompt rule fixed it ("Name options by their names, never by their ids"); the staged check's 24 notes carried no id after it.
 tags: [prompting, listwise, shortlist, ids, task-055]
-timestamp: 2026-10-27
+generated:
+  by: process:okf-migrate
+  at: 2026-10-27
 ---
 
 # Rule

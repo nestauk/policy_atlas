@@ -54,7 +54,7 @@ class ContinuationState:
         capability_run_id: Identity of the parked capability walk.
         capability: The owning task's capability — which plan model read the
             payload, which chain it composed to, and which steering lattice the
-            resumed walk's boundaries use (task 044).
+            resumed walk's boundaries use.
         plan: Version-max approved plan, of ``capability``'s model.
         plan_id: Persisted plan id.
         plan_version: Persisted plan version.
@@ -142,7 +142,7 @@ def build(
         if cap_row is None:
             raise LookupError(f"capability run {capability_run_id} does not exist")
         # Latest-approved is the walk's own lineage BY CONSTRUCTION, not by
-        # accident (review finding codex-2, 2026-07-21): steering amendments
+        # accident: steering amendments
         # supersede within the walk's lineage, and the task_agent router 409s
         # any turn while a walk is running or parked — so no unrelated plan
         # can become latest-approved between park and continuation.
@@ -174,11 +174,11 @@ def build(
     cap = dict(cap_row._mapping)
     plan_data = dict(plan_row._mapping)
     # The parked walk's own capability decides which model reads its payload
-    # and which chain it composes to (C9); it is read inside the connection
+    # and which chain it composes to; it is read inside the connection
     # above rather than guessed from the walk row, because the task row is the
-    # single authority (D2).
+    # single authority.
     plan = validate_plan(capability, plan_data["payload"])
-    # The walk's own intent record picks the chain (task 045, S1): a parked
+    # The walk's own intent record picks the chain: a parked
     # longlist walk resumes on the longlist chain, not the baseline one.
     chain = compose_plan(capability, plan, purpose=purpose, context=scope_context)
     scoped_events = [
@@ -242,9 +242,9 @@ def build(
     attempted_runs = {
         registry: row["run_id"] for registry, (_, row) in latest_registry.items()
     }
-    # Read back from the park snapshot (G2 pattern), never re-derive: this set
+    # Read back from the park snapshot, never re-derive: this set
     # drives remaining_steps — what re-executes after the park. The derived
-    # fallback covers snapshots written before the field existed (adv-m4).
+    # fallback covers snapshots written before the field existed.
     snapshot_completed = snapshot.get("completed_components")
     completed_components = (
         set(snapshot_completed)

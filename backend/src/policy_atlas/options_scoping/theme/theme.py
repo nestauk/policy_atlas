@@ -1,4 +1,4 @@
-"""The ``theme`` component: the included options grouped into themes (task 046, R28).
+"""The ``theme`` component: the included options grouped into themes.
 
 ADR 0040 decision 5. The longlist walk ends ``longlist → option_profile →
 constrain → theme``: ``longlist`` makes options, ``option_profile`` writes what
@@ -70,8 +70,8 @@ log = structlog.get_logger()
 #: Engine policy for the theme clustering.
 THEME_ASSIGNMENT_BATCH_SIZE = 40
 
-#: The theme ceiling ``clamp(ceil(n / 3), 3, 12)`` over n options (lead call:
-#: about three options a theme, characterise's 3..12 theme bounds).
+#: The theme ceiling ``clamp(ceil(n / 3), 3, 12)`` over n options
+#: (about three options a theme, characterise's 3..12 theme bounds).
 THEME_CEILING_DIVISOR, THEME_CEILING_MIN, THEME_CEILING_MAX = 3, 3, 12
 
 # Fixed namespace for content-keyed theme identity — never rotate:
@@ -175,7 +175,7 @@ def _theme_policy(max_labels: int) -> ClusteringPolicy:
 
 
 def _publish_themes(labels: list[ClusterLabel]) -> None:
-    """Show the themes found while options are assigned to them (task 058, round 11)."""
+    """Show the themes found while options are assigned to them."""
     liveness.publish_themes(
         [(label.label, label.description or None) for label in labels], stage="theme"
     )

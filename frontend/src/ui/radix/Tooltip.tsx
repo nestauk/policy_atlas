@@ -69,7 +69,7 @@ export function Tooltip({
   // Controlled, so a close caused by the page scrolling itself can be
   // declined: the tooltip stays open (and follows its trigger) while content
   // grows above it, and closes on pointer leave, focus loss, Escape, a press
-  // elsewhere or the reader's own scroll (task 058, round 8).
+  // elsewhere or the reader's own scroll.
   const [open, setOpen] = useState(false);
   return (
     <TooltipPrimitive.Root

@@ -1,4 +1,4 @@
-"""Steering-history read model (task 024, decision 3).
+"""Steering-history read model.
 
 The front-end's read surface over a task's steering history: a deterministic,
 per-walk projection built from the ``capability_run`` table (the walk identities)

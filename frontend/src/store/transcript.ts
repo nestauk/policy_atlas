@@ -17,7 +17,7 @@ export interface OptimisticTaskAgentTurn {
    *  dropped mid-stream (the turn finishes on the server and the transcript
    *  is re-read until it lands); `failed` on a refusal or a failed turn. */
   status: "pending" | "failed" | "interrupted";
-  /** The reply so far: the stream's `delta` pieces joined (task 058, N9). */
+  /** The reply so far: the stream's `delta` pieces joined. */
   reply?: string;
   /** The stream's latest `progress` label ("Drafting the plan"). */
   progressLabel?: string;
@@ -203,7 +203,7 @@ export function useTaskAgentTranscript(
       } catch (error) {
         if (error instanceof TaskAgentStreamInterruptedError) {
           // The turn is durable and finishes on the server: keep what has
-          // streamed and re-read the transcript until it lands (N9).
+          // streamed and re-read the transcript until it lands.
           dispatch({ type: "interrupted", clientTurnId: input.clientTurnId });
           return null;
         }
@@ -272,7 +272,7 @@ export function useTaskAgentTranscript(
     send,
     retry,
     discard,
-    /** True while a turn's reply is streaming in (task 058, N9). */
+    /** True while a turn's reply is streaming in. */
     isSubmitting: taskAgentTurn.isPending,
   };
 }

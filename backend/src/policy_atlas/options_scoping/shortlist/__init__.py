@@ -1,1 +1,1 @@
-"""The ``shortlist`` component (task 055): about five places proposed over every card."""
+"""The ``shortlist`` component: about five places proposed over every card."""

@@ -12,7 +12,7 @@ import { scrub } from "./scrub";
  * `active`: a check-in is waiting (contract strand 14, "pending check-in
  * visibility outside the workspace"). `ready`: the run finished and the user
  * has not looked yet; it carries the words ("Report ready") and wins over
- * `active` (task 058, N14).
+ * `active`.
  */
 interface TitleMarker {
   active: boolean;

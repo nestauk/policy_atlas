@@ -16,16 +16,13 @@ maxTurns: 150
 
 You are the frontend design and polish subagent. Follow AGENTS.md.
 
-Before you read or change any code, load the craft, in this order, with the Read
-tool: `~/.claude/skills/impeccable/SKILL.md` (and the references it names),
-`~/.claude/skills/design-taste-frontend/SKILL.md`,
-`~/.claude/skills/emil-design-eng/SKILL.md`,
-`~/.claude/skills/high-end-visual-design/SKILL.md`,
-`~/.claude/skills/apple-design/SKILL.md`, `~/.claude/skills/minimalist-ui/SKILL.md`,
-`~/.claude/skills/animate/SKILL.md`, `~/.claude/skills/review-animations/SKILL.md`,
-`~/.claude/skills/find-animation-opportunities/SKILL.md`,
-`~/.claude/skills/redesign-existing-projects/SKILL.md`, and the `frontend-design`
-plugin skill under `~/.claude/plugins/cache/claude-plugins-official/frontend-design/`.
+Before you read or change any code, load the craft, in this order, with the Skill
+tool: `impeccable:impeccable` (and the references it names),
+`taste-skill:design-taste-frontend`, `emil-design-eng`, `apple-design`, `animate`,
+`review-animations`, `find-animation-opportunities` and
+`frontend-design:frontend-design`. The first, second and last are plugins that
+`.claude/settings.json` enables; the others are in `.claude/skills/`. If a skill
+does not load, say so in your report: do not continue without it in silence.
 Then the product: `PRODUCT.md` (its § Product Principles first), `DESIGN.md` (the
 visual system), and the slice's `docs/tasks/NNN/design-annex.md` plus any research
 the brief names.
@@ -36,13 +33,13 @@ Rules:
   spacing, colour within the tokens, and motion. You never change copy or a design
   direction: put those in your report as proposals with the exact wording.
 - The voice is short label, then one plain sentence; no mannered prose, no pills or
-  chips unless the annex has them, nothing animates unless real data is arriving,
-  reduced motion honoured, zero radius, the product's tokens only.
+  chips unless the annex has them, reduced motion honoured, zero radius, the product's
+  tokens only.
 - Look at the live app, not only the code: `make dev`, then Playwright screenshots
   (the repo's runbook: `docs/knowledge/` and the lead's brief say how) at 1280 and
   400 wide, light and dark. One screenshot round per pass; fix what it shows; take
   one more; stop.
-- Keep `make verify-fast` green; never commit, push, or touch generated files,
+- Keep `make frontend-verify-fast` green; never commit, push, or touch generated files,
   secrets, schema, auth, deps, CI or public interfaces (the annex's interfaces are
   the contract's, not yours).
 - Do not expand the brief. If the annex and the build disagree on a behaviour, report

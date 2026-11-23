@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
 from typing import Literal
 
-#: Where full-text ingestion runs (task 057): ``in_process`` on the API's own
+#: Where full-text ingestion runs: ``in_process`` on the API's own
 #: threads (the default), or ``queued`` through the cloud queue and function.
 IngestMode = Literal["in_process", "queued"]
 
@@ -25,17 +25,36 @@ class Settings:
         app_origin: Sole browser origin allowed by CORS.
         database_url: SQLAlchemy database URL.
         run_executor_max: Maximum number of concurrent walk workers.
+        runs_per_user: Maximum number of walks one person's tasks may hold on
+            the walk executor at once; administrators are exempt
+            (``RUNS_PER_USER``).
+        task_quota_per_year: How many tasks one person may create in any
+            365 days; administrators are exempt (``TASK_QUOTA_PER_YEAR``).
         jwks_cache_ttl_seconds: Duration for which a fetched JWKS is retained.
         sse_poll_interval_seconds: Durable-tail poll cadence for SSE clients.
         sse_heartbeat_seconds: Idle interval before an SSE keep-alive comment.
         db_pool_size: SQLAlchemy engine connection pool size.
         db_max_overflow: SQLAlchemy engine pool overflow above ``db_pool_size``.
         theory_of_change_enabled: Whether new theory-of-change tasks may be
-            created (``POLICY_ATLAS_THEORY_OF_CHANGE=1``; task 054, C15).
+            created (``POLICY_ATLAS_THEORY_OF_CHANGE=1``).
             Off by default; existing ones stay readable either way.
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
             (``POLICY_ATLAS_INGEST_QUEUE_URL``); None in process.
+        service_role: Whether this process serves the public API or the isolated
+            operations service (``POLICY_ATLAS_SERVICE_ROLE``; ``api`` by default).
+        self_signup_enabled: Whether the operations service runs its waitlist
+            sweep (``POLICY_ATLAS_SELF_SIGNUP=1``; off by default).
+        self_signup_max_per_hour: Maximum accounts the waitlist sweep may create
+            each hour (``POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR``).
+        ops_ui_dir: Directory holding the operations single-page application
+            (``OPS_UI_DIR``; ``/app/ops-ui`` by default).
+        ops_csp: The Content Security Policy (the header that tells a browser
+            where a page may load content from) for the operations pages
+            (``OPS_CONTENT_SECURITY_POLICY``; the infrastructure code builds
+            it). None sends no such policy.
+        ops_csp_enforced: Whether the browser blocks what ``ops_csp`` forbids
+            (``OPS_CSP_MODE=enforce``) or only reports it in its console.
     """
 
     oidc_issuer: str
@@ -43,8 +62,10 @@ class Settings:
     oidc_jwks_url: str | None
     oidc_jwks_path: Path | None
     app_origin: str
-    database_url: str
+    database_url: str = field(repr=False)
     run_executor_max: int = 2
+    runs_per_user: int = 3
+    task_quota_per_year: int = 50
     jwks_cache_ttl_seconds: int = 300
     sse_poll_interval_seconds: float = 0.4
     sse_heartbeat_seconds: float = 15.0
@@ -53,6 +74,12 @@ class Settings:
     theory_of_change_enabled: bool = False
     ingest_mode: IngestMode = "in_process"
     ingest_queue_url: str | None = None
+    service_role: Literal["api", "ops"] = "api"
+    self_signup_enabled: bool = False
+    self_signup_max_per_hour: int = 100
+    ops_ui_dir: Path | None = Path("/app/ops-ui")
+    ops_csp: str | None = None
+    ops_csp_enforced: bool = False
 
 
 def load_settings() -> Settings:
@@ -68,8 +95,7 @@ def load_settings() -> Settings:
     # Pure os.environ by design: the DEV entry point loads backend/.env via
     # `uv run --env-file` (backend Makefile `dev` target). Loading .env here
     # would leak a developer's live keys into every test process that builds
-    # an app (live-check finding, 2026-07-21: it flipped the CLI pin test
-    # into live mode under socket-deny).
+    # an app.
     issuer = _required("OIDC_ISSUER")
     client_id = _required("OIDC_CLIENT_ID")
     app_origin = _required("APP_ORIGIN")
@@ -98,6 +124,8 @@ def load_settings() -> Settings:
         app_origin=app_origin,
         database_url=database_url,
         run_executor_max=_positive_int("RUN_EXECUTOR_MAX", default=2),
+        runs_per_user=_positive_int("RUNS_PER_USER", default=3),
+        task_quota_per_year=_positive_int("TASK_QUOTA_PER_YEAR", default=50),
         jwks_cache_ttl_seconds=_positive_int("OIDC_JWKS_CACHE_TTL_SECONDS", default=300),
         sse_poll_interval_seconds=_positive_float("SSE_POLL_INTERVAL_SECONDS", default=0.4),
         sse_heartbeat_seconds=_positive_float("SSE_HEARTBEAT_SECONDS", default=15.0),
@@ -106,7 +134,32 @@ def load_settings() -> Settings:
         theory_of_change_enabled=_optional("POLICY_ATLAS_THEORY_OF_CHANGE") == "1",
         ingest_mode=ingest_mode,
         ingest_queue_url=ingest_queue_url_from_env(ingest_mode),
+        service_role=service_role_from_env(),
+        self_signup_enabled=_optional("POLICY_ATLAS_SELF_SIGNUP") == "1",
+        self_signup_max_per_hour=_positive_int(
+            "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", default=100
+        ),
+        ops_ui_dir=Path(_optional("OPS_UI_DIR") or "/app/ops-ui"),
+        ops_csp=_optional("OPS_CONTENT_SECURITY_POLICY"),
+        ops_csp_enforced=_optional("OPS_CSP_MODE") == "enforce",
     )
+
+
+def service_role_from_env() -> Literal["api", "ops"]:
+    """Read the service role, defaulting to the public API process.
+
+    Returns:
+        ``api`` or ``ops``.
+
+    Raises:
+        RuntimeError: If the configured role is not one of the two process roles.
+    """
+    value = _optional("POLICY_ATLAS_SERVICE_ROLE")
+    if value is None or value == "api":
+        return "api"
+    if value == "ops":
+        return "ops"
+    raise RuntimeError("POLICY_ATLAS_SERVICE_ROLE must be api or ops")
 
 
 def ingest_mode_from_env() -> IngestMode:

@@ -284,7 +284,7 @@ def test_sweep_run_frames_with_screening() -> None:
 
 
 def test_run_depth_screens_at_every_depth_and_records_the_caps() -> None:
-    """Every depth is one search pass plus one screening pass (task 051): the
+    """Every depth is one search pass plus one screening pass: the
     run metadata says so and carries the two caps, not the old round constants."""
     from types import SimpleNamespace
 

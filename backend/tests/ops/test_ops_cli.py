@@ -21,12 +21,13 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import RootTransaction, select
+from sqlalchemy import RootTransaction, select, update
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import app_user, organisation
-from policy_atlas.ops.cli import EXIT_REFUSED, _prompt, build_parser, main
+from policy_atlas.core.schema import app_user, ops_action, organisation, organisation_domain
+from policy_atlas.ops.cli import EXIT_REFUSED, _prompt, _quota_value, build_parser, main
 from tests.api.org_support import make_org, ops_enrol, seeded, unique_email
+from tests.helpers import now
 from tests.ops.support import (
     ACCOUNT_ID,
     CALLER_ARN,
@@ -34,7 +35,9 @@ from tests.ops.support import (
     FakeSts,
     cognito,
     expect_environment,
+    expect_lock_out,
     expect_lookup,
+    expect_sub_lookup,
     fresh_sub,
 )
 
@@ -345,7 +348,7 @@ def test_cli_traces_the_revoke_a_de_enrolment_performs(
 ) -> None:
     """``de-enrol`` clears ``is_admin``, and used to do it with no record at all.
 
-    Offboarding is how the support role is most often taken away, so a trace
+    Deactivation is how the support role is most often taken away, so a trace
     that covered only ``admin revoke`` left the common case invisible. One
     mechanism serves both: the record carries the change, the CLI logs it after
     the commit.
@@ -369,6 +372,7 @@ def test_cli_traces_the_revoke_a_de_enrolment_performs(
     assert status == 0
     traced = _traces(capsys.readouterr().out)
     assert [(line["subject"], line["direction"]) for line in traced] == [(leaver, "revoke")]
+    assert traced[0]["flag"] == "is_admin"
     assert traced[0]["operator_arn"] == CALLER_ARN
 
 
@@ -414,3 +418,383 @@ def test_a_failed_commit_leaves_no_admin_trace(
             ).scalar_one()
             is False
         )
+
+
+# --- task 065: the ops role, quotas and domains through the entrypoint (B1, B12, C1) ---
+
+
+def _seed_person(engine: Engine, *, is_ops: bool = False) -> tuple[str, str, uuid.UUID]:
+    """One enrolled row — the leg-3 sample and the subject, as the trace cases seed."""
+    sub = fresh_sub("cognito")
+    email = unique_email("cli-065")
+    with seeded(engine) as conn:
+        org_id = make_org(conn)
+        ops_enrol(conn, user_id=sub, org_id=org_id, email=email)
+        if is_ops:
+            conn.execute(update(app_user).where(app_user.c.user_id == sub).values(is_ops=True))
+    return sub, email, org_id
+
+
+def _person(engine: Engine, sub: str) -> Any:
+    with seeded(engine) as conn:
+        return conn.execute(select(app_user).where(app_user.c.user_id == sub)).mappings().one()
+
+
+def test_cli_ops_grant_traces_the_ops_flag_after_the_commit(
+    engine: Engine, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Contract B1: the same post-commit ``ops.admin_change`` line, with ``flag=is_ops``."""
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    sub, email, _org_id = _seed_person(engine)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv("ops", "grant", "--email", email),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any("grant" in line and email in line for line in lines)
+    traced = _traces(capsys.readouterr().out)
+    assert [(t["subject"], t["direction"], t["flag"]) for t in traced] == [
+        (sub, "grant", "is_ops")
+    ]
+    assert traced[0]["operator_arn"] == CALLER_ARN
+    assert (_person(engine, sub)["is_ops"], _person(engine, sub)["is_admin"]) == (True, False)
+
+
+def test_cli_user_quota_writes_the_overrides(engine: Engine) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv(
+                "user", "quota", "--email", email, "--tasks-per-year", "100", "--runs", "inherit"
+            ),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    expected = "tasks per year inherit → 100, simultaneous tasks inherit → inherit"
+    assert any(expected in line for line in lines)
+    row = _person(engine, sub)
+    assert (row["task_quota_per_year"], row["runs_per_user"]) == (100, None)
+
+
+def test_cli_org_quota_writes_the_overrides(engine: Engine) -> None:
+    sub, _email, org_id = _seed_person(engine)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv(
+                "org", "quota", "--org", str(org_id), "--tasks-per-year", "100", "--runs", "inherit"
+            ),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any(str(org_id) in line and "inherit → 100" in line for line in lines)
+    with seeded(engine) as conn:
+        stored = conn.execute(
+            select(organisation.c.task_quota_per_year, organisation.c.runs_per_user).where(
+                organisation.c.org_id == org_id
+            )
+        ).one()
+    assert tuple(stored) == (100, None)
+
+
+def test_quota_flags_take_a_non_negative_integer_or_inherit() -> None:
+    """The parser refuses what ``set_quota`` would: no negative value reaches the command."""
+    assert (_quota_value("inherit"), _quota_value("0"), _quota_value("7")) == (None, 0, 7)
+    for bad in ("-1", "abc", "1.5"):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(
+                _argv("user", "quota", "--sub", "s", "--tasks-per-year", bad, "--runs", "1")
+            )
+
+
+def test_cli_org_domain_add_then_remove(engine: Engine) -> None:
+    sub, _email, org_id = _seed_person(engine)
+    typed = f"Cli-{uuid.uuid4()}.Example.Test"
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv("org", "domain", "add", "--domain", typed, "--org", str(org_id)),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any(f"added domain {typed.lower()}" in line for line in lines)
+    with seeded(engine) as conn:
+        assert (
+            conn.execute(
+                select(organisation_domain.c.org_id).where(
+                    organisation_domain.c.domain == typed.lower()
+                )
+            ).scalar_one()
+            == org_id
+        )
+
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv("org", "domain", "remove", "--domain", typed),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any(f"removed domain {typed.lower()}" in line for line in lines)
+    with seeded(engine) as conn:
+        assert (
+            conn.execute(
+                select(organisation_domain.c.domain).where(
+                    organisation_domain.c.domain == typed.lower()
+                )
+            ).scalar_one_or_none()
+            is None
+        )
+
+
+def test_cli_user_deactivate_says_the_ops_role_was_revoked(
+    engine: Engine, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``user deactivate`` clears ``is_ops`` as it clears ``is_admin``, and says so."""
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    sub, email, _org_id = _seed_person(engine, is_ops=True)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        expect_lock_out(stubber, sub=sub)
+        status = main(
+            _argv("user", "deactivate", "--email", email),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+        stubber.assert_no_pending_responses()
+    assert status == 0
+    assert any(
+        "deactivated" in line and "cleared the admin and ops roles" in line for line in lines
+    )
+    traced = _traces(capsys.readouterr().out)
+    assert [(t["subject"], t["direction"], t["flag"]) for t in traced] == [
+        (sub, "revoke", "is_ops")
+    ]
+    row = _person(engine, sub)
+    assert (row["org_id"] is not None, row["is_ops"]) == (True, False)  # keeps the organisation
+
+
+# --- user reset-app ---------------------------------------------------------------------
+#
+# The Stubber answers calls strictly in the order they were queued and fails any
+# call it was not given, so the queue is both the order assertion and the proof
+# that a refusal made no Cognito write.
+
+
+def _expect_reset(
+    stubber: Any, *, sub: str, fail_delete: bool = False, fail_sign_out: bool = False
+) -> None:
+    """Queue the enabled read, the global sign-out, then the app unlink.
+
+    A failing sign-out queues no unlink: the Stubber fails a call it was not given.
+    """
+    params = {"UserPoolId": POOL_ID, "Username": sub}
+    stubber.add_response("admin_get_user", {"Username": sub, "Enabled": True}, params)
+    if fail_sign_out:
+        stubber.add_client_error(
+            "admin_user_global_sign_out",
+            service_error_code="InternalErrorException",
+            expected_params=params,
+        )
+        return
+    stubber.add_response("admin_user_global_sign_out", {}, params)
+    if fail_delete:
+        stubber.add_client_error(
+            "admin_delete_software_token",
+            service_error_code="InternalErrorException",
+            expected_params=params,
+        )
+    else:
+        stubber.add_response("admin_delete_software_token", {}, params)
+
+
+def _reset_app(engine: Engine, stubber_setup: Any, *command: str, arn: str) -> int:
+    with cognito() as (client, stubber):
+        stubber_setup(stubber)
+        status = main(
+            _argv("user", "reset-app", *command),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(arn=arn),
+            write=lambda _line: None,
+        )
+        stubber.assert_no_pending_responses()
+    return status
+
+
+def _actions_by(engine: Engine, arn: str) -> list[tuple[Any, ...]]:
+    with seeded(engine) as conn:
+        rows = conn.execute(
+            select(
+                ops_action.c.actor_user_id,
+                ops_action.c.action,
+                ops_action.c.target,
+                ops_action.c.outcome,
+            ).where(ops_action.c.actor_user_id == arn)
+        ).all()
+    return [tuple(row) for row in rows]
+
+
+def _operator() -> str:
+    """A caller identity unique to one test, so its audit rows are its own."""
+    return f"arn:aws:sts::{ACCOUNT_ID}:assumed-role/Operator/{uuid.uuid4()}"
+
+
+def test_cli_user_reset_app_signs_out_then_unlinks_the_app_and_records_one_action(
+    engine: Engine,
+) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub, email=email.upper())
+        _expect_reset(stubber, sub=sub)
+
+    assert _reset_app(engine, queue, "--email", email, arn=arn) == 0
+    assert _actions_by(engine, arn) == [(arn, "person.reset_app", sub, "ok")]
+
+
+def test_cli_user_reset_app_refuses_an_unknown_address(engine: Engine) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    unknown = unique_email("nobody")
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_lookup(stubber, email=unknown, sub=None)
+
+    assert _reset_app(engine, queue, "--email", unknown, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
+
+
+@pytest.mark.parametrize("where", ["marked in the database", "disabled in Cognito"])
+def test_cli_user_reset_app_refuses_a_deactivated_account(engine: Engine, where: str) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    if where == "marked in the database":
+        with seeded(engine) as conn:
+            conn.execute(
+                update(app_user).where(app_user.c.user_id == sub).values(deactivated_at=now())
+            )
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub, email=email)
+        if where == "disabled in Cognito":
+            stubber.add_response(
+                "admin_get_user",
+                {"Username": sub, "Enabled": False},
+                {"UserPoolId": POOL_ID, "Username": sub},
+            )
+
+    assert _reset_app(engine, queue, "--email", email, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
+
+
+def test_cli_user_reset_app_failing_unlink_writes_no_action_and_a_rerun_finishes(
+    engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def failing(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        _expect_reset(stubber, sub=sub, fail_delete=True)
+
+    assert _reset_app(engine, failing, "--sub", sub, arn=arn) == EXIT_REFUSED
+    err = capsys.readouterr().err
+    assert "signed out everywhere" in err and "InternalErrorException" in err
+    assert "again is safe" in err
+    assert _actions_by(engine, arn) == []
+
+    def working(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        _expect_reset(stubber, sub=sub)
+
+    assert _reset_app(engine, working, "--sub", sub, arn=arn) == 0
+    assert _actions_by(engine, arn) == [(arn, "person.reset_app", sub, "ok")]
+
+
+def test_cli_user_reset_app_refuses_when_the_pool_holds_another_address_for_that_person(
+    engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        # Nothing after the lookup is queued, so any further Cognito call fails the test.
+        expect_sub_lookup(stubber, sub=sub, email=unique_email("moved"))
+
+    assert _reset_app(engine, queue, "--email", email, arn=arn) == EXIT_REFUSED
+    assert "no longer matches Cognito" in capsys.readouterr().err
+    assert _actions_by(engine, arn) == []
+
+
+def test_cli_user_reset_app_refuses_a_row_with_no_account_in_the_pool(engine: Engine) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        stubber.add_response(
+            "list_users",
+            {"Users": []},
+            {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
+        )
+
+    assert _reset_app(engine, queue, "--sub", sub, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
+
+
+def test_cli_user_reset_app_failing_sign_out_never_unlinks_and_writes_no_action(
+    engine: Engine,
+) -> None:
+    sub, _email, _org_id = _seed_person(engine)
+    arn = _operator()
+
+    def queue(stubber: Any) -> None:
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        _expect_reset(stubber, sub=sub, fail_sign_out=True)
+
+    assert _reset_app(engine, queue, "--sub", sub, arn=arn) == EXIT_REFUSED
+    assert _actions_by(engine, arn) == []
+
+
+def test_user_reset_app_takes_exactly_one_of_email_or_sub() -> None:
+    parser = build_parser()
+    assert parser.parse_args(_argv("user", "reset-app", "--email", "A@x.org")).email == "a@x.org"
+    assert parser.parse_args(_argv("user", "reset-app", "--sub", "s")).sub == "s"
+    for selectors in ((), ("--email", "a@x.org", "--sub", "s")):
+        with pytest.raises(SystemExit):
+            parser.parse_args(_argv("user", "reset-app", *selectors))

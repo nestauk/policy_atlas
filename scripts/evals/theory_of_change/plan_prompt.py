@@ -1,7 +1,7 @@
-"""Draft prompt and tables for the agentic per-link search (task 054 evaluation, arm C).
+"""Draft prompt and tables for the agentic per-link search (theory-of-change evaluation, arm C).
 
 Lead-authored. Lives with the offline evaluation until the evaluation decides whether it moves
-into the product (docs/tasks/054-toc-integration/agentic-search.md). Not yet pinned.
+into the product. Not yet pinned.
 """
 
 from __future__ import annotations

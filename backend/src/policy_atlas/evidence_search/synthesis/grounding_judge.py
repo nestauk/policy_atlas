@@ -25,16 +25,9 @@ from pydantic import BaseModel, ConfigDict
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
-from policy_atlas.core.openai_client import (
-    openai_kwargs,
-    require_parsed,
-    resolve_openai_client,
-    with_system_breakpoint,
-)
+from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.usage import (
     UsageResult,
-    log_usage,
-    token_usage_from_provider,
     usage_details,
     usage_metadata,
 )
@@ -333,22 +326,17 @@ class OpenAIGroundingJudgeBackend:
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[JudgeResponseWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.parse(
-            **openai_kwargs(
-                JUDGE_MODEL,
-                reasoning_effort=JUDGE_EFFORT,
-                prompt_cache=JUDGE_CACHE,
-                timeout_s=route().timeout_for("judge_grounding"),
-            ),
-            messages=with_system_breakpoint(messages) if JUDGE_CACHE == "breakpoint" else messages,
+        return parse_structured(
+            self._client,
+            messages=messages,
             response_format=JudgeResponseWire,
+            usage_event="grounding_judge.judge.usage",
+            label="grounding judge",
+            model=JUDGE_MODEL,
+            reasoning_effort=JUDGE_EFFORT,
+            prompt_cache=JUDGE_CACHE,
+            timeout_s=route().timeout_for("judge_grounding"),
         )
-        log_usage("grounding_judge.judge.usage", response.usage)
-        parsed_model: JudgeResponseWire = require_parsed(
-            response, label="grounding judge"
-        )
-        return parsed_model, token_usage_from_provider(response.usage)
 
     def judge_block(self, envelope: dict[str, Any]) -> UsageResult[JudgeResponseWire]:
         """Judge one envelope through structured OpenAI output.

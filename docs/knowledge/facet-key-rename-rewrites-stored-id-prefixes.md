@@ -3,7 +3,9 @@ type: Invariant
 title: A grouping facet key lives inside stored group ids and is cited across tables, so a facet rename is a prefix rewrite in five places with its own downgrade
 description: Group ids are `<facet>:gNN` and are cited by annotations (theme referenced_ids, pattern group_id) and synthesis blocks (group_ids) as well as by the grouping result's own keys, counts, flags and provenance and the plan's grouping_facets. Revision f1b6d3a8c2e5 (population → unit) rewrites every place set-based in SQL with exact matches, including provenance rows written before `facet_runs` existed, and its downgrade is the exact inverse; the migration test pins rows without the facet byte-identical.
 tags: [migrations, grouping, data-migration, jsonb, synthesis, annotations, task-046]
-timestamp: 2026-10-12
+generated:
+  by: process:okf-migrate
+  at: 2026-10-12
 ---
 
 # Rule

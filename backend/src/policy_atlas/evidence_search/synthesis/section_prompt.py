@@ -34,38 +34,39 @@ from policy_atlas.evidence_search.synthesis.summary_prompts import (
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
+    CarriedCall,
     ToolExchange,
     window_repair_dependency_chunks,
 )
 from policy_atlas.evidence_search.synthesis.voice_prompt import VOICE_PRINCIPLES
 
-# v5 (task 034 S6/S7): titles are short contents-ready theme names (P9);
-# the 028 strand-12 answer-shaped overview lead is dropped — front matter
+# v5: titles are short contents-ready theme names (P9);
+# the answer-shaped overview lead is dropped — front matter
 # now frames the report. ``nav_label`` may equal the title when the title
 # is already sidebar-short. The plan's ordinary-section budget clause is
 # unchanged.
 SECTIONS_PROMPT_VERSION = "synthesise_sections_v5"
-# v9 (task 034 S7): shared voice block (P1–P8, P10) plus the corpus-touring
+# v9: shared voice block (P1–P8, P10) plus the corpus-touring
 # ban. The v8 priority-findings block is unchanged — it still renders
 # CONDITIONALLY via ``seed["priority_block_active"]``; provenance still
 # records that flag. The version tracks the surface, not the block.
-# v11 (task 056 D8/D10/X3): the prompt text is unchanged; the request shape
+# v11: the prompt text is unchanged; the request shape
 # changes. The run message is a text content part carrying an explicit cache
 # breakpoint; section turns send five tools (``emit_repairs`` appended) with an
 # ``allowed_tools`` choice over the four section tools and parallel tool calls
 # on every turn; the ``lookup`` tool offers only the kinds the run can serve.
-# v12 (task 058, owner 2026-11-05): the writer calls ``write_section`` when it
+# v12: the writer calls ``write_section`` when it
 # has gathered enough and writes the section on the next turn as a streamed
 # JSON reply; ``emit_section`` is no longer offered on open turns (the forced
 # fallback still calls it by name). Six tools on every request.
 SECTION_PROMPT_VERSION = "synthesise_section_v12"
-# The repair surface's own version (task 056 D10). v1 was the unversioned repair
+# The repair surface's own version. v1 was the unversioned repair
 # that rode SECTION_PROMPT_VERSION; v2 starts with the section's own first-turn
 # request (same tools, system, run and task messages) and appends the repair
 # instruction, forcing ``emit_repairs``.
 SECTION_REPAIR_PROMPT_VERSION = "synthesise_repair_v2"
 
-# The v8 additive priority-findings block (task 024 B2′ / ADR 0023) —
+# The v8 additive priority-findings block (ADR 0023) —
 # lead-authored text, rendered into the section system prompt ONLY when the
 # run's extraction carries relevance annotations (the version bump above and
 # this block move together so the version never claims behaviour it doesn't
@@ -86,7 +87,7 @@ Priority findings:
   mark never changes what the evidence says — only the order and prominence
   with which you treat it.
 """
-# v3 (task 034 S3/S7): lead-colon bullets (P5) and gap restatements (at most
+# v3: lead-colon bullets (P5) and gap restatements (at most
 # ``KEY_FINDINGS_GAP_MAX``), still a "- " list whose spans sit inside single
 # lines. Renderer-side crossing-bullet degrade is unchanged.
 KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v3"
@@ -97,11 +98,11 @@ KEY_FINDINGS_GAP_MAX = 2
 # Focus is roomier than the 200-char directive-grammar bound: live writers
 # routinely produce two-sentence foci and the proposal bound is ours to set
 # (the directive grammar's 200 is contract-pinned and unchanged).
-# Proposal reject bound (task 034 S6 / adversarial F10). ``SECTION_TITLE_MAX``
-# stays the read-path ceiling for artefacts minted before this slice.
+# Proposal reject bound. ``SECTION_TITLE_MAX``
+# stays the read-path ceiling for artefacts minted before this bound existed.
 SECTION_TITLE_PROPOSAL_MAX = 60
 SECTION_FOCUS_MAX = 300
-# The contents-list label (task 032 G6). Short enough to scan in a sidebar,
+# The contents-list label. Short enough to scan in a sidebar,
 # and unlike the two bounds above it REJECTS rather than truncates: a label
 # the writer had to be told to keep short is a proposal defect, and silently
 # clipping one produces a mid-word stub no reader can use.
@@ -509,7 +510,7 @@ EMIT_REPAIRS_TOOL_SCHEMA: dict[str, Any] = {
     },
 }
 
-#: The writer's "I have enough" signal (task 058, owner 2026-11-05): it ends the
+#: The writer's "I have enough" signal: it ends the
 #: gathering, and the next turn writes the section as a streamed reply. The
 #: model used to write through ``emit_section`` itself, which the provider
 #: delivers in one burst at the end, so the page saw nothing until the section
@@ -541,8 +542,7 @@ LOOKUP_TOOL_KINDS: tuple[str, ...] = tuple(
     LOOKUP_TOOL_SCHEMA["function"]["parameters"]["properties"]["kind"]["enum"]
 )
 
-# Appended to the lookup description when the tool is offered for one run
-# (task 056 X3, lead words).
+# Appended to the lookup description when the tool is offered for one run.
 LOOKUP_RUN_KINDS_SENTENCE = " Only the kinds listed here exist for this run."
 
 
@@ -589,8 +589,8 @@ def lookup_tool_schema(available_kinds: Sequence[str]) -> dict[str, Any]:
     }
 
 
-#: The section-turn tools the ``allowed_tools`` choice permits (task 056 D10,
-#: task 058): the three read tools and ``write_section``; never
+#: The section-turn tools the ``allowed_tools`` choice permits:
+#: the three read tools and ``write_section``; never
 #: ``emit_section`` (the streamed write turn replaces it on open turns; the
 #: forced fallback still calls it by name) and never ``emit_repairs``.
 SECTION_TURN_TOOL_NAMES: tuple[str, ...] = (
@@ -744,13 +744,13 @@ of the original rules.
 """
 
 
-# --- The section-loop prompt (synthesise_section_v10; v3 = the 018 B-B2 voice
-# design; v4 = 018 C2 round 2 repetition/label-translation rules; v5 = 018 C2
-# round 3 multi-read-tool turns; v8 = 024 priority-findings block; v9 = 034
+# --- The section-loop prompt (synthesise_section_v10; v3 = the voice
+# design; v4 = repetition/label-translation rules; v5 =
+# multi-read-tool turns; v8 = priority-findings block; v9 =
 # shared voice + corpus-touring ban; v10 = optional one-sentence bridge from
 # the previous body section) ---
 
-# --- Template-keyed section writer (owner ruling 2026-09-09, task 044: "option 2").
+# --- Template-keyed section writer ("option 2").
 # One writer, one shared core; a short preamble per output kind. The Evidence
 # search report keeps its v10 text byte-for-byte (pinned by
 # test_section_system_prompt_report_is_byte_identical_to_v10); the baseline
@@ -951,11 +951,11 @@ SECTION_FINAL_TURN_MESSAGE = (
     "claims this section can support from what you have gathered."
 )
 
-#: The write turn (task 058, D1; owner 2026-11-05): after ``write_section``, or
+#: The write turn: after ``write_section``, or
 #: on the forced final turn, the section comes back as a streamed JSON reply in
 #: the shape of ``emit_section``'s arguments. The tools stay on the request
 #: (with no tool allowed) so the provider's cached prefix is reused; a
-#: structured-output schema would break that prefix (probe, 2026-11-05).
+#: structured-output schema would break that prefix (probe).
 SECTION_WRITE_TURN_MESSAGE = (
     "Write the section now: reply with one JSON object, the emit_section "
     "arguments (the prose, then the claims this section can support from what "
@@ -1400,13 +1400,94 @@ def build_section_prefix(seed: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+# The result a carried turn's tool call gets when the loop did not run it.
+NOT_USED_TOOL_RESULT = "Not used: this call was not run in this turn. If it is still needed, make it again."  # noqa: E501
+
+
+def tool_history_messages(
+    transcript: Sequence[ToolExchange],
+    carried: Sequence[CarriedCall | None] | None = None,
+) -> list[Any]:
+    """The tool exchanges so far, as request messages, in order.
+
+    An exchange with no carried entry is rebuilt: an assistant message holding
+    its one tool call (with a stable made-up call id) and a tool message holding
+    its result as JSON (JSON keeps control characters inert). The exchanges a
+    carried model turn produced (next to each other, the same ``turn``) are
+    instead sent as that turn itself, through
+    :meth:`~policy_atlas.core.openai_client.CarriedTurn.with_results`: each call
+    the loop ran gets the same JSON text the rebuilt tool message would carry,
+    and every call it did not run (``write_section`` or ``emit_section`` beside
+    reads, an ignored extra) gets :data:`NOT_USED_TOOL_RESULT`.
+
+    Args:
+        transcript: Executed tool exchanges, in order.
+        carried: One entry per exchange (the model turn it came from), or
+            ``None`` to rebuild every exchange.
+
+    Returns:
+        The messages, rebuilt ones as dicts and carried turns as entries the
+        model-call module expands.
+
+    Raises:
+        ValueError: If ``carried`` is not one entry per exchange.
+    """
+    links = list(carried) if carried is not None else [None] * len(transcript)
+    if len(links) != len(transcript):
+        raise ValueError("carried must hold one entry per transcript exchange")
+    messages: list[Any] = []
+    index = 0
+    while index < len(transcript):
+        link = links[index]
+        if link is None:
+            call_id = f"call_{index}"
+            exchange = transcript[index]
+            messages.append(
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": exchange["tool"],
+                                "arguments": json.dumps(
+                                    exchange["arguments"], ensure_ascii=False, sort_keys=True
+                                ),
+                            },
+                        }
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": json.dumps(exchange["result"], ensure_ascii=False, sort_keys=True),
+                }
+            )
+            index += 1
+            continue
+        results = dict.fromkeys(link.turn.call_ids, NOT_USED_TOOL_RESULT)
+        while index < len(transcript) and (
+            (other := links[index]) is not None and other.turn is link.turn
+        ):
+            results[other.call_id] = json.dumps(
+                transcript[index]["result"], ensure_ascii=False, sort_keys=True
+            )
+            index += 1
+        messages.append(link.turn.with_results(results))
+    return messages
+
+
 def build_section_messages(
     seed: dict[str, Any],
     transcript: list[ToolExchange],
     *,
     force_emit: bool,
     streamed: bool = False,
-) -> list[dict[str, Any]]:
+    carried: Sequence[CarriedCall | None] | None = None,
+) -> list[Any]:
     """Assemble the section-loop conversation for one turn.
 
     The conversation is rebuilt deterministically from the seed and the
@@ -1421,41 +1502,17 @@ def build_section_messages(
         streamed: The turn writes the section as a streamed JSON reply (task
             058): after the model's ``write_section`` call, or on the forced
             final turn. Appends the write-turn message instead.
+        carried: One entry per exchange: the model turn it came from, sent
+            back in place of the rebuilt messages (see
+            :func:`tool_history_messages`). ``None`` rebuilds every exchange.
 
     Returns:
         Chat messages ready for the completion: the prefix, then the
         transcript exchanges, then (when writing) the write-turn or final-turn
         message.
     """
-    messages = build_section_prefix(seed)
-    for index, exchange in enumerate(transcript):
-        call_id = f"call_{index}"
-        messages.append(
-            {
-                "role": "assistant",
-                "tool_calls": [
-                    {
-                        "id": call_id,
-                        "type": "function",
-                        "function": {
-                            "name": exchange["tool"],
-                            "arguments": json.dumps(
-                                exchange["arguments"], ensure_ascii=False, sort_keys=True
-                            ),
-                        },
-                    }
-                ],
-            }
-        )
-        messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": json.dumps(
-                    exchange["result"], ensure_ascii=False, sort_keys=True
-                ),
-            }
-        )
+    messages: list[Any] = build_section_prefix(seed)
+    messages.extend(tool_history_messages(transcript, carried))
     if streamed:
         messages.append({"role": "user", "content": SECTION_WRITE_TURN_MESSAGE})
     elif force_emit:

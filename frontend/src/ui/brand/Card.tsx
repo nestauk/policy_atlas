@@ -50,7 +50,7 @@ const STATUS_MARK_TONES = {
 export type StatusTone = keyof typeof STATUS_MARK_TONES;
 
 /**
- * The status mark (task 058; DESIGN.md § Status mark): a 6 px square with
+ * The status mark (DESIGN.md § Status mark): a 6 px square with
  * square corners, always followed by its word, never colour alone. Electric
  * Blue while a run is live, Green when it ended well, Orange while it waits
  * on a person, Red when it failed, Line 2 when nothing has started.
@@ -59,7 +59,7 @@ export type StatusTone = keyof typeof STATUS_MARK_TONES;
  *   tone: Which state the mark shows.
  *   breathing: True while updates are arriving (the caller's freshness
  *     rule); only a live mark breathes (opacity to 0.25 and scale to 0.8,
- *     `anim-breathe-mark`; owner, round 11), and it holds still under
+ *     `anim-breathe-mark`), and it holds still under
  *     reduced motion.
  */
 export function StatusMark({
@@ -74,7 +74,7 @@ export function StatusMark({
       data-tone={tone}
       className={cn(
         // A mark that changes state (a step landing: blue to green) eases
-        // its colour over 150 ms (round 9).
+        // its colour over 150 ms.
         "inline-block size-1.5 flex-none transition-colors duration-150 ease-[ease]",
         STATUS_MARK_TONES[tone],
         breathing && tone === "running" && "anim-breathe-mark",
@@ -90,12 +90,11 @@ export function StatusMark({
 export const LIVE_MARK_TEXT_SIZE = 14;
 
 /**
- * The live mark (task 058; annex § Owner round after the trace, item 6):
- * wherever a run is live, its mark is the Policy Atlas fold mark turning.
+ * The live mark: wherever a run is live, its mark is the Policy Atlas fold mark turning.
  * It turns while the stream is open and the run is live (heartbeats count as
  * data arriving), and holds still (the shut blue diamond) when the
- * connection is down or under reduced motion (lead ruling, design lane
- * review). The static states keep the 6 px square (`StatusMark`).
+ * connection is down or under reduced motion. The static states keep the
+ * 6 px square (`StatusMark`).
  *
  * Args:
  *   size: 14 px in a line of text (the default), 17 px in the rail.

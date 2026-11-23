@@ -3,7 +3,9 @@ type: Live behaviour
 title: A judge-effort decision needs a content read of the verdicts; the counts invert between offline and live
 description: The grounding judge at low reasoning effort marked more claims unsupported than at medium on live runs (10.9% against 5.1%), the opposite of the offline experiment's lean; the verdicts read show the low judge flagging the writer's own hedges ("does not establish a causal effect", "remains unclear") as unsupported claims, so the repair pass removes caution rather than fixing citations. Decide effort from the verdicts' content, never from the unsupported count.
 tags: [synthesis, judge, reasoning-effort, evaluation, "057"]
-timestamp: 2026-11-03
+generated:
+  by: process:okf-migrate
+  at: 2026-11-03
 ---
 
 # Rule

@@ -241,9 +241,9 @@ def _map_rows(
         return []
     # The full-history context exists solely for the decided-pause check, so
     # fetch it only when this batch carries a pause, and fetch decisions only.
-    # The previous unconditional after=0 read re-scanned the whole task log
+    # An unconditional after=0 read would re-scan the whole task log
     # (large JSONB payloads included) every poll interval per client, even
-    # when idle (review finding backend-M1, 2026-07-21).
+    # when idle.
     decision_events: list[dict[str, Any]] = []
     if any(row["event_type"] == "steering.pause" for row in all_rows):
         decision_events = [
@@ -381,7 +381,7 @@ def _frames_for_row(
     persisted = _persisted_kwargs(row)
     # A walk-level stage with no component run of its own (the longlist
     # walk's ``option_searches``, written by the runner's fan-out and join)
-    # names its walk in the payload (task 058, round 11).
+    # names its walk in the payload.
     stage_walk = (
         (walks or {}).get(row["run_id"])
         if row.get("run_id") is not None
@@ -394,7 +394,7 @@ def _frames_for_row(
         "run.finished",
         # The claim IS the durable paused→running transition of a boundary
         # continuation — without this frame, replay and the live store show a
-        # continuing walk as still paused (live-check finding, 2026-07-21).
+        # continuing walk as still paused (live-check finding).
         "continuation.claimed",
     }:
         capability_run_id = _uuid(payload.get("capability_run_id"))
@@ -515,7 +515,8 @@ def _frames_for_row(
     if event_type == "plan.approved":
         plan_frame = _plan_frame(conn, task_id=task_id, payload=payload, persisted=persisted)
         return [plan_frame.model_dump(mode="json")] if plan_frame is not None else []
-    # Both generations: pre-038 rows say `project.*` (task 038, contract V1).
+    # Both generations: rows written before the project-to-task rename say
+    # `project.*`.
     if event_type in both_generations(*LIFECYCLE_EVENT_KINDS):
         task_frame = _task_frame(
             conn,
@@ -551,7 +552,7 @@ def _summary(payload: dict[str, Any]) -> dict[str, int | float | str]:
     hidden = {
         "component", "registry_component", "plan_id", "plan_version", "session_id",
         "already_in_store", "capability_run_id",
-        # The runner's stamp (task 054, S1) names the frame's stage; it is no count.
+        # The runner's stamp names the frame's stage; it is no count.
         "stage",
     }
     summary: dict[str, int | float | str] = {
@@ -657,7 +658,8 @@ def _decision_frames(
     if check_in_id is None:
         return []
     response = payload.get("interpreted_action")
-    # Pre-038 rows carry the old actor word; the set below would drop them.
+    # Rows written before the orchestrator-to-agent rename carry the old actor
+    # word; the set below would drop them.
     decided_by = steering_events.canonical_actor(payload.get("decided_by"))
     frame: list[CheckinResolvedFrame | PlanUpdatedFrame] = [
         CheckinResolvedFrame(
@@ -711,7 +713,7 @@ def _plan_frame(
         return None
     capability = capability_of_task(conn, task_id)
     validated = validate_plan(capability, row["payload"])
-    # Task 044: a scoping plan travels on its own field; the other is null.
+    # A scoping plan travels on its own field; the other is null.
     draft = spec_for(capability).task_agent.draft_from_plan(validated)
     return PlanUpdatedFrame(
         type="plan.updated", **plan_slot(draft), version=version, **persisted
@@ -934,7 +936,7 @@ async def stream_events(
                             break
                 # The whole ephemeral batch is held until the tail has
                 # re-authorised. Nothing is written to the response before it
-                # answers (task 058, N4 and N7).
+                # answers.
                 batch = await anyio.to_thread.run_sync(
                     partial(
                         _tail,

@@ -16,16 +16,16 @@ class _FakePromptTokensDetails:
 
 class _FakeUsageWithCached:
     def __init__(self) -> None:
-        self.prompt_tokens = 100
-        self.completion_tokens = 20
+        self.input_tokens = 100
+        self.output_tokens = 20
         self.total_tokens = 120
-        self.prompt_tokens_details = _FakePromptTokensDetails(cached_tokens=7)
+        self.input_tokens_details = _FakePromptTokensDetails(cached_tokens=7)
 
 
 class _FakeUsageWithoutDetails:
     def __init__(self) -> None:
-        self.prompt_tokens = 50
-        self.completion_tokens = 10
+        self.input_tokens = 50
+        self.output_tokens = 10
         self.total_tokens = 60
 
 
@@ -112,8 +112,8 @@ def test_token_usage_from_provider_rejects_boolean_fields() -> None:
     must land as None (absent), never be coerced to 1/0."""
 
     class _BoolUsage:
-        prompt_tokens = True
-        completion_tokens = 10
+        input_tokens = True
+        output_tokens = 10
         total_tokens = 60
 
     usage = token_usage_from_provider(_BoolUsage())
@@ -158,11 +158,11 @@ class _Usage:
         prompt_details: object | None = None,
         completion_details: object | None = None,
     ) -> None:
-        self.prompt_tokens = 1000
-        self.completion_tokens = 300
+        self.input_tokens = 1000
+        self.output_tokens = 300
         self.total_tokens = 1300
-        self.prompt_tokens_details = prompt_details
-        self.completion_tokens_details = completion_details
+        self.input_tokens_details = prompt_details
+        self.output_tokens_details = completion_details
 
 
 def test_provider_usage_with_both_details_reads_cache_write_and_reasoning() -> None:
@@ -259,15 +259,15 @@ def test_provider_usage_rejects_boolean_breakdown_fields() -> None:
 def test_real_openai_sdk_usage_keeps_undeclared_cache_write_field() -> None:
     """The OpenAI SDK model does not declare ``cache_write_tokens``; providers that
     send it (via the OpenAI-compatible API) must still reach ``cache_write``."""
-    from openai.types.completion_usage import CompletionUsage
+    from openai.types.responses import ResponseUsage
 
-    raw = CompletionUsage.model_validate(
+    raw = ResponseUsage.model_validate(
         {
-            "prompt_tokens": 1000,
-            "completion_tokens": 300,
+            "input_tokens": 1000,
+            "output_tokens": 300,
             "total_tokens": 1300,
-            "prompt_tokens_details": {"cached_tokens": 200, "cache_write_tokens": 500},
-            "completion_tokens_details": {"reasoning_tokens": 120},
+            "input_tokens_details": {"cached_tokens": 200, "cache_write_tokens": 500},
+            "output_tokens_details": {"reasoning_tokens": 120},
         }
     )
     usage = token_usage_from_provider(raw)

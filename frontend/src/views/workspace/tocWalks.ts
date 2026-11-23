@@ -6,8 +6,7 @@ import { isFinished, walkKind } from "./runProgress";
 type RunRef = NonNullable<RunStreamState["run"]>;
 
 /*
- * A theory of change's automatic chain as one card (task 054's 058
- * alignment, decision 5, S3 and S10). The server runs a draft, then starts
+ * A theory of change's automatic chain as one card. The server runs a draft, then starts
  * the evidence check by itself and marks it as the draft's follow-on
  * (`RunOut.follows_capability_run_id`). The Task Agent thread draws the two
  * walks as one run card: the draft's rows first, one timer from the draft's
@@ -61,7 +60,7 @@ function endedMs(at: string | null | undefined): number | null {
 
 /**
  * Whether a draft that has just finished still reads "Running": its check
- * is about to start (S10). A draft whose check is in the list, an upload's
+ * is about to start. A draft whose check is in the list, an upload's
  * read (the reader starts its check), a draft that ended badly and a gap
  * longer than `BETWEEN_WALKS_MS` (a refused check) do not.
  *
@@ -121,7 +120,7 @@ export function pendingLead(
 
 /**
  * When the run the stream follows started, counting a check from the draft
- * it followed (S10), for a surface with the stream and no runs read (the
+ * it followed, for a surface with the stream and no runs read (the
  * run status bar). It remembers a draft that finished while this view was
  * mounted; a check that started within `BETWEEN_WALKS_MS` of its end takes
  * the draft's start. Without that memory (a page opened mid-check) it is the

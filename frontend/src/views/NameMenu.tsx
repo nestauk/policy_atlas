@@ -19,7 +19,7 @@ import { SHARE_COPY } from "./sharePresentation";
 const CONTROL_CLASS = "h-10 whitespace-nowrap py-0";
 const OUTLINE_CONTROL_CLASS = cn(buttonVariants({ variant: "outline" }), CONTROL_CLASS);
 
-/** The rename field's button: "Save" on screen (owner, round 13), named
+/** The rename field's button: "Save" on screen, named
  *  "Save name" for a screen reader, on the headers and the rows alike. */
 const SAVE_WORD = "Save";
 const SAVE_NAME_LABEL = "Save name";
@@ -27,7 +27,7 @@ const SAVE_NAME_LABEL = "Save name";
 /** One mutation the menu runs: it calls back once it has settled. */
 export type Action<T> = (value: T, done: { onSuccess: () => void; onError: () => void }) => void;
 
-/** A further step a menu item opens in place of the menu (round 12). */
+/** A further step a menu item opens in place of the menu. */
 export type MenuStep = {
   /** The item's words ("Add to project"). */
   label: string;
@@ -38,7 +38,7 @@ export type MenuStep = {
 };
 
 /**
- * The rename field (task 058, owner round 11; split out in round 12 so the
+ * The rename field (its own component so the
  * list rows use it too): the name as a field in place, with Save and
  * Cancel beside it. Enter saves, Escape (anywhere in the group) cancels; a
  * failed save is said under the field. `onClose` runs when it closes either
@@ -130,7 +130,7 @@ export function NameRenameField({
         )}
       />
       <span className="flex shrink-0 items-center gap-1">
-        {/* The visible word is "Save" (owner, round 13); the name keeps the
+        {/* The visible word is "Save"; the name keeps the
             word it saves, which holds the visible word (label in name). */}
         <button
           type="button"
@@ -156,8 +156,8 @@ export function NameRenameField({
 }
 
 /**
- * The menu behind a name's control (task 058, owner round 11; split out in
- * round 12 so the list rows open the same menu): Rename and Archive as menu
+ * The menu behind a name's control (its own component so the list rows
+ * open the same menu): Rename and Archive as menu
  * rows (the account menu's rows), focus on the first as it opens, the arrow
  * keys moving between them; Escape or an outside press closes it with focus
  * back on the control. Archive asks once more in words, the Share page's
@@ -185,7 +185,7 @@ export function NameActionsMenu({
   trigger: ReactElement;
   onRename: () => void;
   /** More items between Rename and Archive, each opening its own step in
-   *  the menu (a list row's "Add to project", round 12). An item with a
+   *  the menu (a list row's "Add to project"). An item with a
    *  `reason` is disabled, the reason on a grey line under its words. */
   steps?: ReadonlyArray<MenuStep>;
   /** Absent when the thing cannot be archived from here. */
@@ -347,11 +347,10 @@ export function NameActionsMenu({
 }
 
 /**
- * A task's or a project's name with its menu (task 058, owner round 11): the
+ * A task's or a project's name with its menu: the
  * name, a 40 px quiet control with the chevron that opens Rename and Archive
  * (`NameActionsMenu`) sitting on the name's baseline, and anything that goes
- * under the name on its own short line (the task's capability; owner, round
- * 12). Rename closes the menu and turns the name into a field in place
+ * under the name on its own short line (the task's capability). Rename closes the menu and turns the name into a field in place
  * (`NameRenameField`); focus comes back to the chevron when it closes.
  *
  * Only an owner sees the chevron; a colleague sees the name alone.
@@ -395,7 +394,7 @@ export function NameMenu({
   /** A page title wraps; the task bar's name truncates on its one line. */
   wrap?: boolean;
   /** More menu items between Rename and Archive (the task's "Add to
-   *  project", round 12); a project's title has none. */
+   *  project"); a project's title has none. */
   steps?: ReadonlyArray<MenuStep>;
 }) {
   const [editing, setEditing] = useState(false);
@@ -488,7 +487,7 @@ export function NameMenu({
 }
 
 /**
- * A task's "Add to project" step (owner, rounds 12 and 13; the task header's
+ * A task's "Add to project" step (the task header's
  * menu and the list rows' share it): the shared `ProjectPicker` (the New page
  * and the Share page use the same one) listing the projects the task is not
  * in, then "New project…", which makes a project on the spot and chooses
@@ -561,7 +560,7 @@ function AddToProjectStep({
 }
 
 /**
- * The "Add to project" item for a task's menu (owner, rounds 12 and 13): the
+ * The "Add to project" item for a task's menu: the
  * same item and step on the task header's menu and on a task row's, so the
  * two menus match. It lists the projects the Share page offers (one cached
  * `useProjects` query) less those the task is already in, then "New
@@ -598,7 +597,7 @@ export function useAddToProjectStep(taskId: string, projectIds: readonly string[
 }
 
 /**
- * The project archive confirm's sentence (owner, round 14): what happens to
+ * The project archive confirm's sentence: what happens to
  * the project and to its tasks. Archiving also archives the tasks that are
  * in no other project; the server counts them on the project row
  * (`ProjectOut.solo_task_count`, the backend builder's this round), and the
@@ -618,15 +617,14 @@ export function projectArchiveSentence(soloTaskCount: number | null | undefined)
 }
 
 /** The project row's count of tasks in no other project, typed here until
- *  the generated `ProjectOut` carries it (round 14). */
+ *  the generated `ProjectOut` carries it. */
 export function soloTaskCount(project: object): number | null {
   const value = (project as { solo_task_count?: unknown }).solo_task_count;
   return typeof value === "number" ? value : null;
 }
 
 /**
- * A project page's title with the same menu as a task's (owner, round 11:
- * "add a way to archive (and rename) projects"). Rename saves in place;
+ * A project page's title with the same menu as a task's. Rename saves in place;
  * Archive, once confirmed, leaves the page for the Projects list. An
  * archived project offers Rename only.
  */
@@ -641,7 +639,7 @@ export function ProjectName({
   name: string;
   isOwner: boolean;
   archived: boolean;
-  /** Its tasks in no other project, for the archive sentence (round 14). */
+  /** Its tasks in no other project, for the archive sentence. */
   soloTasks?: number | null;
 }) {
   const update = useUpdateProject(projectId);

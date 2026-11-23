@@ -48,19 +48,19 @@ ScreenStatus = Literal["relevant", "not_relevant", "failed", "excluded_retracted
 ScreenBasis = Literal["title_abstract", "title_only", "full_text"]
 
 SCREEN_RETRY_CAP = 1
-# 48 (task 057, N10d; was 12): E8 measured the stage-1 set wall 14.4 -> 4.8 s at 48
+# 48: measured the stage-1 set wall 14.4 -> 4.8 s at 48 (against 12)
 # on Bedrock with no 429s. Stage 2 stays at 4 (not measured).
 MAX_CONCURRENT_STAGE1 = 48
 MAX_CONCURRENT_STAGE2 = 4
 
-# Screening-directive criteria list cap (contract decision 2 rev 2.5, plan rev
-# 2 finding 3): a plan-visible screening criteria list is small, so this
+# Screening-directive criteria list cap:
+# a plan-visible screening criteria list is small, so this
 # mirrors — but is deliberately smaller than — the selection directive's
 # DIRECTIVE_LIST_MAX discipline (select.py/synthesis_tools.py, 200).
 CRITERIA_LIST_MAX = 50
 
-# Per-criterion length cap (task 039 bug 2): live check found the shared
-# DIRECTIVE_STRING_MAX (200) too short for real screening rules. Screening
+# Per-criterion length cap: the shared
+# DIRECTIVE_STRING_MAX (200) is too short for real screening rules. Screening
 # criteria are their own decision surface, so they get their own — larger —
 # cap rather than widening DIRECTIVE_STRING_MAX for every other directive
 # string that reuses it.
@@ -89,8 +89,8 @@ class ScreenDirectiveError(Exception):
 
 class ScreenSupersessionError(RuntimeError):
     """A stage-2 re-screen collides with an existing stage-2 row at the effective
-    generation. Stage-2 supersession is deliberately NOT built (task 024
-    contract): stage-2 rows inherit their stage-1 generation rather than
+    generation. Stage-2 supersession is deliberately NOT built:
+    stage-2 rows inherit their stage-1 generation rather than
     minting their own, so there is no fresh generation to write into. This is a
     reason-coded halt-and-re-gate trigger, never a silent skip.
     """
@@ -144,7 +144,7 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
     """Return the effective non-failed screening row per scope/source.
 
     The effective row is the non-failed row ordering **generation DESC first,
-    stage DESC second** (task 024 generation supersession, ADR 0022). A
+    stage DESC second** (generation supersession, ADR 0022). A
     criteria-changed re-screen writes fresh rows at ``screen_generation =
     max+1`` without touching prior rows; the newest generation's verdicts win
     by design because the criteria changed. *Within* a generation the
@@ -158,8 +158,13 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
     Consumers should join this selectable instead and then filter its effective
     ``status``/``screen_stage`` columns.
 
+    The window partitions by ``task_id`` as well as scope and snapshot.
+    ``task_id`` is constant within a scope/snapshot partition (``fk_ssr_scope_task``
+    ties each scope to one task), so the ranking is unchanged; it leads the key
+    so PostgreSQL pushes a caller's ``task_id`` filter below the window function.
+
     ``excluded_retracted`` is a terminal effective status like any other
-    non-failed status (task 019): it is always a stage-1 row (retraction
+    non-failed status: it is always a stage-1 row (retraction
     exclusion happens before any stage-2 candidate exists), so it ranks as
     the effective row within its generation and is never superseded by a
     later stage of the same generation. Consumers that filter on
@@ -179,6 +184,7 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
         func.row_number()
         .over(
             partition_by=(
+                source_screening_result.c.task_id,
                 source_screening_result.c.evidence_scope_id,
                 source_screening_result.c.task_source_snapshot_id,
             ),
@@ -240,7 +246,7 @@ def _parse_screen_directive(
     by ``CRITERIA_LIST_MAX`` entries. Anything above a cap rejects — it is
     never truncated. Criteria are preserved alongside a stage-2 directive.
 
-    ``rescreen`` (task 024 generation supersession) accepts ONLY the literal
+    ``rescreen`` (generation supersession) accepts ONLY the literal
     boolean ``True`` — any other value (including ``1``, ``"true"``, or
     ``False``) rejects. It flags a replacement re-run: stage-1 re-screens all
     scope docs at ``generation = max+1``; prior rows are never touched.
@@ -296,8 +302,7 @@ def _compose_screen_intent(intent: str, criteria: list[str]) -> str:
 
     Criteria compose ONLY into the screen's intent input, never into
     ``evidence_scope.intent`` itself — that column is also read by search
-    generation and synthesise, and is never rewritten here (contract
-    decision 2 rev 2.5).
+    generation and synthesise, and is never rewritten here.
 
     The composed string is validated HERE against ``SCREEN_INTENT_MAX``, at
     directive validation time. ``CRITERIA_LIST_MAX`` (50) x per-entry
@@ -540,7 +545,7 @@ def _run_stage1_calls(
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: documents screened so far (first reads only) and the
+    # Documents screened so far (first reads only) and the
     # relevant ones so far (either read). Counted on the future the pool
     # waits on, never in the serial retry below.
     progress_lock = threading.Lock()
@@ -661,7 +666,7 @@ def _exclude_retracted_docs(
 
     Writes an ``excluded_retracted`` row (and matching event) for every
     retracted doc, BEFORE any doc reaches the screening backend — the backend
-    is never called for a retracted doc. Owner decision: retraction is a
+    is never called for a retracted doc. Retraction is a
     policy exclusion, never a relevance verdict, so it is never conflated
     with ``not_relevant``.
 
@@ -840,7 +845,7 @@ def screen_in(
     reason: str,
     rescreen: bool = False,
 ) -> dict[str, Any]:
-    """Screen chosen documents in or out by code, with no model call (task 054, C27).
+    """Screen chosen documents in or out by code, with no model call.
 
     Writes the same stage-1 rows and ``source.screened`` events the screen
     writes: each chosen document not yet screened in this scope gets
@@ -1176,7 +1181,7 @@ def _run_stage2_reps(
     errors: dict[int, Exception] = {}
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: one count per document, on the pool's own future; the
+    # One count per document, on the pool's own future; the
     # serial retry below never publishes.
     done = 0
     lock = threading.Lock()

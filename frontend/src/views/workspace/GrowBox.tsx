@@ -5,9 +5,9 @@ import { prefersReducedMotion } from "../../ui/motion/motion";
 import { useEasedHeight } from "../streamPacing";
 
 /**
- * A block of the Task Agent thread that grows smoothly (owner, round 14:
- * the action line popping back after an answer, a decision card appearing
- * and the progress card appearing all jumped).
+ * A block of the Task Agent thread that grows smoothly, so the action line
+ * coming back after an answer, a decision card appearing and the progress
+ * card appearing do not jump.
  *
  * Arriving after the thread's first paint, it opens from nothing to its
  * height over 300 ms on the strong ease-out, so the thread around it makes

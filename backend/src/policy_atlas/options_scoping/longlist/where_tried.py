@@ -1,4 +1,4 @@
-"""Where tried: two levels read from the record (task 046, amendment 3; R59, R72).
+"""Where tried: two levels read from the record.
 
 The top level comes from the record's ``study_country`` (every country the
 study names, separated by ";", each its short English name); the level
@@ -12,10 +12,8 @@ them, or any gives "multiple"; else "other" when any record states a place;
 else "not stated". Countries compare with case folded only.
 
 The name tables below drive :func:`names_place` and :func:`named_place`
-(the setting pass). The plan-text place strip of S6 is gone (R74; the
-owner's ruling at the review, 2026-10-12): the place rule is words in the
-prompts. Task 046, amendment 4 (R87; S29a,
-S32): :data:`COUNTRY_NAMES` holds every ISO-3166 country, and one resolver
+(the setting pass). The place rule is words in the prompts; no code strip of
+the plan text backs it. :data:`COUNTRY_NAMES` holds every ISO-3166 country, and one resolver
 (:func:`resolve_country`) maps a place text to one country code and one
 short English name (:data:`COUNTRY_DISPLAY_NAMES`), so "UK", "England" and
 "Britain" are the United Kingdom; coverage reads the signal's countries and
@@ -69,8 +67,8 @@ def countries_named(study_country: str | None) -> tuple[list[str], bool]:
             seen[key] = len(countries)
             countries.append(name)
         else:
-            # One spelling per country, chosen without regard to row order (task 046,
-            # amendment 3): the smallest spelling wins ("United Kingdom" < "united kingdom").
+            # One spelling per country, chosen without regard to row order:
+            # the smallest spelling wins ("United Kingdom" < "united kingdom").
             countries[seen[key]] = min(countries[seen[key]], name)
     return countries, multiple
 
@@ -225,12 +223,11 @@ def _iso_country_names() -> dict[str, str]:
 
 #: Country names (lower case) → ISO-3166 alpha-2: every country of the
 #: ISO-3166 table the Evidence search sourcing holds, by its full and its
-#: bare name, with the aliases above merged over them (task 046, amendment 4,
-#: R87; S29a).
+#: bare name, with the aliases above merged over them.
 COUNTRY_NAMES: dict[str, str] = {**_iso_country_names(), **_COUNTRY_ALIASES}
 
 #: The short English name per ISO-3166 code where the ISO name is not the
-#: name in common use (task 046, amendment 4, R76; S29a).
+#: name in common use.
 _DISPLAY_OVERRIDES: dict[str, str] = {
     "GB": "United Kingdom",
     "US": "United States",
@@ -311,15 +308,15 @@ def _display_name(name: str) -> str:
     return " ".join(text.split())
 
 
-#: ISO-3166 alpha-2 → one short English name per country (task 046,
-#: amendment 4, R76; S29a): the signal's country words.
+#: ISO-3166 alpha-2 → one short English name per country:
+#: the signal's country words.
 COUNTRY_DISPLAY_NAMES: dict[str, str] = {
     code: _DISPLAY_OVERRIDES.get(code, _display_name(name))
     for code, name in ISO_3166_ALPHA2.items()
 }
 
 #: Recurring sub-national places (lower case) → the ISO-3166 alpha-2 code of
-#: their country (task 046, item 26): the United Kingdom's nations, the
+#: their country (item 26): the United Kingdom's nations, the
 #: English regions and the largest cities and combined authorities; the US
 #: states; the Canadian provinces and territories; the Australian states and
 #: territories. Deliberately modest. A name that is also a country
@@ -449,8 +446,7 @@ ABBREVIATIONS: dict[str, str] = {
 
 #: The United Kingdom's four nations: sub-national, but each a country name
 #: to the reader, so a ``study_geography`` naming one under the United
-#: Kingdom is the country level, not a place below it (task 046,
-#: amendment 4, R87; S32).
+#: Kingdom is the country level, not a place below it.
 UK_NATIONS: frozenset[str] = frozenset({"england", "scotland", "wales", "northern ireland"})
 
 _LEADING_THE_RE = re.compile(r"^the\s+", re.IGNORECASE)
@@ -485,8 +481,7 @@ def resolve_country(text: str | None) -> tuple[str, str] | None:
     The text has its whitespace collapsed and a leading "the" stripped; it
     is looked up case-folded in :data:`COUNTRY_NAMES`, then case-sensitively
     in :data:`ABBREVIATIONS` ("UK", "U.S."), then case-folded in
-    :data:`SUBNATIONAL_PLACES` ("England", "New South Wales") (task 046,
-    amendment 4, R87; S29a).
+    :data:`SUBNATIONAL_PLACES` ("England", "New South Wales").
 
     Args:
         text: A country or place as written, or ``None``.
@@ -508,8 +503,7 @@ def names_country(text: str | None) -> bool:
 
     A name or alias in :data:`COUNTRY_NAMES`, an abbreviation ("UK") or one
     of the United Kingdom's nations (:data:`UK_NATIONS`); a city, region or
-    state ("London", "New South Wales") is a place within its country
-    (task 046, amendment 4, R87; S32).
+    state ("London", "New South Wales") is a place within its country.
 
     Args:
         text: A place as written, or ``None``.
@@ -527,7 +521,7 @@ def names_country(text: str | None) -> bool:
 
 
 def place_key(text: str) -> str:
-    """The key a place's spellings are grouped under (task 046, amendment 4, R87; S32).
+    """The key a place's spellings are grouped under.
 
     Case folded, a leading "the" stripped, hyphens and spaces removed, so
     "South West", "south-west" and "southwest" are one place.
@@ -553,7 +547,7 @@ def country_level(
     Kingdom", "Scotland")`` → ``("United Kingdom", None)`` and ``(None,
     "France")`` → ``("France", None)``. A geography that resolves to another
     country ("Georgia" under the United Kingdom) or to no country is kept as
-    written (task 046, amendment 4, R87; S32). Nothing is written back.
+    written. Nothing is written back.
 
     Args:
         study_country: The record's ``study_country``.
@@ -580,15 +574,15 @@ def _alternation(phrases: Iterable[str]) -> str:
     return "|".join(re.escape(phrase) for phrase in ordered)
 
 
-# --- A place in a text (the setting pass; task 046, S11; R87) -----------------
+# --- A place in a text (the setting pass) -----------------
 
 # A place is a country or sub-national name (case-insensitive) or an
 # abbreviation (case-sensitive: "us" is a pronoun). Never an adjective, and
 # never the head of a compound ("UK-wide", "London-based").
 #: Country names that are also common nouns or given names ("turkey farms",
 #: "guinea pig", "a football jersey", "the Jordan model of care"): the matcher
-#: reads them as a place only when capitalised (review of task 046,
-#: 2026-10-12). The resolver (:func:`resolve_country`) still knows them.
+#: reads them as a place only when capitalised. The resolver
+#: (:func:`resolve_country`) still knows them.
 AMBIGUOUS_COUNTRY_NAMES: frozenset[str] = frozenset(
     {"chad", "guinea", "jersey", "jordan", "niger", "turkey"}
 )

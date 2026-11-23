@@ -3,7 +3,7 @@ import { Card } from "../brand/Card";
 import { cn } from "../brand/cn";
 
 /**
- * A view that could not load (task 058 consistency pass): one sentence on
+ * A view that could not load: one sentence on
  * what failed and a Retry button under it, the same `Button` secondary small
  * the Agent tab's failed turn uses, so Retry looks one way everywhere.
  */

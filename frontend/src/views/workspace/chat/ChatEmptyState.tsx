@@ -1,6 +1,6 @@
 /** The empty chat: an invitation and up to three starter questions drawn from
  *  the report's sections. Shared by a real chat with no turns yet and by a
- *  draft chat that has no row at all (038 V8).
+ *  draft chat that has no row at all.
  *
  * Args:
  *   props: `message` (the invitation, or an error line), the starter

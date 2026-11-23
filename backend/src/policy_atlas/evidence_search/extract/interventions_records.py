@@ -32,7 +32,7 @@ InterventionRole = Literal["evaluated", "described", "recommended", "comparator"
 # The Literal type is the schema CHECK vocabulary — drift fails at import.
 assert get_args(InterventionRole) == INTERVENTION_ROLES
 
-#: The plan-relative tags (task 046, S5). Null on a record means "not tagged".
+#: The plan-relative tags. Null on a record means "not tagged".
 UnitTag = Literal["on_target", "adjacent", "other"]
 ObjectTag = Literal["plan_object", "option", "neither"]
 
@@ -233,7 +233,7 @@ def render_interventions_field_docs() -> str:
     )
 
 
-# --- The profile bundle's stored shape (task 045 Phase 2.2) ------------------
+# --- The profile bundle's stored shape ------------------
 #
 # Everything below the wire models is pipeline code, not prompt text: the
 # record carried through the shared extract pipeline, the stored record, the

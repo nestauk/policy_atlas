@@ -1,7 +1,7 @@
-"""The option cards the shortlist proposal reads (task 055, P4, P7).
+"""The option cards the shortlist proposal reads.
 
 A thin bridge to the read model: the card text is built from the same
-``OptionOut`` the option card renders (S13). The read-model package imports
+``OptionOut`` the option card renders. The read-model package imports
 the options-scoping package at module import time, so this module imports it
 lazily, inside the function, and the scoping package never imports
 ``policy_atlas.api`` when it loads.

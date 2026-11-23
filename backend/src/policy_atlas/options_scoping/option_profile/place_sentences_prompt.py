@@ -30,12 +30,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 PLACE_SENTENCES_PROMPT_VERSION = "place_sentences_v5"
 
-#: The sentence ceiling the code enforces per place (owner, Q6: 220 to start;
+#: The sentence ceiling the code enforces per place (220 to start;
 #: the loop may lower it). Not on the wire.
 PLACE_SENTENCE_MAX_CHARS = 220
 
 #: Documents a place sends at most (the first by role then quality); the
-#: place's total count is sent beside them (S31).
+#: place's total count is sent beside them.
 PLACE_DOCUMENTS_MAX = 12
 
 #: A reasoning model: the cap covers reasoning and output; at most a few

@@ -63,7 +63,7 @@ dependencies = [
     # Moved here from the `ops` group so the runtime image carries it; the
     # `<2` ceiling is the same rule as openai/langfuse above. Its type stubs
     # stay in `ops` (type-check only, never shipped).
-    "boto3>=1.43,<2",
+    "boto3>=1.44.6,<2",
     # Task 057 (approved dependency gate G3): the AWS Lambda Runtime Interface
     # Client, which runs the queued ingest handler inside the backend image
     # (`python -m awslambdaric policy_atlas.ops.ingest_worker.handler`). In the MAIN
@@ -97,7 +97,7 @@ src = ["src", "tests"]
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "T20"]
 
 [dependency-groups]
 dev = [
@@ -138,7 +138,7 @@ ops = [
     # boto3 itself moved to the main dependencies in task 053 (Bedrock); the
     # stubs stay here because they are type-check only. `bedrock-runtime` added
     # for the Cohere and Claude backends (task 053, approved dependency gate).
-    "boto3-stubs[cognito-idp,bedrock-runtime]>=1.43,<2",
+    "boto3-stubs[cognito-idp,bedrock-runtime]>=1.44.6,<2",
 ]
 
 [tool.uv]

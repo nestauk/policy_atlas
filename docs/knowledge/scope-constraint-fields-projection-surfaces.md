@@ -3,7 +3,22 @@ type: Invariant
 title: A new ScopeConstraints field must touch every projection surface — and the Task Agent sees it via the wire draft, not the CLI render
 description: publisher_source (039) mapped the full surface set — PlanDraftWire (re-planning visibility, with normalisation at the API fold), the CLI-only _render_scope_constraints, scopeChips (whose text the overlay's geography derivation string-slices), and the deferred removal note. Missing one leaves the field invisible, a 500 path, or a silent edit-behaviour change.
 tags: [plan, scope-constraints, planner, frontend, wire-models]
-timestamp: 2026-09-08
+generated:
+  by: process:okf-migrate
+  at: 2026-09-08
+sources:
+  - resource: "backend/src/policy_atlas/runtime/task_agent_prompt.py"
+    title: "`backend/src/policy_atlas/runtime/task_agent_prompt.py` (`PlanDraftWire`)"
+  - resource: "backend/src/policy_atlas/api/routers/task_agent.py"
+    title: "`backend/src/policy_atlas/api/routers/task_agent.py` (`_draft_from_wire` normaliser)"
+  - resource: "backend/tests/api/test_task_agent_router.py::test_draft_from_wire_normalises_loose_publisher_source"
+    title: "`backend/tests/api/test_task_agent_router.py::test_draft_from_wire_normalises_loose_publisher_source`"
+  - resource: "frontend/src/views/workspace/planVocabulary.test.ts"
+    title: "`frontend/src/views/workspace/planVocabulary.test.ts` (chip pins), `planOverlay.test.ts` (\"reads APO from publisher_source\")"
+  - resource: "../tasks/039-apo-mod/verification.md"
+    title: "[docs/tasks/039-apo-mod/verification.md](../tasks/039-apo-mod/verification.md) \u00a7 Review findings"
+  - resource: "wire-field-additions-break-all-construction-sites.md"
+    title: "Related: [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)"
 ---
 
 # Rule
@@ -26,12 +41,3 @@ different, quiet way:
 renderer surface and the re-apply scout initially attributed the wrong
 mechanism to it. The loose-wire→strict-draft 500 was found (and fixed with a
 normaliser + test) only by the review stack.
-
-# Citations
-
-- `backend/src/policy_atlas/runtime/task_agent_prompt.py` (`PlanDraftWire`)
-- `backend/src/policy_atlas/api/routers/task_agent.py` (`_draft_from_wire` normaliser)
-- `backend/tests/api/test_task_agent_router.py::test_draft_from_wire_normalises_loose_publisher_source`
-- `frontend/src/views/workspace/planVocabulary.test.ts` (chip pins), `planOverlay.test.ts` ("reads APO from publisher_source")
-- [docs/tasks/039-apo-mod/verification.md](../tasks/039-apo-mod/verification.md) § Review findings
-- Related: [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)

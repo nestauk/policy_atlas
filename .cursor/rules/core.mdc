@@ -5,6 +5,6 @@ alwaysApply: true
 
 - Follow `AGENTS.md`.
 - Use `.cursor/plans/` for Cursor-native working plans.
-- Promote accepted plans that matter into `docs/plans/` or `docs/contracts/`.
+- Promote accepted plans that matter into `docs/tasks/<task-id>/` (see `AGENTS.md`).
 - Keep changes scoped to the task.
 - Produce verification evidence before review.

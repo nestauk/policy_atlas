@@ -1,12 +1,11 @@
 """One place that says what each capability's plan is, and what it composes to.
 
-Before task 044 there was exactly one capability, so every reader of a plan
-payload could name ``TaskPlan`` and ``compose`` directly. Options scoping makes
-that a bug waiting to happen (C9): a payload's shape is decided by
+A reader of a plan payload cannot simply name ``TaskPlan`` and ``compose``:
+a payload's shape is decided by
 ``task.capability``, and a reader that guesses wrong either validates a scoping
 plan against the Evidence search model or — worse — composes an Evidence search
-chain for a scoping task. The same argument applies to the steering lattice
-(A2): a flat, global point table would fire a scoping pause on an Evidence
+chain for a scoping task. The same argument applies to the steering lattice:
+a flat, global point table would fire a scoping pause on an Evidence
 search walk in frequent mode.
 
 So: one :class:`CapabilitySpec` per capability, and three lookups
@@ -14,10 +13,6 @@ So: one :class:`CapabilitySpec` per capability, and three lookups
 reader goes through. Unknown capability is
 a typed error, never a default — a row whose ``capability`` this build does not
 know is a row this build must not run.
-
-Phase 2 of task 044 built this as the chassis with the Evidence search entry
-alone; phase 3.2 added the options-scoping entry, and — as designed — it cost
-one more dict entry and nothing else.
 
 A test (``tests/runtime/test_capability_registry.py``) asserts by AST scan that
 ``TaskPlan.model_validate`` and bare ``compose(`` appear nowhere else in
@@ -53,7 +48,7 @@ EVIDENCE_SEARCH = "evidence_search"
 #: The options-scoping capability key.
 OPTIONS_SCOPING = "options_scoping"
 
-#: The theory-of-change capability key (task 054).
+#: The theory-of-change capability key.
 THEORY_OF_CHANGE = "theory_of_change"
 
 #: Any capability's plan model. The runner and the continuation reducer are
@@ -109,7 +104,7 @@ class TaskAgentProfile:
         part_ids: The part (card) ids this Task Agent may propose.
         no_primary_parts: Part ids whose options carry no primary.
         degrade_suggestions: Whether malformed suggested answers are dropped.
-        after_turn: Optional hook after every turn (task 054).
+        after_turn: Optional hook after every turn.
         after_approve: Optional ``(engine, task_id, plan, agent)`` →
             ``(plan, reply note)``, run outside any transaction once a turn
             approves a plan.
@@ -137,12 +132,11 @@ class TaskAgentProfile:
         Callable[[Engine, uuid.UUID, Any, Any], tuple[AnyPlan, str | None]] | None
     ) = None
     #: ``(engine, task_id, turn, user_id)`` → a note added to the reply, after any
-    #: turn: the theory of change stores proposed edits and clarifications here
-    #: (task 054, C46, C49).
+    #: turn: the theory of change stores proposed edits and clarifications here.
     after_turn: Callable[[Engine, uuid.UUID, Any, str], str | None] | None = None
     #: ``(reply, note)`` → the reply with ``after_approve``'s note; default: the
     #: note after the reply. The theory of change drops "start it" sentences
-    #: when the note warns the plan may not work (task 054, red team).
+    #: when the note warns the plan may not work (red team).
     merge_note: Callable[[str, str], str] | None = None
 
 
@@ -155,8 +149,8 @@ class CapabilitySpec:
             payload.
         compose: Builds the deterministic component chain from a validated
             plan of ``plan_model``, the intent record's ``purpose`` and its
-            ``context`` (task 045: options scoping composes a different chain
-            per purpose; task 046: a targeted record's context can mark it
+            ``context`` (options scoping composes a different chain
+            per purpose; a targeted record's context can mark it
             acquire-only; the Evidence search ignores both).
         lattice: Point name → the component boundary it sits on.
         load_task_agent: Returns the capability's :class:`TaskAgentProfile`.
@@ -195,7 +189,7 @@ def _toc_task_agent() -> TaskAgentProfile:
     return TOC_TASK_AGENT
 
 
-#: The registry: Evidence search, options scoping (task 044), theory of change (task 054).
+#: The registry: Evidence search, options scoping, theory of change.
 CAPABILITIES: dict[str, CapabilitySpec] = {
     EVIDENCE_SEARCH: CapabilitySpec(
         plan_model=TaskPlan,
@@ -207,16 +201,16 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         plan_model=ScopingPlan,
         compose=compose_scoping,
         # The gate is registered here as *data* — the point exists on the
-        # scoping chain and nowhere else (A2), so an Evidence search walk can
+        # scoping chain and nowhere else, so an Evidence search walk can
         # never resolve it. Its options, card, unattended recording and
-        # end-walk disposition are phase 5.2.
+        # end-walk disposition live in the runner.
         lattice={BASELINE_CONFIRM: PausePoint("after_component", "synthesise")},
         load_task_agent=_options_scoping_task_agent,
     ),
     THEORY_OF_CHANGE: CapabilitySpec(
         plan_model=TocPlan,
         compose=compose_toc,
-        # Empty: a theory-of-change walk never pauses (C12).
+        # Empty: a theory-of-change walk never pauses.
         lattice={},
         load_task_agent=_toc_task_agent,
     ),
@@ -277,7 +271,8 @@ def compose_plan(
             read by the caller from ``evidence_scope.purpose`` — on the fresh
             path and on both resume paths, so a parked walk recomposes the
             chain it started on. ``None`` for every Evidence search walk and
-            every pre-045 scoping walk.
+            every scoping walk whose intent record has no purpose (it composes
+            the baseline chain).
         context: The walk's intent-record ``context``, read beside the
             purpose (ADR 0040 decision 1: the chain is recoverable from the
             purpose and the context). ``None`` where the caller has none.
@@ -292,7 +287,7 @@ def compose_plan(
 
 
 def lattice_for(capability: str) -> dict[str, PausePoint]:
-    """Return the steering lattice belonging to one capability (A2).
+    """Return the steering lattice belonging to one capability.
 
     Args:
         capability: The owning task's capability.
@@ -340,7 +335,7 @@ def intent_record(
 ) -> tuple[str | None, dict[str, Any]]:
     """Read the ``purpose`` and ``context`` of one intent record.
 
-    The purpose selects the chain :func:`compose_plan` composes (task 045) and
+    The purpose selects the chain :func:`compose_plan` composes and
     the context composes beside it. Pass ``walk_id`` to read the record a walk
     runs under (through its ``evidence_scope_id``; both rows are task-scoped),
     or ``scope_id`` to read a record directly.

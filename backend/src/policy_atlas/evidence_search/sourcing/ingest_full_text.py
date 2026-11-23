@@ -1,7 +1,7 @@
 """Full-text ingestion component — fetch → parse → segment, post-screen Tier 0.
 
 For every screened-in acquired source of a scope, resolve candidate URLs from the
-provider fields task 007 retained, fetch through the ``DocumentFetcher`` seam
+retained provider fields, fetch through the ``DocumentFetcher`` seam
 (current build: fixture replay of committed real, openly-licensed documents — zero
 runtime egress until the live-fetcher slice opens that gate; live fetching is
 v3.0-required, see docs/deferred.md), parse structure-aware (PDF via pymupdf4llm,
@@ -12,18 +12,18 @@ snapshot to the corpus document via ``task_source_snapshot.full_text_snapshot_id
 
 Never truncate: a stored ``full_text`` snapshot is the whole parsed document; the
 fetch byte cap and the hard per-document parse timeout are guards that fail loudly
-(``too_large`` / ``timeout``), never scissors (contract decision 6). A failed source
+(``too_large`` / ``timeout``), never scissors. A failed source
 stays on the text in hand with a queryable, reason-coded ``full_text_status`` —
 nothing is dropped, nothing is silent (decision 3).
 
-Task 057 (P8, P9): one document is handled by one call of
+One document is handled by one call of
 ``ingest_document.ingest_document`` (fetch, store-key lookup, parse in its own
 terminable process, one short write transaction). The stage below queues the
 eligible documents, sends one message per document to a queue client, waits for
 the documents to resolve, and embeds. The in-process client runs the function on a
-thread pool, one database connection per thread; the cloud client (Phase 4b) puts
+thread pool, one database connection per thread; the cloud client puts
 the messages on a queue that a function reads. Parse workers receive primitives
-only (decision 8, adversarial findings 6 + 7). Each document's text is decided by
+only. Each document's text is decided by
 its own bytes, so the persisted outcome does not depend on the number of workers.
 """
 
@@ -119,28 +119,28 @@ _install_deterministic_column_boxes()
 
 FETCH_BYTE_CAP = 100 * 1024 * 1024  # generous guard, never a scissor (decision 6)
 PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is terminated
-# (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
+# (120s: generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
 # Parse workers are separate processes doing CPU-bound work, so the width follows
-# the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
-# (task 044 phase 8, owner 2026-09-17). In process (task 057) the ingest threads
-# are ``ingest_queue.IN_PROCESS_INGEST_THREADS`` (10, owner 2026-11-04); this
+# the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine.
+# In process the ingest threads
+# are ``ingest_queue.IN_PROCESS_INGEST_THREADS`` (10); this
 # count still bounds the parse step through ``INGEST_SLOTS``.
 DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
-#: Live parse-job worker processes across every walk in the process (task 045,
-#: S2). Defined here, beside the width it is sized from, so the cloud function's
+#: Live parse-job worker processes across every walk in the process.
+#: Defined here, beside the width it is sized from, so the cloud function's
 #: handler takes it without importing the runtime (``runtime.walk_pool``
-#: re-exports it), task 057.
+#: re-exports it).
 INGEST_SLOTS = threading.BoundedSemaphore(DEFAULT_MAX_WORKERS)
 # How often the stage reads the documents' statuses while they are being ingested.
 STAGE_POLL_SECONDS = 3.0
-# Task 057 (N2, D4): the per-document deadline, as a ``time.monotonic()`` value, for
+# The per-document deadline, as a ``time.monotonic()`` value, for
 # the fetcher's waits (set by ``ingest_document`` around its fetches; None in
 # process). No wait or parse is started that would end within the margin of it.
 FETCH_DEADLINE: ContextVar[float | None] = ContextVar("fetch_deadline", default=None)
 DEADLINE_MARGIN_S = 5.0
 
-# Parse profile v2 (task 057, N7/D8): the same parsers and cuts as v1, with the markup
+# Parse profile v2: the same parsers and cuts as v1, with the markup
 # rule (``core.markup.strip_markup``) applied to every chunk's text and heading. The v1
 # names stay on the snapshots parsed under v1; the parser no longer stamps them.
 PDF_PARSE_PROFILE = "pymupdf4llm_v2"
@@ -150,7 +150,7 @@ PDF_SEGMENTATION_POLICY = "pymupdf4llm_struct_v2"
 HTML_SEGMENTATION_POLICY = "trafilatura_para_v2"
 PLAIN_SEGMENTATION_POLICY = "plain_para_v2"
 
-# Europe PMC JATS XML (task 056, N10/S7). The live fetcher never labels a body
+# Europe PMC JATS XML. The live fetcher never labels a body
 # with an XML type (it sniffs PDF / HTML / plain), so only the Europe PMC
 # candidate reaches the JATS branch of ``parse_and_segment``.
 EUROPE_PMC_XML_CONTENT_TYPE = "application/xml"
@@ -158,7 +158,7 @@ _JATS_CONTENT_TYPES = frozenset({"application/xml", "text/xml"})
 # Which route served an ingested document (stored as ``source_kind`` on the
 # full-text snapshot's metadata; counted as ``by_route`` in the run summary).
 ROUTE_EUROPE_PMC_XML = "europe_pmc_xml"
-# Europe PMC full-text XML endpoint (task 056 S7, egress approved 2026-11-01): the only
+# Europe PMC full-text XML endpoint: the only
 # thing sent is the PubMed Central id, in the path.
 EUROPE_PMC_HOST = "www.ebi.ac.uk"
 EUROPE_PMC_FULL_TEXT_URL = (
@@ -168,15 +168,15 @@ EUROPE_PMC_FULL_TEXT_URL = (
 # the "PMC" prefix (e.g. ``https://www.ncbi.nlm.nih.gov/pmc/articles/5264339``).
 _PMCID_LOOSE_RE = re.compile(r"(?:^|/)(?:PMC)?([0-9]{1,12})/?$", re.IGNORECASE)
 
-# Closed failure-reason vocabulary (contract decision 3). Presence on failure is
+# Closed failure-reason vocabulary. Presence on failure is
 # CHECK-enforced (ck_tss_full_text_error_presence); the values are code-enforced so
 # the list can grow at the live seam without a migration.
 #
-# Task 057 adds two reasons the stage writes, never the per-document function, and
+# Two reasons are written by the stage, never the per-document function, and
 # neither is an access failure: ``not_ready`` (the document was still being read
 # when the stage stopped waiting; the next run tries it again) and ``send_failed``
-# (the queue refused the message). ``worker_error`` (task 057 review, Codex 8 /
-# security 3) is written by the cloud handler on its last delivery: the function
+# (the queue refused the message). ``worker_error``
+# is written by the cloud handler on its last delivery: the function
 # failed outside the per-document vocabulary; not an access failure.
 FAILURE_REASONS = (
     "no_url", "paywall", "not_found", "too_large", "timeout",
@@ -184,13 +184,13 @@ FAILURE_REASONS = (
     "blocked", "blocked_by_host", "fetch_error", "unsupported_type",
     "not_ready", "send_failed", "worker_error",
 )
-# task 057 review (Codex 9, deviation 10): the reasons that mean "not read yet"
+# The reasons that mean "not read yet"
 # (the document was never judged), not "could not be read"; one shared set.
 NOT_READ_YET_REASONS = frozenset({"not_ready", "send_failed", "worker_error"})
 
 # Base content types that are never parseable text; anything here fails fast with
-# a reason-coded outcome instead of being chunked as text (prod incident 2026-08-19:
-# a JPEG routed to the plain path and its NUL bytes killed the whole run at INSERT).
+# a reason-coded outcome instead of being chunked as text (a JPEG routed to the
+# plain path would carry NUL bytes into the INSERT and kill the whole run).
 _NON_TEXT_TYPE_PREFIXES = ("image/", "audio/", "video/", "font/", "model/")
 
 # A short page telling the client to enable JavaScript or cookies is the host
@@ -351,7 +351,7 @@ class FixtureFetcher:
     """Replays committed real documents by URL from the manifest. Zero egress.
 
     The fixture corpus is repo test data (``tests/data``), not package data — it
-    never ships in the wheel (contract decision 12). URLs map to outcomes in
+    never ships in the wheel. URLs map to outcomes in
     ``fulltext_manifest.json``: ``ok`` entries read the committed document bytes;
     ``http_error``/``oversize`` entries replay the recorded failure. An unmapped
     URL is a dead link (``not_found``). The manifest loads lazily on first
@@ -473,7 +473,7 @@ _DOI_HOSTS = frozenset({"doi.org", "dx.doi.org"})
 
 
 def _valid_doi(value: Any) -> str | None:
-    """Validate a bare, normalised DOI string (contract decision 7 recall aid).
+    """Validate a bare, normalised DOI string (a recall aid).
 
     Must be a ``str`` matching ``^10\\.\\d{4,9}/\\S{1,200}$`` and contain no
     control characters — ``\\S`` alone does not exclude them (e.g. embedded
@@ -523,8 +523,8 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
     ``pdf_url`` → ``document_url``. Deduplicated preserving order; non-URL
     sentinels (e.g. Overton's ``"n/a"``) are treated as absent.
 
-    Every URL above is verbatim provider metadata. The one exception (contract
-    decision 3/7) is a DOI-URL fallback: when ``metadata["doi"]`` is a valid
+    Every URL above is verbatim provider metadata. The one exception
+    is a DOI-URL fallback: when ``metadata["doi"]`` is a valid
     bare DOI (see ``_valid_doi``), ``https://doi.org/<percent-encoded doi>`` is
     appended as the LAST cascade entry — the one URL this function constructs
     rather than receives — unless an equivalent doi.org/dx.doi.org URL is
@@ -553,7 +553,7 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
         raw = [fields.get("pdf_url"), fields.get("document_url")]
     else:
         # An unmapped backend would otherwise masquerade as a per-document no_url
-        # data problem — surface the wiring gap loudly (review finding).
+        # data problem — surface the wiring gap loudly.
         log.warning("fulltext.unknown_backend", backend=backend)
         raw = []
     urls: list[str] = []
@@ -629,7 +629,7 @@ _ANCHOR_SCAN_CAP = 2000  # bounds worst-case anchor scan cost on huge landing pa
 def discover_document_url(html_body: bytes, base_url: str) -> str | None:
     """Discover a document URL from a fetched HTML landing page.
 
-    Pure, side-effect-free recall aid (contract decision 7): no fetching and no
+    Pure, side-effect-free recall aid: no fetching and no
     SSRF validation beyond URL shape — the caller validates any returned URL
     before use.
 
@@ -721,7 +721,7 @@ def _segment_markdown_pages(pages: list[tuple[int, str]]) -> list[dict[str, Any]
     Sections may span pages; each chunk's locator carries its page number(s) and
     the heading path in force (decision 7 — the provenance v2 threw away).
 
-    Parse profile v2 (task 057, N7): the markup rule runs on every line as it is
+    Parse profile v2: the markup rule runs on every line as it is
     read, after the line has been recognised as a heading, a table row or body
     text, so the structure (which lines are headings, which are tables) is decided
     exactly as in v1. Body lines are cleaned with ``table=False`` (a ``<br>`` starts
@@ -820,8 +820,8 @@ def _parse_pdf(body: bytes) -> dict[str, Any]:
         (int(pg.get("metadata", {}).get("page", i + 1)), str(pg.get("text", "")))
         for i, pg in enumerate(page_dicts)
     ]
-    # \w is Unicode-aware: a text layer in any script counts (review finding — the
-    # previous ASCII-only class misread e.g. CJK/Arabic PDFs as no_text_layer).
+    # \w is Unicode-aware: a text layer in any script counts (an ASCII-only
+    # class would misread e.g. CJK/Arabic PDFs as no_text_layer).
     if not any(re.search(r"\w", text) for _, text in pages):
         return {"status": "error", "reason": "no_text_layer"}
     chunks = _segment_markdown_pages(pages)
@@ -926,7 +926,7 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
     Args:
         body: Raw document bytes.
         content_type: ``"application/pdf"`` | ``"text/html"`` | ``"text/plain"`` |
-            ``"application/xml"`` / ``"text/xml"`` (Europe PMC JATS, task 056).
+            ``"application/xml"`` / ``"text/xml"`` (Europe PMC JATS).
         thin_min: Minimum total parsed characters; below it → ``thin_text``.
 
     Returns:
@@ -990,7 +990,7 @@ def _worker_entry(
     thin_min: int,
 ) -> None:
     """Worker-process entrypoint: parse, send the result, exit. Top-level so it pickles."""
-    # task 057 review (security 1): the worker denies itself sockets before
+    # The worker denies itself sockets before
     # parsing; the result pipe is already open, so nothing needs one after this.
     # (This assignment only takes sockets away; the module's no-network-client
     # guard forbids constructing one, not naming the module.)
@@ -1004,7 +1004,7 @@ def _worker_entry(
 
 
 def _parse_process_context() -> Any:
-    """Return the start-method context for parse workers (task 056, N8).
+    """Return the start-method context for parse workers.
 
     A ``forkserver`` context whose helper ("server") process imports this module
     once, and with it pymupdf4llm, trafilatura and the determinism patch above.
@@ -1040,11 +1040,11 @@ def run_parse_worker(
 ) -> dict[str, Any]:
     """Parse one document in its own process, killing it if it runs out of time.
 
-    The process is forked from the preloaded forkserver (task 056, N8), so it
+    The process is forked from the preloaded forkserver, so it
     starts in milliseconds, and it is a real process, so a parser stuck in native
-    code can be terminated (adversarial finding 6). It receives primitives only
-    (finding 7). While it runs it holds one of the process-wide ingest slots
-    (task 045, S2), so every walk in the process shares one budget of parse
+    code can be terminated. It receives primitives only.
+    While it runs it holds one of the process-wide ingest slots,
+    so every walk in the process shares one budget of parse
     processes. The pipe is readable when the worker has sent its result or has
     died, so a child busy sending a large result is never misread as a timeout.
 
@@ -1402,7 +1402,7 @@ def _close_queued(
                 task_source_snapshot.update()
                 .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
                 .where(task_source_snapshot.c.full_text_status == "queued")
-                # task 057 review (Codex 1 / security 8): only this run's rows.
+                # Only this run's rows.
                 .where(task_source_snapshot.c.ingested_by_run_id == run_id)
                 .values(
                     full_text_snapshot_id=None,
@@ -1447,7 +1447,7 @@ _EMBED_COUNT_KEYS = (
 
 
 class _StageEmbedder:
-    """Embeds the stage's documents on its own thread as they arrive (task 057, D6).
+    """Embeds the stage's documents on its own thread as they arrive.
 
     The stage hands it the snapshots that became ``ingested`` at each tick; the
     thread embeds their chunks through the stage's one :class:`AdaptivePool`,
@@ -1553,7 +1553,7 @@ class _StageEmbedder:
             "embedded": sum(p["embedded"] for p in passes),
             "already_embedded": final["already_embedded"] - sum(p["embedded"] for p in earlier),
             "failed": final["failed"],
-            # task 057 review: chunks the pool gave up for throttling this pass (no
+            # Chunks the pool gave up for throttling this pass (no
             # vector written; the next run picks them up), kept apart from failures.
             "deferred": final["deferred"],
             "skipped_no_units": final["skipped_no_units"],
@@ -1582,7 +1582,7 @@ def ingest_full_text_sources(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
-    """Ingest full text for a scope's screened-in acquired sources (task 057, P9).
+    """Ingest full text for a scope's screened-in acquired sources.
 
     One path in both ingest modes. In its own committed transaction the stage
     sets every eligible document that is not yet ``ingested`` to ``queued`` (a
@@ -1595,7 +1595,7 @@ def ingest_full_text_sources(
     ``ingest`` progress ticks. A document still ``queued`` when the stage stops
     waiting becomes ``fetch_failed`` with reason ``not_ready``.
 
-    Embedding (task 057, D6): with a real ``connect``, each tick hands the
+    Embedding: with a real ``connect``, each tick hands the
     documents that arrived since the last tick to an embedding thread, which
     embeds their chunks through one adaptive pool on its own connections, so
     the polls and the deadline never wait on it; before returning, the stage
@@ -1750,7 +1750,7 @@ def _run_stage(
                         full_text_snapshot_id=None,
                         full_text_status="queued",
                         full_text_error=None,
-                        # task 057 review (Codex 1 / security 8): stamp the run
+                        # Stamp the run
                         # that queued the row; the guarded writes require it.
                         ingested_by_run_id=run_id,
                     )
@@ -1792,7 +1792,7 @@ def _run_stage(
         if isinstance(queue, LocalQueueClient) and queue.inline:
             do_send()
         else:
-            # task 057 review (code-review 3): carry the caller's contextvars
+            # Carry the caller's contextvars
             # (structlog run binding, Langfuse propagation) onto the sender.
             sender = threading.Thread(
                 target=contextvars.copy_context().run,

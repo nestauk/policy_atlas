@@ -1,4 +1,4 @@
-"""Task 057 (N4, N5, N11): the queued ingest worker and its alarms, pinned value by value.
+"""The queued ingest worker and its alarms, pinned value by value.
 
 Each test reads the synthesized templates built once in ``test_synth``.
 """
@@ -72,7 +72,7 @@ def _api_environment(template: dict) -> dict:
     return {item["Name"]: item["Value"] for item in container["Environment"]}
 
 
-# --- Queue and dead-letter queue (N4, N11) ---
+# --- Queue and dead-letter queue ---
 
 
 def test_ingest_queue_retention_encryption_visibility_and_dead_letter_after_two_tries():
@@ -108,7 +108,7 @@ def test_both_queues_refuse_unencrypted_transport():
         assert statement["Condition"] == {"Bool": {"aws:SecureTransport": "false"}}
 
 
-# --- Function (N4, N11, D5, D6) ---
+# --- Function ---
 
 
 def test_ingest_function_sizing_and_image_command():
@@ -137,7 +137,8 @@ def test_ingest_function_uses_the_same_backend_image_as_the_api_and_migration():
         json.dumps(resource["Properties"]["ContainerDefinitions"][0]["Image"])
         for _, resource in _resources(APP, "AWS::ECS::TaskDefinition")
     ]
-    assert len(task_images) == 2
+    # The API, the migration task and the ops service share the one image.
+    assert len(task_images) == 3
     assert all(function_tag in image for image in task_images)
 
     # The backend asset is created once per app stack, from ../backend.
@@ -160,7 +161,7 @@ def test_ingest_function_runs_in_the_private_subnets_with_its_own_security_group
     assert set(vpc_config["SubnetIds"]) == set(service_subnets)
     # Outbound only; nothing is allowed in.
     assert "SecurityGroupIngress" not in sg["Properties"]
-    # Outbound is three rules (owner ruling 2026-11-04): 80 and 443 to the internet,
+    # Outbound is three rules: 80 and 443 to the internet,
     # 5432 to the database group. Not "allow all".
     inline = sg["Properties"]["SecurityGroupEgress"]
     assert sorted((r["CidrIp"], r["IpProtocol"], r["FromPort"], r["ToPort"]) for r in inline) == [
@@ -243,7 +244,7 @@ def test_ingest_function_log_group_keeps_thirty_days():
     assert function["Properties"]["LoggingConfig"]["LogGroup"] == {"Ref": log_group_id}
 
 
-# --- Event-source mapping (N5) ---
+# --- Event-source mapping ---
 
 
 def test_event_source_mapping_takes_one_message_at_a_time_with_a_cap_of_twenty():
@@ -258,7 +259,7 @@ def test_event_source_mapping_takes_one_message_at_a_time_with_a_cap_of_twenty()
     assert mapping["FunctionResponseTypes"] == ["ReportBatchItemFailures"]
 
 
-# --- API task side (N11) ---
+# --- API task side ---
 
 
 def test_api_task_role_may_only_send_to_the_ingest_queue():
@@ -268,7 +269,7 @@ def test_api_task_role_may_only_send_to_the_ingest_queue():
         for logical_id, resource in _resources(APP, "AWS::IAM::Policy")
         if logical_id.startswith("PolicyAtlasBackendTaskDefTaskRole")
     ]
-    # The role also reads and writes the uploads bucket (task 054); one statement names SQS.
+    # The role also reads and writes the uploads bucket; one statement names SQS.
     (statement,) = [
         statement
         for policy in task_role_policies
@@ -297,7 +298,7 @@ def test_ingest_mode_is_set_per_environment_in_the_config():
         env_name: env_config["policy_atlas_config"]["backend"]["ingest_mode"]
         for env_name, env_config in config.items()
     }
-    # Owner 2026-11-04: production is queued too; nothing reaches production before it is
+    # Production is queued too; nothing reaches production before it is
     # tested on staging, and the function is built for every environment.
     assert modes == {"staging": "queued", "prod": "queued"}
 
@@ -323,7 +324,7 @@ def test_an_unknown_ingest_mode_is_rejected_at_synth():
         )
 
 
-# --- Alarms (N4, N11) ---
+# --- Alarms ---
 
 
 def test_dead_letter_queue_depth_alarm():

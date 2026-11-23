@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AUTH_RETURN_TO_KEY, OidcAuthProvider } from "./OidcAuthProvider";
@@ -131,5 +132,30 @@ describe("OidcAuthProvider splash gating", () => {
         logout_uri: window.location.origin,
       },
     });
+  });
+});
+
+describe("OidcAuthProvider token on the sign-in render", () => {
+  it("gives a child's first effect after sign-in the new token", async () => {
+    const seen: (string | null)[] = [];
+    function Reader() {
+      const auth = useAuth();
+      useEffect(() => {
+        if (auth.status === "authenticated") void auth.getAccessToken().then((token) => seen.push(token));
+      }, [auth]);
+      return null;
+    }
+    oidcState = { isLoading: false, isAuthenticated: false, activeNavigator: undefined, error: undefined, user: null };
+    const { rerender } = render(<OidcAuthProvider><Reader /></OidcAuthProvider>);
+    oidcState = {
+      isLoading: false,
+      isAuthenticated: true,
+      activeNavigator: undefined,
+      error: undefined,
+      user: { access_token: "fresh", profile: { sub: "user-1" } },
+    };
+    rerender(<OidcAuthProvider><Reader /></OidcAuthProvider>);
+
+    await waitFor(() => expect(seen).toEqual(["fresh"]));
   });
 });

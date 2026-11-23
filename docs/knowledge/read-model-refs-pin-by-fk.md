@@ -3,7 +3,9 @@ type: Convention
 title: A read model resolving another table's payload pins the referencing row's FK — never "latest by created_at"
 description: The synthesis row records characterisation_run_id/grouping_run_id exactly so consumers resolve the artefact's OWN themes; latest-by-created_at let a later run's reused theme ids (e.g. intervention:g01) relabel an older committed artefact. Pin by the recorded FK; a NULL reference resolves to nothing, honestly.
 tags: [read-models, foreign-keys, provenance, artefact, themes]
-timestamp: 2026-07-29
+generated:
+  by: process:okf-migrate
+  at: 2026-07-29
 ---
 
 # Rule

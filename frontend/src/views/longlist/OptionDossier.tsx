@@ -4,8 +4,8 @@ import { Sheet, SheetContent } from "../../ui/radix/Sheet";
 import { DOSSIER_LOADING_LINE, SourceDossierBody, useDossierRecords } from "../SourcesView";
 
 /**
- * A document's dossier over the option card (round 12, owner bug: a
- * document opened the Sources tab). The Sources tab's sheet, read by the
+ * A document's dossier over the option card, so a document does not
+ * open the Sources tab. The Sources tab's sheet, read by the
  * document's id, its slot reading "In this option"; the reader stays on the
  * card, and closing returns to it.
  *

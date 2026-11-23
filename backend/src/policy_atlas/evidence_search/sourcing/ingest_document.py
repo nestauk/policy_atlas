@@ -1,8 +1,8 @@
-"""Ingest one document: fetch, look it up in the document store, parse, write (task 057).
+"""Ingest one document: fetch, look it up in the document store, parse, write.
 
 This is the one function both ingest modes run for each document (plan P8): the
 in-process thread pool calls it on the API's machine, and the cloud function
-(Phase 4b) calls it once per queue message. It is given the id of a link row (a
+calls it once per queue message. It is given the id of a link row (a
 ``task_source_snapshot`` row) in status ``queued`` and:
 
 1. reads the link row and its envelope snapshot's metadata (one short read; a row
@@ -13,7 +13,7 @@ in-process thread pool calls it on the API's machine, and the cloud function
    when a parse fails, the open-access cross-check and the reason priority;
 3. hashes each fetched body and looks the store key (body hash, parse profile,
    segmentation policy) up BEFORE parsing; a hit links the existing snapshot
-   without parsing again (N9);
+   without parsing again;
 4. otherwise parses in its own process with the 120 s kill;
 5. writes the result in one short transaction whose link-row update is guarded on
    ``full_text_status = 'queued'`` and on the message's run, so a result that
@@ -21,9 +21,9 @@ in-process thread pool calls it on the API's machine, and the cloud function
    changes nothing on the row (the parsed snapshot still joins the store).
 
 ``ingested_by_run_id`` is the run that last queued the row; it is stamped at
-queue time and required by the guarded writes (task 057 review, Codex 1 /
-security 8). A store hit whose snapshot the retention script deleted between the
-lookup and the write is parsed afresh and written again (Codex 7 / code-review 2).
+queue time and required by the guarded writes.
+A store hit whose snapshot the retention script deleted between the
+lookup and the write is parsed afresh and written again.
 
 No connection is held while fetching or parsing. The shared snapshot row carries
 no task, user, run or URL key beyond the public document address in
@@ -146,7 +146,7 @@ def _read_queued_row(
             )
             .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
         ).one_or_none()
-    # task 057 review (Codex 1 / security 8): a stale delivery from a run that no
+    # A stale delivery from a run that no
     # longer owns the row does no fetch at all.
     if row is None or row.full_text_status != "queued" or row.ingested_by_run_id != run_id:
         return None
@@ -203,7 +203,7 @@ def _write_ingested(
                     source_snapshot_id=uuid.uuid4(),
                     content_hash=content_hash("".join(c["content"] for c in parsed.chunks)),
                     text_basis="full_text",
-                    # The public document address (owner item 4); no task, user or run key.
+                    # The public document address; no task, user or run key.
                     source_locator=fetched_from,
                     metadata={
                         "parse_profile": parsed.parse_profile,
@@ -252,7 +252,7 @@ def _write_ingested(
             task_source_snapshot.update()
             .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
             .where(task_source_snapshot.c.full_text_status == "queued")
-            # task 057 review (Codex 1 / security 8): only the run that queued it.
+            # Only the run that queued it.
             .where(task_source_snapshot.c.ingested_by_run_id == run_id)
             .values(
                 full_text_snapshot_id=snapshot_id,
@@ -279,7 +279,7 @@ def _write_failed(
             task_source_snapshot.update()
             .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
             .where(task_source_snapshot.c.full_text_status == "queued")
-            # task 057 review (Codex 1 / security 8): only the run that queued it.
+            # Only the run that queued it.
             .where(task_source_snapshot.c.ingested_by_run_id == run_id)
             .values(
                 full_text_snapshot_id=None,
@@ -344,7 +344,7 @@ def ingest_document(
         )
 
     doc = _DocState(tss_id=tss_id, metadata=metadata, urls=candidate_urls(metadata))
-    # Europe PMC XML first (task 056, N10/S7) for documents with a PubMed Central
+    # Europe PMC XML first for documents with a PubMed Central
     # id, then the PDF-first URL cascade unchanged; only when the fetcher offers
     # the Europe PMC hook (the live fetcher does; fixture replay stays zero-egress).
     if callable(getattr(fetcher, "fetch_europe_pmc_xml", None)):
@@ -353,7 +353,7 @@ def ingest_document(
             doc.xml_pmcid, doc.xml_url = xml
             doc.urls = [doc.xml_url, *(u for u in doc.urls if u != doc.xml_url)]
     if not doc.urls:
-        # Durable state, distinguishable from not_attempted (adversarial finding 1)
+        # Durable state, distinguishable from not_attempted
         doc.resolution, doc.reason = "fetch_failed", "no_url"
         doc.fetch_failure_reasons.append("no_url")
 
@@ -363,7 +363,7 @@ def ingest_document(
     deadline_cut = False
     parsed: _Parsed | None = None
     # The body a store hit linked, kept for a fresh parse if its snapshot is
-    # pruned under the write (task 057 review, Codex 7 / code-review 2).
+    # pruned under the write.
     hit_body: tuple[bytes, str] | None = None
     token = FETCH_DEADLINE.set(deadline)
     try:
@@ -449,7 +449,7 @@ def ingest_document(
                 content_type=doc.content_type or "application/octet-stream", route=route,
             )
         except IntegrityError as exc:
-            # task 057 review (Codex 7 / code-review 2): the retention script
+            # The retention script
             # deleted the store hit's snapshot between the lookup and the link
             # write; parse the same bytes afresh and write again.
             if hit_body is None or getattr(exc.orig, "sqlstate", None) != _FOREIGN_KEY_VIOLATION:
@@ -513,7 +513,7 @@ def ingest_document(
         _apply_oa_cross_check(doc)
     # failure ⟺ closed-vocabulary reason (the CHECK enforces presence; the
     # vocabulary is code-enforced here, as the FAILURE_REASONS comment claims)
-    # task 057 review (Codex 8): the not-read-yet reasons are never this function's.
+    # The not-read-yet reasons are never this function's.
     assert doc.reason in FAILURE_REASONS and doc.reason not in NOT_READ_YET_REASONS, (
         doc.reason
     )

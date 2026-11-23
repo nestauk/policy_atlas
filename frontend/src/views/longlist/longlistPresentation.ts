@@ -7,10 +7,10 @@ import { formatCount } from "../../lib/format";
 
 /**
  * Presentation helpers shared by the longlist's three surfaces (list view,
- * reduced grid, option card) — task 045 phase 6.2. Structure-and-plumbing:
- * every string here is either given verbatim by the task contract/brief or
+ * reduced grid, option card). Structure-and-plumbing:
+ * every string here is either fixed copy or
  * a direct template of a read-model field. No summary prose, no writer
- * call — the option card is assembled, not written (D15).
+ * call — the option card is assembled, not written.
  */
 
 type RelationOut = components["schemas"]["RelationOut"];
@@ -24,7 +24,7 @@ export function capitalise(value: string): string {
 }
 
 /** The origin words, one vocabulary from the first row of the build to the
- *  option card (round 10, C1). The one place the `origin` literal becomes
+ *  option card. The one place the `origin` literal becomes
  *  words. */
 export const ORIGIN_WORDS: Record<OptionSummaryOut["origin"], string> = {
   from_evidence_search: "from your report",
@@ -34,7 +34,7 @@ export const ORIGIN_WORDS: Record<OptionSummaryOut["origin"], string> = {
 };
 
 /**
- * Who "you" is in the longlist's words (owner, 2026-11-10): the owner reads
+ * Who "you" is in the longlist's words: the owner reads
  * "you"; a colleague in the organisation, the owner's first name and surname
  * initial; a public link, "the owner".
  *
@@ -73,16 +73,16 @@ export function originWords(origin: OptionSummaryOut["origin"], who = "you"): st
 }
 
 /** The option card's origin: the row's words, and for an option drawn from
- *  the linked report the section it came from (task 045, F3; round 10, C1:
- *  "from your report · <section>"). */
+ *  the linked report the section it came from ("from your report ·
+ *  <section>"). */
 export function originLabel(origin: OptionSummaryOut["origin"], fromSection?: string | null, who = "you"): string {
   const section = fromSection?.trim() ?? "";
   const words = originWords(origin, who);
   return origin === "from_evidence_search" && section !== "" ? `${words} · ${section}` : words;
 }
 
-/** One relation, rendered from this option's side (contract § Terms
- *  "package"; the list view and card both use this literal wording). */
+/** One relation, rendered from this option's side (the list view and
+ *  card both use this literal wording). */
 export function relationLabel(relation: RelationOut): string {
   return relation.kind === "part_of" ? `part of ${relation.other_name}` : `includes ${relation.other_name}`;
 }
@@ -105,8 +105,8 @@ export function constraintLabel(text: string): string {
 }
 
 /**
- * The reason a group's Exclude records on each of its options (round 13,
- * owner): "with the theme <name>" or "with the lever <name>", the reader's
+ * The reason a group's Exclude records on each of its options:
+ * "with the theme <name>" or "with the lever <name>", the reader's
  * own words after a colon when they give some.
  *
  * Args:
@@ -126,13 +126,12 @@ type ExclusionOut = components["schemas"]["ExclusionOut"];
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
 /**
- * An excluded option's facts on the option card (round 15, owner: "Breaks"
- * was hard to read): the constraint it does not meet (none for the
+ * An excluded option's facts on the option card: the constraint it does not meet (none for the
  * reader's own exclusion), why (Policy Atlas's or the reader's reason, the
  * group's words moved to the heading), and the block's Red heading saying
  * by whom: "Does not meet a constraint" (`by` is "constrain", Policy Atlas
  * judging it against the plan's constraints), or "Excluded by you" and
- * " · with the theme <name>" for a group's exclusion (owner: no By row).
+ * " · with the theme <name>" for a group's exclusion (no By row).
  *
  * Args:
  *   exclusion: Who excluded the option, the constraint and the reason.
@@ -156,7 +155,7 @@ export function exclusionFacts(exclusion: Pick<ExclusionOut, "by" | "constraint"
 }
 
 /**
- * An excluded row's or tile's one short phrase (round 15, owner): who or
+ * An excluded row's or tile's one short phrase: who or
  * what excluded it, never the constraint's name or a reason; the option
  * card keeps the full facts (`exclusionFacts`).
  *
@@ -181,20 +180,20 @@ export function joinAnd(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-/** The note on the documents line about how they were read (task 046, amendment 4, R81). */
+/** The note on the documents line about how they were read. */
 export const ABSTRACTS_NOTE = "read from titles and abstracts only";
 
 /** The words for an option with no in-scope evidence, as plain text at the
- *  end of the row's meta line (round 10: no chip for a settled state). */
+ *  end of the row's meta line (no chip for a settled state). */
 export const NO_IN_SCOPE_WORDS = "No in-scope evidence";
 
 /** Under "Where it has been evaluated" when no document evaluated the
- *  option (round 12, owner). */
+ *  option. */
 export const NOT_EVALUATED_LINE = "Not evaluated in any of these sources.";
 
 /**
- * A list row's one meta line (round 11, review finding 4; round 10's fixed
- * order kept): the lever (or, under a lever heading, the theme), the
+ * A list row's one meta line, in a fixed
+ * order: the lever (or, under a lever heading, the theme), the
  * evidence signal's first part, then "No in-scope evidence" when that holds.
  * "searching for its evidence…" stands for the signal while the option's
  * own search runs. Relations, origin and the rest of the signal are the
@@ -222,7 +221,7 @@ export function rowMetaFields(
   if (lever !== null) fields.push(lever);
   if (theme !== null) fields.push(theme);
   if (option.search_pending) fields.push("searching for its evidence…");
-  // The count alone on the list (round 13, owner: no evaluated / describe
+  // The count alone on the list (no evaluated / describe
   // split on the page); the card keeps the split.
   else fields.push(option.document_count === 0 ? noDocumentsWords(building) : countOf(option.document_count, "document", "documents"));
   if (option.no_in_scope_evidence) fields.push(NO_IN_SCOPE_WORDS);
@@ -271,7 +270,7 @@ export function instrumentsSummary(
   return joinAnd(ordered.map(leverNoun));
 }
 
-/** The group of options no lever type names (round 13, owner: "Other",
+/** The group of options no lever type names ("Other",
  *  not "No lever fits"), sorted last. */
 export const OTHER_LEVER = "Other";
 
@@ -288,7 +287,7 @@ export function byLeverThenName(leverTypes: readonly string[]) {
 }
 
 /** A row's lever, as the first thing after its name: "Provide a service".
- *  A row carries no mark and no ambition word (R40, R44). */
+ *  A row carries no mark and no ambition word. */
 export function leverLabel(option: OptionSummaryOut): string {
   return option.primary_lever_type == null ? OTHER_LEVER : capitalise(option.primary_lever_type);
 }
@@ -299,24 +298,24 @@ export function definitionSentence(definition: string | null | undefined): strin
   return text === "" ? "" : `${capitalise(text)}.`;
 }
 
-/** A collapsed theme's summary: its description (owner, 2026-09-23: no
+/** A collapsed theme's summary: its description (no
  *  option names). */
 export function themeSummary(description: string): string {
   return description.trim();
 }
 
-/** The lever line on the option card (task 046, amendment 3, § 2.5): "Lever:
+/** The lever line on the option card: "Lever:
  *  Subsidise, with Regulate and Provide a service." — the primary type and the
- *  secondary types, or "Lever: other." when no type fits (round 13, owner). The reason is a
+ *  secondary types, or "Lever: other." when no type fits. The reason is a
  *  separate sentence under it. */
 export function leverLine(primary: string | null | undefined, secondary: string[] | undefined): string {
-  // One sentence with the lever nouns (round 12, owner): "Lever: regulation."
+  // One sentence with the lever nouns: "Lever: regulation."
   if (primary == null) return "Lever: other.";
   const also = (secondary ?? []).map(leverNoun);
   return also.length > 0 ? `Lever: ${leverNoun(primary)}, with ${joinAnd(also)}.` : `Lever: ${leverNoun(primary)}.`;
 }
 
-/** A lever group's definition (task 046, AM19): the definition of the
+/** A lever group's definition: the definition of the
  *  taxonomy version its options were typed under, when they share one the
  *  longlist knows; the current list's definition otherwise. */
 export function leverDefinitionFor(
@@ -333,14 +332,13 @@ export function leverDefinitionFor(
 }
 
 /** The line under the longlist's counts that says how its documents were
- *  read (round 10, C4: it replaces the "scoping pass" chip and its hover
- *  sentence). */
+ *  read. */
 export const READ_FROM_ABSTRACTS = "Read from titles and abstracts";
 
 
 type LonglistCountsOut = components["schemas"]["LonglistCountsOut"];
 
-/** The distinct lever types among the included options (round 12): an
+/** The distinct lever types among the included options: an
  *  option with no lever adds none. */
 export function leverCount(
   options: readonly Pick<OptionSummaryOut, "state" | "primary_lever_type">[] | null | undefined,
@@ -352,8 +350,8 @@ export function leverCount(
   return levers.size;
 }
 
-/** The counts line under the longlist title (task 046, amendment 4, R83), as parts:
- *  "40 options in 12 themes and 3 levers" (round 12, owner: the levers are
+/** The counts line under the longlist title, as parts:
+ *  "40 options in 12 themes and 3 levers" (the levers are
  *  counted too), then " · 3 excluded" only when some are (the view links it
  *  in list mode), then " · 2 with no in-scope evidence" only when some are.
  *  One source of the words. */
@@ -367,7 +365,7 @@ export function countsParts(
 } {
   return {
     // No theme count before the theme step has run (or when it wrote none):
-    // "in 0 themes" would read as a result (review of task 046, 2026-10-12).
+    // "in 0 themes" would read as a result.
     head: (() => {
       const spans = [
         ...(counts.themes > 0 ? [countOf(counts.themes, "theme", "themes")] : []),
@@ -380,7 +378,7 @@ export function countsParts(
   };
 }
 
-/** The counts line as one string: the excluded part only when K > 0 (R83). */
+/** The counts line as one string: the excluded part only when K > 0. */
 export function countsLine(counts: LonglistCountsOut, levers = 0): string {
   const { head, excluded, noInScope } = countsParts(counts, levers);
   return [head, excluded, noInScope].filter((part): part is string => part !== null).join(" · ");
@@ -402,22 +400,22 @@ type ProfileLineKey = components["schemas"]["ProfileLineOut"]["key"];
 type Mark = "less" | "more";
 type AuthorityOut = components["schemas"]["AuthorityOut"];
 
-/** The nine profile lines, in display order (R37; Potential impact last, task
- *  055); the last entry of the shared vocabulary, transferability, is read at
+/** The nine profile lines, in display order (Potential impact
+ *  last); the last entry of the shared vocabulary, transferability, is read at
  *  assessment and not listed. */
 export const PROFILE_LINE_KEYS = (Object.keys(PROFILE_LINE_LABELS) as string[]).filter(
   (key): key is ProfileLineKey => key !== "transferability",
 );
 
-/** The name of a profile line or of ambition (R40). */
+/** The name of a profile line or of ambition. */
 export const LINE_NAMES = { ...PROFILE_LINE_LABELS, ambition: "Ambition" } as Record<
   ProfileLineKey | "ambition",
   string
 >;
 
-/** The level word each mark takes on each line (R40, R44); `null` where the
+/** The level word each mark takes on each line; `null` where the
  *  line never carries a mark (who decides, dependencies). Potential impact
- *  carries a mark since 2026-10-27 (task 055). */
+ *  carries a mark. */
 export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, string | null>> = {
   cost: { less: "Cheaper", more: "Costlier" },
   time_to_set_up: { less: "Quicker", more: "Slower" },
@@ -432,7 +430,7 @@ export const LEVEL_WORDS: Record<ProfileLineKey | "ambition", Record<Mark, strin
 };
 
 /** The lines the grid can put in its columns: the eight that carry a mark,
- *  ambition first (R41), Potential impact last (task 055). */
+ *  ambition first, Potential impact last. */
 export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "ambition",
   "cost",
@@ -445,7 +443,7 @@ export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
 ];
 
 /**
- * The words for "What it could take" when it is shut (round 12, owner): one
+ * The words for "What it could take" when it is shut: one
  * short point per line and marked level, its first letter capitalised and no
  * full stop. The lead adjusts the words here.
  */
@@ -462,7 +460,7 @@ export const PROFILE_POINTS: Record<
 };
 
 /** The first two points, always given, middle or not, and relative to the
- *  longlist as every point is (round 12, owner). */
+ *  longlist as every point is. */
 export const AMBITION_POINTS: Record<Mark | "middle", string> = {
   more: "More ambitious",
   middle: "Average ambition",
@@ -477,11 +475,11 @@ export const IMPACT_POINTS: Record<Mark | "middle", string> = {
 /** The intro over the points: the marks are relative across the list. */
 export const PROFILE_POINTS_INTRO = "Compared with the other options on the longlist, this option is:";
 
-/** The last point when every other line is in the middle (round 12, owner). */
+/** The last point when every other line is in the middle. */
 export const OTHERS_MIDDLE_POINT = "Average on cost, time, workforce, coordination and delivery";
 
 /**
- * "What it could take" when it is shut (round 12, owner): the points under
+ * "What it could take" when it is shut: the points under
  * `PROFILE_POINTS_INTRO`. The ambition first and the potential impact second,
  * always; then one point per other line not in the middle, in the lines'
  * order; when none is, `OTHERS_MIDDLE_POINT`. A line the profile does not
@@ -511,7 +509,7 @@ export function profilePoints(
   ];
 }
 
-/** One run of the sentence: the takeaways are strong (round 12, owner). */
+/** One run of the sentence: the takeaways are strong. */
 export type SentencePart = { text: string; strong: boolean };
 
 /** Runs joined as "a", "a and b", "a, b and c", each phrase strong. */
@@ -538,8 +536,8 @@ export function midSentence(phrase: string): string {
 export type DocumentFact = { label: "Where" | "Type" | "Targeted" | "Measures" | "Discusses"; value: string };
 
 /**
- * A document's facts under its reference on the option card (round 12,
- * owner): a small labelled list, in this order, a row with no value left
+ * A document's facts under its reference on the option card:
+ * a small labelled list, in this order, a row with no value left
  * out. Where it was studied; its Type (the classifier's evidence type
  * through the shared label, as the Sources table's Type column); whom it
  * Targeted (the plan's own target-unit words when the study's subjects fold
@@ -567,11 +565,11 @@ export function documentFacts(
   return facts;
 }
 
-/** One plan outcome's coverage in the option's documents (round 12, owner). */
+/** One plan outcome's coverage in the option's documents. */
 export type OutcomeCoverage = { outcome: string; measured: number; discussed: number };
 
 /**
- * How the option's documents cover the plan's outcomes (round 12, owner): for
+ * How the option's documents cover the plan's outcomes: for
  * each outcome, in the plan's order, the evaluating documents whose outcome
  * tag names it (measured) and the others that name it (discussed). The same
  * data the documents' facts read (`measured` and `role`), matched with case
@@ -595,7 +593,7 @@ export function outcomeCoverage(
   });
 }
 
-/** An outcome's coverage as lines (round 13, owner): "Measured in 2" over
+/** An outcome's coverage as lines: "Measured in 2" over
  *  "Discussed in 1", a line with none left out, or "Not covered". */
 export function outcomeCoverageLines({ measured, discussed }: Pick<OutcomeCoverage, "measured" | "discussed">): string[] {
   const lines = [
@@ -605,7 +603,7 @@ export function outcomeCoverageLines({ measured, discussed }: Pick<OutcomeCovera
   return lines.length > 0 ? lines : ["Not covered"];
 }
 
-/** The plan's target in the option's documents (round 12, owner). */
+/** The plan's target in the option's documents. */
 export type TargetCoverage = {
   unit: string;
   /** Documents whose target is the plan's unit. */
@@ -615,8 +613,8 @@ export type TargetCoverage = {
 };
 
 /**
- * How many of the option's documents target the plan's target unit directly
- * (round 12, owner): those whose target is the unit (the read gives the
+ * How many of the option's documents target the plan's target unit directly:
+ * those whose target is the unit (the read gives the
  * plan's own words when a study's subjects fold into it), out of those whose
  * target is known.
  *
@@ -633,7 +631,7 @@ export function targetCoverage(unit: string, documents: readonly Pick<OptionDocu
   return { unit, targeted, known: known.length };
 }
 
-/** The target row's value (round 12, owner): "Directly targeted in 3", or
+/** The target row's value: "Directly targeted in 3", or
  *  "Not directly targeted" when none is. */
 export function targetCoverageWords({ targeted }: Pick<TargetCoverage, "targeted">): string {
   return targeted > 0 ? `Directly targeted in ${targeted}` : "Not directly targeted";
@@ -643,7 +641,7 @@ export function targetCoverageWords({ targeted }: Pick<TargetCoverage, "targeted
 const ACTS_ON_SHOWN = 6;
 
 /**
- * Whom the option acts on, as runs for How it works (round 12, owner): the
+ * Whom the option acts on, as runs for How it works: the
  * model's own call on the option's setting (the profile's `acts_on`), not
  * the documents' targets. "Acts on **food outlets**, **parents** and
  * **councils**.", the names strong as the setting's; " and k more" only
@@ -671,14 +669,14 @@ export function actsOnParts(names: readonly string[] | undefined): SentencePart[
   return [lead, ...listed, { text: ` and ${rest} more`, strong: false }, stop];
 }
 
-/** The link under the option's documents to the same documents in Sources
- *  (round 12, owner): "See these 12 documents in Sources", "See this
+/** The link under the option's documents to the same documents in Sources:
+ * "See these 12 documents in Sources", "See this
  *  document in Sources" for one. */
 export function seeInSourcesWords(count: number): string {
   return count === 1 ? "See this document in Sources" : `See these ${formatCount(count)} documents in Sources`;
 }
 
-/** A group's count in its heading (round 13, owner): "12 options", then
+/** A group's count in its heading: "12 options", then
  *  " · 3 shortlisted" when any of its options holds a place. */
 export function groupCountWords(total: number, shortlisted: number): string {
   const head = countOf(total, "option", "options");
@@ -686,13 +684,13 @@ export function groupCountWords(total: number, shortlisted: number): string {
 }
 
 /** Exclude's words, short enough for a control; the tooltip carries the
- *  meaning (round 13, owner). */
+ *  meaning. */
 export const EXCLUDE_FROM_SHORTLISTING = "Exclude";
 export const EXCLUDE_GROUP_FROM_SHORTLISTING = {
   theme: "Exclude theme",
   lever: "Exclude lever",
 } as const;
-/** An excluded group's control; an option's stays "Include again" (round 13, owner). */
+/** An excluded group's control; an option's stays "Include again". */
 export const INCLUDE_GROUP_AGAIN = {
   theme: "Include theme again",
   lever: "Include lever again",
@@ -704,11 +702,11 @@ export const EXCLUDE_TOOLTIP =
 export const EXCLUDE_OPTION_TOOLTIP =
   "Excludes this option from being shortlisted. It stays on the longlist under Excluded.";
 
-/** The heading for the lever types no option uses (round 13, owner). */
+/** The heading for the lever types no option uses. */
 export const NO_OPTIONS_FOR = "No options found for";
 
 /** The lever types no option carries at all, included or excluded, in the
- *  taxonomy's order: the search found none for them (round 14, owner: an
+ *  taxonomy's order: the search found none for them (an
  *  excluded lever was found, so it is not listed). One rule for the grid
  *  and the list. */
 export function uncoveredLevers(
@@ -718,7 +716,7 @@ export function uncoveredLevers(
   return leverTypes.filter((lever) => !options.some((option) => option.primary_lever_type === lever));
 }
 
-/** The documents disclosure's words (round 12, owner): closed, the count
+/** The documents disclosure's words: closed, the count
  *  and its groups, "Show 6 documents · 2 evaluated it · 4 describe it" (a
  *  group with none left out); open, "Hide documents". */
 export function documentsToggleWords(open: boolean, evaluated: number, describing: number): string {
@@ -730,21 +728,21 @@ export function documentsToggleWords(open: boolean, evaluated: number, describin
   ].join(" · ");
 }
 
-/** A marked level word (round 10, lead ruling on finding 7): one Navy look
+/** A marked level word: one Navy look
  *  for both directions, the word itself saying which way ("Quicker",
  *  "Higher"), after a 6 px Navy square; no tint, so no colour reads as good
  *  or bad. A line with no mark reads "Middle" in Grey. */
 export const LEVEL_MARKED_CLASS = "inline-flex items-center gap-1.5 font-semibold text-navy";
 export const LEVEL_MIDDLE_CLASS = "font-semibold text-grey";
 
-/** The collapsed profile's summary of its unmarked lines (round 10): "Middle
+/** The collapsed profile's summary of its unmarked lines: "Middle
  *  on 6 of 8" once, rather than "Middle" in six cells; "No line stands out"
- *  when no line carries a mark (C5). */
+ *  when no line carries a mark. */
 export function middleSummary(unmarked: number, total: number): string {
   return unmarked >= total ? "No line stands out" : `${MIDDLE_WORD} on ${formatCount(unmarked)} of ${formatCount(total)}`;
 }
 
-/** The authority labels' words (R43); a null body reads "another body". */
+/** The authority labels' words; a null body reads "another body". */
 export const AUTHORITY_LABELS: Record<AuthorityOut["label"], string> = {
   within_your_power: "Within your power",
   needs_action_by: "Needs action by another body",
@@ -770,7 +768,7 @@ type EvaluatedCountryOut = components["schemas"]["EvaluatedCountryOut"];
 type JudgementOut = components["schemas"]["JudgementOut"];
 type GuessOut = components["schemas"]["GuessOut"];
 
-/** Countries whose name takes "the" in running text (task 046, amendment 4, R76). */
+/** Countries whose name takes "the" in running text. */
 const COUNTRIES_WITH_THE: readonly string[] = [
   "netherlands",
   "philippines",
@@ -789,7 +787,7 @@ export function countryWithArticle(name: string): string {
   return key.startsWith("united") || COUNTRIES_WITH_THE.includes(key) ? `the ${name}` : name;
 }
 
-/** The countries part of the evidence signal (R76): the countries in served order. */
+/** The countries part of the evidence signal: the countries in served order. */
 function evaluatedInPart(countries: readonly EvaluatedCountryOut[]): string {
   if (countries.length === 0) return "No evaluation gives a place";
   const first = countryWithArticle(countries[0].country);
@@ -800,7 +798,7 @@ function evaluatedInPart(countries: readonly EvaluatedCountryOut[]): string {
 }
 
 /**
- * The evidence signal (task 046, amendment 4, R76), one line shared by the card
+ * The evidence signal, one line shared by the card
  * header and the list row: the documents that evaluated the option and those
  * that describe it, where it was evaluated, how many of the plan's outcomes it
  * measures.
@@ -840,7 +838,7 @@ export function evidenceSignal(
   return parts.join(" · ");
 }
 
-/** The words after "Delivered" for each setting kind (R77); other kinds read "in {plural}". */
+/** The words after "Delivered" for each setting kind; other kinds read "in {plural}". */
 const SETTING_PHRASES: Record<string, string> = {
   home: "at home",
   online: "online",
@@ -867,7 +865,7 @@ export function settingPhrase(kind: string): string {
 }
 
 /**
- * The lead-in to the design features (R77): "Delivered in schools and at home.
+ * The lead-in to the design features: "Delivered in schools and at home.
  * It typically involves:", or "It typically involves:" alone with no setting.
  */
 export function deliveredLeadIn(settings: readonly string[] | undefined): string {
@@ -875,7 +873,7 @@ export function deliveredLeadIn(settings: readonly string[] | undefined): string
   return phrases.length === 0 ? "It typically involves:" : `Delivered ${joinAnd(phrases)}. It typically involves:`;
 }
 
-/** The lead-in as runs, the setting's words strong (round 12, owner):
+/** The lead-in as runs, the setting's words strong:
  *  "Delivered **in jobcentres and in community centres**. It typically
  *  involves:", the groups it acts on between them when there are any. */
 export function deliveredLeadInParts(
@@ -891,12 +889,12 @@ export function deliveredLeadInParts(
           { text: joinAnd(phrases), strong: true },
           { text: ". ", strong: false },
         ];
-  // The groups it acts on follow the setting (round 12, owner).
+  // The groups it acts on follow the setting.
   const acts: SentencePart[] = actsOn.length === 0 ? [] : [...actsOn, { text: " ", strong: false }];
   return [...delivered, ...acts, { text: "It typically involves:", strong: false }];
 }
 
-/** The lever sentence as runs, the lever nouns strong (round 12, owner):
+/** The lever sentence as runs, the lever nouns strong:
  *  "Lever: **regulation**, with **services**." */
 export function leverLineParts(primary: string | null | undefined, secondary: string[] | undefined): SentencePart[] {
   if (primary == null) return [{ text: "Lever: ", strong: false }, { text: "other", strong: true }, { text: ".", strong: false }];
@@ -909,7 +907,7 @@ export function leverLineParts(primary: string | null | undefined, secondary: st
   ];
 }
 
-/** One line of the notices under the description (R78; round 10: a word in
+/** One line of the notices under the description (a word in
  *  its tone, then the sentence, no chip). */
 export type ConstraintNotice = {
   key: string;
@@ -922,7 +920,7 @@ export type ConstraintNotice = {
 };
 
 /**
- * The callout's lines (R78): a user constraint that breaks or cannot be
+ * The callout's lines: a user constraint that breaks or cannot be
  * checked, a guess that likely falls short or cannot be said. A pass, a
  * likely-meets and the built-in checks show nothing.
  */
@@ -951,12 +949,12 @@ export function constraintNotices(
   return notices;
 }
 
-/** The documents disclosure's summary (R81): "Documents · 29 · read from titles and abstracts only". */
+/** The documents disclosure's summary: "Documents · 29 · read from titles and abstracts only". */
 export function documentsSummary(count: number): string {
   return count > 0 ? `Documents · ${count} · ${ABSTRACTS_NOTE}` : `Documents · ${count}`;
 }
 
-/** A document's place and, in grey brackets, the level below when it adds a word (R81). */
+/** A document's place and, in grey brackets, the level below when it adds a word. */
 export function placeWithDetail(
   place: string | null | undefined,
   detail: string | null | undefined,
@@ -972,7 +970,7 @@ type MaturityOut = components["schemas"]["MaturityOut"];
  *  many years is stale. */
 const MATURITY_RECENT_YEARS = 5;
 
-/** The maturity rung's word (task 055, item 7). */
+/** The maturity rung's word. */
 export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
   proposal_only: "Proposed, not yet implemented",
   described: "Implemented, not yet evaluated",
@@ -980,8 +978,8 @@ export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
   reviewed: "Evaluated, including a review",
 };
 
-/** The shortlist row's evidence footing in plain words (owner, 2026-10-27:
- *  the rung line read as jargon): the rung's words, then ", not in {Where}"
+/** The shortlist row's evidence footing in plain words (the
+ *  bare rung line reads as jargon): the rung's words, then ", not in {Where}"
  *  and ", last before {year}" as they apply. Policy Atlas assesses;
  *  documents evaluate — the words keep that line. */
 export function maturityPhrase(
@@ -998,18 +996,18 @@ export function maturityPhrase(
 }
 
 
-// --- The longlist while it is being built (task 058, N24; annex scene 15) ---
+// --- The longlist while it is being built ---
 
 type OptionProgressOut = components["schemas"]["OptionProgressOut"];
 type LonglistOut = components["schemas"]["LonglistOut"];
 
-/** The shortlist toggle's words (round 10, lead ruling on finding 6): the
+/** The shortlist toggle's words: the
  *  state a row holds, said in words beside the row's name, from the
  *  shortlist wave of the build to the finished list. */
 export const SHORTLISTED_WORD = "Shortlisted";
 export const ADD_TO_SHORTLIST_WORDS = "Add to shortlist";
-/** What pressing "Shortlisted" does, said on hover and keyboard focus
- *  (round 11, owner): the held words alone did not say it. */
+/** What pressing "Shortlisted" does, said on hover and keyboard focus:
+ * the held words alone did not say it. */
 export const REMOVE_FROM_SHORTLIST_WORDS = "Remove from shortlist";
 
 /** A longlist walk's stages (the server's keys). "shortlist" is left out on
@@ -1027,7 +1025,7 @@ export const LONGLIST_WALK_STAGES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Whether the scoping Result shows the longlist being built (N24): a
+ * Whether the scoping Result shows the longlist being built: a
  * longlist walk is running or paused. The live stream says so first (any of
  * its stages is a longlist stage, its last one included); the task read
  * stands in until the stream catches up. No API flag, no qualifier word.
@@ -1054,7 +1052,7 @@ export function isLonglistBuilding(
 
 /** A row's right-hand line while its own search is the news; nothing once
  *  the longlist read has the option (its evidence then sits on the meta
- *  line, so the count is said once: round 10, finding 2 with R85). */
+ *  line, so the count is said once). */
 export type BuildingStatus = { kind: "queued" | "searching" | "searched" | "failed" | "assigning"; text: string } | null;
 
 /** The right-hand line while the option's search is the news. */
@@ -1075,7 +1073,7 @@ export function searchStatusLine(row: Pick<OptionProgressOut, "search_status" | 
 }
 
 /**
- * The names a longlist walk's steps publish while they run (round 11),
+ * The names a longlist walk's steps publish while they run,
  * before the step commits anything to a read: the options "Clustering into
  * options" names, then the themes "Grouping into themes" names. Names and
  * descriptions only; the committed longlist brings the counts and which
@@ -1123,17 +1121,17 @@ export function nameKey(prefix: string, text: string): string {
 }
 
 /** The right-hand line of a row while "Clustering into options" assigns the
- *  sources (round 11): it breathes until the step commits, when the row's
+ *  sources: it breathes until the step commits, when the row's
  *  evidence line brings its count. */
 export const ASSIGNING_LINE: BuildingStatus = { kind: "assigning", text: "Assigning sources" };
 
 /** One row of the longlist, built or being built: one anatomy from the
- *  first row of the build to the finished list (round 10, finding 2). */
+ *  first row of the build to the finished list. */
 export interface BuildingRow {
   id: string;
   /** The row's React key and View Transition name: the option's id, or for
    *  an option clustering found, its name's key, so the row a published name
-   *  drew keeps its place when the read brings the option (round 11). */
+   *  drew keeps its place when the read brings the option. */
   key: string;
   name: string;
   description: string;
@@ -1159,7 +1157,7 @@ export interface BuildingGroup {
   description: string;
   rows: BuildingRow[];
   /** A theme "Grouping into themes" has named and the read does not have
-   *  yet: its heading shows before any option is in it (round 11). */
+   *  yet: its heading shows before any option is in it. */
   named?: true;
 }
 
@@ -1174,21 +1172,21 @@ function profiled(option: OptionSummaryOut): boolean {
 }
 
 /**
- * The longlist being built, as rows in place (N24, D9).
+ * The longlist being built, as rows in place.
  *
  * The options read gives the rows and their order from the end of suggest,
  * with each option's search and, from clustering on, the folds. While
  * "Clustering into options" runs, the names it publishes join as rows at
  * once (an option the options read does not have yet, origin "found in the
  * evidence"), and every row not yet on the longlist reads "Assigning
- * sources" with its count as the batches land (round 11). Once the longlist
+ * sources" with its count as the batches land. Once the longlist
  * read exists it fills them in, in waves: the evidence line, then the
  * lever, then exclusions (into their own group), then themes (rows move
  * under them), then shortlist marks. While "Grouping into themes" runs, the
  * themes it names stand as headings under the rows before the read has
- * them, and an option moves under its theme as it is assigned (round 11).
+ * them, and an option moves under its theme as it is assigned.
  * A folded row moves under the option it was folded into. The finished list
- * is the same layout (round 10, finding 2): without the options read (a
+ * is the same layout: without the options read (a
  * finished task opened cold) the rows come from the longlist read alone.
  *
  * Within a theme the rows run by lever, then name, as the finished list
@@ -1282,7 +1280,7 @@ export function buildingLayout(
   const excluded = all.filter((row) => excludedIds.has(row.id));
 
   const byLever = byLeverThenName(longlist?.lever_types ?? []);
-  // The shortlisted rows lead each group (round 12, owner), the rest after
+  // The shortlisted rows lead each group, the rest after
   // them in the list's own order.
   const sorted = (members: BuildingRow[]) =>
     shortlistedFirst(
@@ -1346,7 +1344,7 @@ export function layoutSignature(layout: BuildingLayout): string {
 }
 
 /**
- * The longlist's one order within a group or a grid cell (round 12, owner):
+ * The longlist's one order within a group or a grid cell:
  * the shortlisted first, then the rest, each keeping the order it came in.
  *
  * Args:

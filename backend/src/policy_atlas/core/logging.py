@@ -20,7 +20,13 @@ def configure_logging() -> None:
     if os.getenv("LOG_FORMAT") == "json":
         # Structured traceback (a JSON-serializable list of frames) so
         # log.error(..., exc_info=True) renders the exception in JSON output.
-        processors.append(structlog.processors.dict_tracebacks)
+        # show_locals=False: the default dumps every frame's local variables,
+        # which carried user text and secret prefixes into CloudWatch.
+        processors.append(
+            structlog.processors.ExceptionRenderer(
+                structlog.tracebacks.ExceptionDictTransformer(show_locals=False)
+            )
+        )
         processors.append(structlog.processors.JSONRenderer())
     else:
         # Formats exc_info into an "exception" string field before the console
@@ -42,6 +48,6 @@ def configure_logging() -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         # No cache_logger_on_first_use: a cached module-level logger ignores
         # later reconfiguration, which breaks structlog.testing.capture_logs
-        # for every test that runs after anything calls create_app (033).
+        # for every test that runs after anything calls create_app.
         cache_logger_on_first_use=False,
     )

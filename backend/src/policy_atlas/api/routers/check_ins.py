@@ -25,6 +25,7 @@ from policy_atlas.api.deps import (
     get_engine,
     get_executor,
     get_runner_backends,
+    get_settings,
 )
 from policy_atlas.api.longlist_start import (
     LonglistRefused,
@@ -32,9 +33,11 @@ from policy_atlas.api.longlist_start import (
     plan_row_of_walk,
 )
 from policy_atlas.api.routers.access import accessible_task
+from policy_atlas.api.routers.common import effective_limits
 from policy_atlas.api.run_io import ParkIO
+from policy_atlas.api.settings import Settings
 from policy_atlas.core import events, tracing
-from policy_atlas.core.schema import capability_run
+from policy_atlas.core.schema import capability_run, task
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
@@ -90,8 +93,8 @@ def list_check_ins(
         # Pending means answerable: the walk must actually be parked. A death
         # between pause-emit and park leaves an undecided pause on a walk the
         # sweep marks interrupted — rendering that as pending shows a card
-        # whose answer always 404s (review finding, 2026-07-21; the answer
-        # path's _pending_pause has required paused status all along).
+        # whose answer always 404s (the answer path's _pending_pause requires
+        # paused status too).
         latest_walk_paused = latest_walk is not None and (
             connection.execute(
                 select(capability_run.c.status)
@@ -176,8 +179,8 @@ def execute_claimed(
             task_id=str(task_id),
             capability_run_id=str(capability_run_id),
         )
-        # Without this the walk stays `running` forever with no thread attached
-        # (review finding I1/codex-7, 2026-07-21): the user sees a permanently
+        # Without this the walk stays `running` forever with no thread attached:
+        # the user sees a permanently
         # running run and every new dispatch 409s until the next restart's sweep.
         continuation.mark_interrupted_best_effort(
             engine, task_id=task_id, capability_run_id=capability_run_id
@@ -194,6 +197,7 @@ def respond_to_check_in(
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
     agent: Annotated[AgentBackend, Depends(get_agent_backend)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> FreeTextCompileOut | Response:
     """Compile or durably answer one check-in, dispatching continuations after commit."""
     with engine.connect() as conn:
@@ -232,7 +236,7 @@ def respond_to_check_in(
         raise ApiConflict("already_answered", str(exc)) from None
     except continuation.ConfirmTokenExpiredError as exc:
         # 409, not an opaque 404: the recovery action (recompile) must reach the
-        # user (review finding m3, 2026-07-21).
+        # user.
         raise ApiConflict("confirm_expired", str(exc)) from None
     except continuation.InvalidResponseError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
@@ -240,14 +244,19 @@ def respond_to_check_in(
         raise HTTPException(status_code=404, detail="resource not found") from None
 
     if result.follow_on == LONGLIST_PURPOSE:
-        # "Confirm plan and build longlist" (task 045, S3): the decision has
+        # "Confirm plan and build longlist" (S3): the decision has
         # committed; open the second walk without waiting for its row — the
-        # card route stays 204 (owner) and the thread learns of the walk from
+        # card route stays 204 and the thread learns of the walk from
         # the run stream. A refusal leaves the durable decision standing and
         # is logged, as on the chat path; the plan document's confirm action
         # opens the walk later. It opens on the version the gate's walk ran —
-        # the one this decision confirmed — or not at all (A10).
+        # the one this decision confirmed — or not at all.
         try:
+            with engine.connect() as conn:
+                owner = conn.execute(
+                    select(task.c.owner_user_id).where(task.c.task_id == task_id)
+                ).scalar_one()
+                cap = effective_limits(conn, owner, settings=settings).runs
             open_longlist_walk(
                 engine,
                 task_id=task_id,
@@ -257,6 +266,7 @@ def respond_to_check_in(
                 backends=backends,
                 executor=executor,
                 user_id=user.user_id,
+                user_cap=cap,
                 await_run=False,
             )
         except LonglistRefused as exc:

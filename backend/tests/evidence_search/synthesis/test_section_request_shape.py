@@ -37,6 +37,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     available_lookup_kinds,
     run_section_loop,
 )
+from tests.helpers import FakeResponsesClient, spy_calls, text_stream_events, tool_call_response
 
 #: The open turns' ``allowed_tools`` (task 058): the three reads and the ready
 #: signal; emit_section stays on the request for the forced fallback only.
@@ -81,35 +82,11 @@ def _seed(
     return seed
 
 
-# --- Fakes: a recording chat-completions client and a Langfuse span recorder ---
+# --- Fakes: tool-call answers and a Langfuse span recorder ---
 
 
-class _Function:
-    def __init__(self, name: str, arguments: str) -> None:
-        self.name = name
-        self.arguments = arguments
-
-
-class _ToolCall:
-    def __init__(self, name: str, arguments: dict[str, Any]) -> None:
-        self.function = _Function(name, json.dumps(arguments))
-
-
-class _Response:
-    def __init__(self, tool_calls: list[_ToolCall]) -> None:
-        message = type("M", (), {"tool_calls": tool_calls})()
-        self.choices = [type("C", (), {"message": message})()]
-        self.usage = None
-
-
-class _Completions:
-    def __init__(self, tool_calls: list[_ToolCall]) -> None:
-        self.tool_calls = tool_calls
-        self.calls: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> _Response:
-        self.calls.append(kwargs)
-        return _Response(self.tool_calls)
+def _tool_call(name: str, arguments: dict[str, Any]) -> tuple[str, str]:
+    return name, json.dumps(arguments)
 
 
 class _Span:
@@ -148,28 +125,25 @@ class _Langfuse:
 
 
 def _backend(
-    tool_calls: list[_ToolCall], *, langfuse: _Langfuse | None = None
-) -> tuple[OpenAISynthesisBackend, _Completions]:
+    tool_calls: list[tuple[str, str]], *, langfuse: _Langfuse | None = None
+) -> OpenAISynthesisBackend:
+    """A backend whose model answers every request with ``tool_calls``."""
     backend = OpenAISynthesisBackend.__new__(OpenAISynthesisBackend)
-    completions = _Completions(tool_calls)
-    client = type("Client", (), {})()
-    client.chat = type("Chat", (), {})()
-    client.chat.completions = completions
     raw = cast("Any", backend)
-    raw._client = client
+    raw._client = FakeResponsesClient(tool_call_response(*tool_calls))
     raw._langfuse_client = langfuse
     raw._turn_count = 0
     raw._lock = Lock()
     raw.stream_fallbacks = 0
-    return backend, completions
+    return backend
 
 
-def _emit(prose: str) -> _ToolCall:
-    return _ToolCall("emit_section", {"prose": prose, "claims": []})
+def _emit(prose: str) -> tuple[str, str]:
+    return _tool_call("emit_section", {"prose": prose, "claims": []})
 
 
-def _emit_repairs(segment: str) -> _ToolCall:
-    return _ToolCall(
+def _emit_repairs(segment: str) -> tuple[str, str]:
+    return _tool_call(
         "emit_repairs",
         {"repairs": [{"claim_id": "s0c0", "replacement_segment": segment, "claim": None}]},
     )
@@ -210,18 +184,20 @@ def test_run_message_is_a_text_part_carrying_the_breakpoint() -> None:
 # --- (b) D10: same tools, same parallel flag; tool_choice alone differs ---
 
 
-def test_turns_and_repair_send_identical_tools_and_parallel_tool_calls() -> None:
-    seed = _seed()
-    normal, normal_calls = _backend([_ToolCall("search_chunks", {"query": "q"})])
-    normal.section_turn(seed, [], force_emit=False)
-    forced, forced_calls = _backend([_emit("Prose.")])
-    forced.section_turn(seed, [], force_emit=True)
-    repairer, repair_calls = _backend([_emit_repairs("Fixed.")])
-    repairer.repair_section(seed, [], failing=_FAILING)
+def test_turns_and_repair_send_identical_tools_and_parallel_tool_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
 
-    [turn_kwargs] = normal_calls.calls
-    [forced_kwargs] = forced_calls.calls
-    [repair_kwargs] = repair_calls.calls
+    calls = spy_calls(monkeypatch, sb, "send_turn")
+    seed = _seed()
+    _backend([_tool_call("search_chunks", {"query": "q"})]).section_turn(
+        seed, [], force_emit=False
+    )
+    _backend([_emit("Prose.")]).section_turn(seed, [], force_emit=True)
+    _backend([_emit_repairs("Fixed.")]).repair_section(seed, [], failing=_FAILING)
+
+    [turn_kwargs, forced_kwargs, repair_kwargs] = calls
     for kwargs in (turn_kwargs, forced_kwargs, repair_kwargs):
         assert [tool["function"]["name"] for tool in kwargs["tools"]] == _REQUEST_TOOLS
         assert kwargs["parallel_tool_calls"] is True
@@ -256,35 +232,31 @@ def test_streamed_write_turn_keeps_the_turns_tools_and_prefix(
     from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
 
     monkeypatch.setattr(sb, "publish_section_delta", lambda *_args, **_kwargs: None)
+    turn_calls = spy_calls(monkeypatch, sb, "send_turn")
+    stream_calls = spy_calls(monkeypatch, sb, "stream_turn")
     seed = _seed()
-    normal, normal_calls = _backend([_ToolCall("write_section", {})])
-    turn, _usage = normal.section_turn(seed, [], force_emit=False)
+    turn, _usage = _backend([_tool_call("write_section", {})]).section_turn(
+        seed, [], force_emit=False
+    )
     assert turn.get("ready") is True
 
     reply = json.dumps({"prose": "Prose.", "claims": []})
-    chunk = type("Chunk", (), {})()
-    chunk.choices = [type("C", (), {"delta": type("D", (), {"content": reply})()})()]
-    chunk.usage = None
-    stream_calls: list[dict[str, Any]] = []
-
-    def _create(**kwargs: Any) -> list[Any]:
-        stream_calls.append(kwargs)
-        return [chunk]
-
-    writer, _unused = _backend([])
-    cast("Any", writer)._client.chat.completions.create = _create
+    writer = _backend([])
+    writer_client = FakeResponsesClient(text_stream_events([reply]))
+    cast("Any", writer)._client = writer_client
     written, _usage = writer.section_emit_stream(seed, [])
     claims = written["claims"]
     assert claims is not None
     assert claims.prose == "Prose."
 
-    [turn_kwargs] = normal_calls.calls
+    [turn_kwargs] = turn_calls
     [stream_kwargs] = stream_calls
     assert [tool["function"]["name"] for tool in stream_kwargs["tools"]] == _REQUEST_TOOLS
     assert stream_kwargs["tools"] == turn_kwargs["tools"]
     assert stream_kwargs["tool_choice"] == "none"
     assert "response_format" not in stream_kwargs
-    assert stream_kwargs["stream"] is True
+    [sent] = writer_client.calls
+    assert sent["stream"] is True
     turn_messages = turn_kwargs["messages"]
     assert stream_kwargs["messages"][: len(turn_messages)] == turn_messages
 
@@ -293,7 +265,7 @@ def test_streamed_write_turn_keeps_the_turns_tools_and_prefix(
 
 
 def test_forced_turn_takes_the_first_emit_section_and_counts_the_rest() -> None:
-    backend, _ = _backend([_emit("First."), _emit("Second.")])
+    backend = _backend([_emit("First."), _emit("Second.")])
 
     with capture_logs() as logs:
         turn, _usage = backend.section_turn(_seed(), [], force_emit=True)
@@ -308,7 +280,7 @@ def test_forced_turn_takes_the_first_emit_section_and_counts_the_rest() -> None:
 
 
 def test_forced_turn_skips_a_leading_read_call_to_the_emission() -> None:
-    backend, _ = _backend([_ToolCall("search_chunks", {"query": "q"}), _emit("Emitted.")])
+    backend = _backend([_tool_call("search_chunks", {"query": "q"}), _emit("Emitted.")])
 
     turn, _usage = backend.section_turn(_seed(), [], force_emit=True)
 
@@ -318,7 +290,7 @@ def test_forced_turn_skips_a_leading_read_call_to_the_emission() -> None:
 
 
 def test_forced_turn_with_one_call_counts_nothing() -> None:
-    backend, _ = _backend([_emit("Only.")])
+    backend = _backend([_emit("Only.")])
 
     turn, _usage = backend.section_turn(_seed(), [], force_emit=True)
 
@@ -326,7 +298,7 @@ def test_forced_turn_with_one_call_counts_nothing() -> None:
 
 
 def test_section_loop_result_counts_ignored_calls() -> None:
-    backend, _ = _backend([_emit("First."), _emit("Second.")])
+    backend = _backend([_emit("First."), _emit("Second.")])
 
     result = run_section_loop(backend, seed=_seed(), tools={}, turn_cap=1)
 
@@ -342,7 +314,7 @@ def test_section_loop_result_counts_ignored_calls() -> None:
 
 def test_repair_takes_the_first_emit_repairs_and_records_the_count() -> None:
     langfuse = _Langfuse()
-    backend, _ = _backend(
+    backend = _backend(
         [_emit_repairs("First fix."), _emit_repairs("Second fix.")], langfuse=langfuse
     )
 
@@ -361,7 +333,7 @@ def test_repair_takes_the_first_emit_repairs_and_records_the_count() -> None:
 
 
 def test_repair_without_emit_repairs_still_fails_loud() -> None:
-    backend, _ = _backend([_emit("Not a repair.")])
+    backend = _backend([_emit("Not a repair.")])
 
     with pytest.raises(RuntimeError, match="did not emit repairs"):
         backend.repair_section(_seed(), [], failing=_FAILING)

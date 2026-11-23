@@ -3,7 +3,9 @@ type: Invariant
 title: Cross-parameter validation must run on effective (defaulted) values, not explicit arguments
 description: query_findings' kind/filter mismatch check only fired when `kinds` was explicitly present; the omitted-kinds DEFAULT (both kinds) skipped the check entirely, so a kind-specific filter returned the other kind unfiltered — a fail-open path created by validating the raw argument instead of the resolved value (021 review stack, Codex adversarial catch).
 tags: [validation, fail-closed, tool-arguments, synthesis-tools, defaults]
-timestamp: 2026-07-13
+generated:
+  by: process:okf-migrate
+  at: 2026-07-13
 ---
 
 # Rule
@@ -33,5 +35,3 @@ correct. The fix also tightened semantics: a kind-specific filter now requires
 
 - Test the DEFAULT path of every cross-parameter rule explicitly; pinning only
   the explicit-argument path is what let this ship.
-- Same family: [plan-compile-fails-closed](plan-compile-fails-closed.md),
-  [directive-parse-malformed-vs-unknown](directive-parse-malformed-vs-unknown.md).

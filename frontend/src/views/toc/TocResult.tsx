@@ -51,10 +51,10 @@ function reportKey(report: Report | null): string | null {
 /** The header's prose: the report's own measure and size. */
 const HEADER_P = `mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`;
 
-/** The canvas between a draft that failed its checks and its retry (S12). */
+/** The canvas between a draft that failed its checks and its retry. */
 const EMPTY_SKETCH: LiveSketch = { boxes: [], links: [] };
 
-/** The steps an "Update the report" walk runs (`toc_plan`, C45): a walk
+/** The steps an "Update the report" walk runs (`toc_plan`): a walk
  *  whose steps are only these rewrites the report and searches nothing. */
 const UPDATE_STAGES = new Set(["toc_summarise", "toc_report"]);
 
@@ -62,7 +62,7 @@ const UPDATE_STAGES = new Set(["toc_summarise", "toc_report"]);
  * The verdict line, the question and "what would settle it" above the
  * canvas (decision 4: the header keeps its four parts), live while the
  * report is written and committed after. The verdict line runs beside a rule
- * in its tone (owner, 2026-11-10); the rule arrives with the committed
+ * in its tone; the rule arrives with the committed
  * report, its indent held while the line is written so the words never move.
  */
 function HeaderParts({
@@ -123,7 +123,7 @@ function HeaderParts({
   );
 }
 
-/** The theory-of-change Result tab: the report page (task 054, A14), with the
+/** The theory-of-change Result tab: the report page, with the
  *  header, the canvas with its bar and detail panel, and the report under it.
  *  The report's expand state is the task's, as the Evidence search's is. */
 /** The report's Download menu; a download that cannot be made says so in
@@ -163,7 +163,7 @@ function TocPage({ taskId }: { taskId: string }) {
   const canEdit = toc.data?.can_edit === true;
   const panel = usePanelWidth({ label: "Resize the details panel", initial: 380, edge: "left" });
   const { editor, toast, dismissToast, undoLast, error } = useTocEditor(taskId, canEdit);
-  // A review runs in the background; poll for its card while it runs (C45), and once more when it ends.
+  // A review runs in the background; poll for its card while it runs, and once more when it ends.
   const reviewing = toc.data?.reviewing === true;
   const proposals = useTocProposals(taskId, canEdit, reviewing);
   const { refetch: refetchProposals } = proposals;
@@ -181,8 +181,8 @@ function TocPage({ taskId }: { taskId: string }) {
   const graph = toc.data;
   const report = graph?.report ?? null;
 
-  // The report while it is written (A13): only a first report streams
-  // (S7b, A22), so the live parts show only while there is no report.
+  // The report while it is written: only a first report streams,
+  // so the live parts show only while there is no report.
   const parts = tocParts(stream?.liveSections ?? {});
   const runStatus = stream?.run?.status;
   const showLive =
@@ -193,7 +193,7 @@ function TocPage({ taskId }: { taskId: string }) {
   const active = useActivePart(parts);
   const sources = useLiveSourceNames(stream?.run?.id ?? null, [...parts.values()]);
 
-  // "Update the report" (A17): the old report stays, with the working line,
+  // "Update the report": the old report stays, with the working line,
   // until the new one swaps in. The update's walk rewrites the report and
   // searches nothing; the reader's press says so before its first step.
   const [requested, setRequested] = useState<{ from: string | null } | null>(null);
@@ -206,7 +206,7 @@ function TocPage({ taskId }: { taskId: string }) {
   }
   const updating = report !== null && (updateRunning || requested !== null);
 
-  // The swap (S7): the committed report replaces the live one, or the old
+  // The swap: the committed report replaces the live one, or the old
   // one, in place; what it brings fades in once (058's swap). A cut under
   // reduced motion. A reader who watched it written finds its sections open.
   const [swap, setSwap] = useState<{ from: string | null; waiting: boolean; arriving: boolean }>({ from: null, waiting: false, arriving: false });
@@ -229,7 +229,7 @@ function TocPage({ taskId }: { taskId: string }) {
     setSelection(target);
     setFocus((current) => ({ target, count: (current?.count ?? 0) + 1 }));
   };
-  // A code clicked in the chat (?focus=#5) selects that box or connection here (round 6).
+  // A code clicked in the chat (?focus=#5) selects that box or connection here.
   const [params, setParams] = useSearchParams();
   const wanted = params.get("focus");
   const [handled, setHandled] = useState<string | null>(null);
@@ -251,13 +251,13 @@ function TocPage({ taskId }: { taskId: string }) {
   // Before any draft the owner may draw their own theory here; the draft keeps it as drawn.
   const sketching = graph != null && graph.check_status === "none" && canEdit;
 
-  // The first draft drawn while it is written (S12). The stream's sketch is
+  // The first draft drawn while it is written. The stream's sketch is
   // held until the stored graph has boxes, so the swap shows no empty
   // canvas: the stage's end comes before `GET /toc` returns the graph, and
   // a new walk (the check that follows) clears the stream's sketch. An
   // empty sketch while the draft runs means it is written again, so the
   // held one goes and the page shows its waiting message until the next
-  // box or the stored graph (owner, 2026-11-10: a fallback's ordinary call
+  // box or the stored graph (a fallback's ordinary call
   // can take minutes, and an empty canvas reads as broken); a failed draft
   // drops it.
   const streamSketch = stream?.liveSketch ?? null;
@@ -329,7 +329,7 @@ function TocPage({ taskId }: { taskId: string }) {
     </Button>
   );
 
-  // The facts line (A14): the sources the report cites out of those found,
+  // The facts line: the sources the report cites out of those found,
   // and the years they were published.
   const facts: ReportFact[] = [];
   if (report !== null && report.sources.length > 0) {
@@ -360,11 +360,11 @@ function TocPage({ taskId }: { taskId: string }) {
 
   return (
     // The contents sit inside the paper beside the report's narrative, so the
-    // canvas and the Assumptions table keep the paper's width (owner, 2026-11-10).
+    // canvas and the Assumptions table keep the paper's width.
     <ReportPage entries={entries} contents="within" className="md:max-w-[1180px]">
       <header className={appeared}>
         <ReportKindRow kind="Report">
-          {/* Download arrives with the committed report (058). */}
+          {/* Download arrives with the committed report. */}
           {report !== null && !isPublicView && (
             <span className={arriving}>
               <TocDownload graph={graph} />
@@ -392,7 +392,7 @@ function TocPage({ taskId }: { taskId: string }) {
           <ReportFacts facts={facts} />
         </div>
         {/* A report written before the reader's latest changes says so; the
-            update is the reader's (decision 10, S9). While it runs, the
+            update is the reader's (decision 10). While it runs, the
             working line stands in its place and the old report stays. */}
         {updating ? (
           <div className="mt-3">
@@ -418,7 +418,7 @@ function TocPage({ taskId }: { taskId: string }) {
           </p>
         )}
         {graph.check_status === "drafted" && (
-          // An uploaded theory (increment 5): the user checks the reading before the evidence check.
+          // An uploaded theory: the user checks the reading before the evidence check.
           <div role="status" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-2 border-blue bg-blue-tint-2 px-4 py-3">
             <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>
               This is how Policy Atlas read your diagram. Solid dark connections are drawn in your diagram. Dashed blue ones are connections Policy Atlas suggested where your diagram grouped boxes or left them unconnected. What Policy Atlas would add to complete the theory waits under Suggestions, beside the canvas. Compare it with your original in the plan, fix anything that is wrong, then check the evidence.
@@ -430,7 +430,7 @@ function TocPage({ taskId }: { taskId: string }) {
           <p className={`mt-4 max-w-[1100px] ${REPORT_BODY_CLASS}`}>The check was stopped. What it finished stays; connections it did not reach show Needs evidence.</p>
         )}
         {graph.check_status === "failed" && (
-          // A check that ended with an error: say so and offer the retry the chat names (owner, 2026-11-04).
+          // A check that ended with an error: say so and offer the retry the chat names.
           // A failure is a Red Tint surface (DESIGN.md § Callout), as a failed turn is.
           <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border border-red-tint bg-red-tint/40 px-4 py-3">
             <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>The evidence check stopped with an error. What it finished stays on the canvas.</p>

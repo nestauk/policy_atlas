@@ -20,7 +20,7 @@ import { visibilityOutcomeLine } from "./VisibilityControl";
 type Visibility = components["schemas"]["TaskOut"]["visibility"];
 type Section = "public" | "org" | "projects";
 
-/** Every Share control is the outline button at 40 px (lead ruling S1, P1):
+/** Every Share control is the outline button at 40 px:
  *  access changes are settings, not progress, so nothing here carries the
  *  blue cut corner. */
 const CONTROL_CLASS = "h-10 whitespace-nowrap py-0";
@@ -32,9 +32,9 @@ const OUTLINE_CONTROL_CLASS = cn(buttonVariants({ variant: "outline" }), CONTROL
 const COPIED_MS = 2000;
 
 /**
- * One settings row (S2): the heading and the current state on the left, the
+ * One settings row: the heading and the current state on the left, the
  * control on the right; below `md` the control drops under the words. The
- * state is the answer the page exists to give, so it is Navy Semibold (S6);
+ * state is the answer the page exists to give, so it is Navy Semibold;
  * a rule that explains it stays Grey.
  */
 function SettingsRow({
@@ -48,8 +48,8 @@ function SettingsRow({
 }: {
   headingId: string;
   heading: string;
-  /** One plain line under the heading saying what the section is for
-   *  (owner, round 13), Body Grey. */
+  /** One plain line under the heading saying what the section is for,
+   * Body Grey. */
   explain?: string;
   state?: string;
   note?: ReactNode;
@@ -88,7 +88,7 @@ function SectionError({ text }: { text: string | null }) {
 }
 
 /**
- * Public link (task 037, contract § R1; round 10, S3): the owner makes the
+ * Public link (S3): the owner makes the
  * task public in two steps, inline, and sees the link once it is public.
  */
 function PublicLinkSection({
@@ -218,7 +218,7 @@ function PublicLinkSection({
           </button>
           {/* "Copied" has a slot of its own beside the button, so the field
               does not narrow when it appears; a failed copy says so on the
-              line under the field it has selected (S4). */}
+              line under the field it has selected. */}
           <span
             aria-live="polite"
             className={cn("text-meta text-grey", copy === "failed" ? "basis-full" : "w-16 shrink-0")}
@@ -234,9 +234,9 @@ function PublicLinkSection({
 
 /**
  * Share: who can read this task (a public link, the organisation) and which
- * projects it is filed under, in that order of consequence (round 10, S2).
+ * projects it is filed under, in that order of consequence.
  * The owner changes them; a colleague sees the state without the controls
- * the server would refuse them (S5, S8).
+ * the server would refuse them.
  */
 export function ShareView() {
   const { taskId = "" } = useParams();
@@ -244,7 +244,7 @@ export function ShareView() {
   const projects = useProjects();
   const me = useMe();
   const update = useUpdateTask(taskId);
-  // Adding goes through the one add (round 13); removing stays a membership
+  // Adding goes through the one add; removing stays a membership
   // change here, the only place that removes.
   const addToProject = useAddTaskToProject(taskId, task.data?.project_ids);
   const toast = useToast();
@@ -265,10 +265,10 @@ export function ShareView() {
     (project) => !memberIds.includes(project.project_id),
   );
 
-  // Visibility (task 033 phase 10b): hidden entirely without an
+  // Visibility: hidden entirely without an
   // organisation — sharing "with your organisation" means nothing when
-  // there isn't one (rubric 14's dark-launch invariant). The outcome line
-  // is binding copy (rubric 41), so its toast stays.
+  // there isn't one. The outcome line
+  // is binding copy, so its toast stays.
   const changeVisibility = (next: Visibility) => {
     setError(null);
     update.mutate(
@@ -319,7 +319,7 @@ export function ShareView() {
       <h1 id={titleId} className="sr-only">
         {LIFECYCLE_LABELS.share}
       </h1>
-      {/* Below md the paper becomes the screen, as the report's does (S9). */}
+      {/* Below md the paper becomes the screen, as the report's does. */}
       <Card className="p-6 max-md:border-0 max-md:p-4 max-md:shadow-none">
         {task.data !== undefined &&
           (isOwner ? (
@@ -346,7 +346,7 @@ export function ShareView() {
             explain={SHARE_COPY.orgExplain}
             state={task.data.visibility === "private" ? SHARE_COPY.orgPrivate : SHARE_COPY.orgShared}
             // A task in a project follows the project's visibility, so the
-            // control that could only fail is not offered (S4, P3).
+            // control that could only fail is not offered (P3).
             note={
               inProject ? (
                 <>
@@ -403,7 +403,7 @@ export function ShareView() {
               <label htmlFor="share-add-to-project" className="mb-2 block text-body font-semibold text-navy">
                 {SHARE_COPY.addToProject}
               </label>
-              {/* The shared picker (round 13; the New page and the task menu
+              {/* The shared picker (the New page and the task menu
                   use the same one): picking a project adds it, and "New
                   project…" makes one on the spot and adds it; the control
                   goes back to its placeholder. */}

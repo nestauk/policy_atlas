@@ -10,8 +10,8 @@ appraisal, classification, tags, screening, coverage, ``docs_by_tag``, and
 All of those currently carry a creating-run key, so no structured lookup kind
 is scope-wide-by-necessity.
 
-**An options-scoping task's scope set** (task 045, S11, A8; ADR 0039
-decision 5): once a longlist exists the chat — the ordinary task chat and
+**An options-scoping task's scope set** (ADR 0039 decision 5): once a
+longlist exists the chat — the ordinary task chat and
 the Task Agent's longlist questions alike — answers over the walk that built
 it **and** every option search's targeted scope, so an added option's own
 documents are reachable; before that, over the baseline walk. A document in
@@ -69,7 +69,7 @@ class ResolvedRunScope:
         extraction_run_id: Latest successful extraction attempt.
         grouping_run_id: Latest successful grouping attempt.
         extra_scope_ids: Further evidence scopes the readers span — an
-            options-scoping task's option searches (task 045, S11). Empty
+            options-scoping task's option searches. Empty
             for every other scope.
         resolve_labels: Whether a document with no label in its own scope
             takes the label resolver's (``options_scoping.labels``) — an
@@ -94,7 +94,7 @@ def resolve_terminal_run_components(
 
     Selects the walk; ``_resolve_components`` does the reduction. An Evidence
     search reads its latest completed walk, as it always has. An
-    options-scoping task reads what exists (task 045, S11, A8): once a
+    options-scoping task reads what exists: once a
     ``longlist_result`` exists, the completed walk that built the latest one,
     with every option search's targeted scope as an extra scope; before that,
     its latest completed walk that is neither a child nor an option search
@@ -350,7 +350,7 @@ def build_chat_readers(
             scope_id=scope.evidence_scope_id,
             selected_tss_ids=selected_tss_ids,
             extra_scope_ids=scope.extra_scope_ids,
-            # Each search opens its own short read and closes it (task 057 N8).
+            # Each search opens its own short read and closes it.
             connect=engine.connect,
         )
         if scope.resolve_labels:
@@ -433,7 +433,7 @@ def _fill_resolved_labels(
     """Give an unlabelled document the label resolver's labels, in place.
 
     A document inherited from a linked Evidence search task is neither
-    classified nor appraised again in the longlist scope (task 045, S6); its
+    classified nor appraised again in the longlist scope; its
     labels are read across through the resolver, the same one the citations
     use. Without this the retriever would read it as unappraised, and the
     citation floor would refuse a citation to it.
@@ -451,7 +451,7 @@ def _fill_resolved_labels(
         if label is None:
             continue
         if doc.get("appraisal_tier") is None:
-            # "4" for a scored document, "Unrated" for one with no score (task 056).
+            # "4" for a scored document, "Unrated" for one with no score.
             doc["appraisal_tier"] = appraisal_tier(label.quality_score, unrated=label.unrated)
         if doc.get("primary_evidence_type") is None and label.evidence_type is not None:
             doc["primary_evidence_type"] = label.evidence_type

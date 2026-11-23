@@ -4,7 +4,7 @@ import type { RunStreamState } from "../../store";
 import { cardRows, currentRow, rowDetail, rowLiveness, traceWords, type CardRow } from "./runProgress";
 
 /**
- * What a run is doing now, in the trace header's words (task 058): the
+ * What a run is doing now, in the trace header's words: the
  * current step and its activity ("Writing · Section 3 of 7 · Costs and
  * funding"), "Still working on this step" after two quiet minutes, and the
  * task's paused words ("Paused · waiting on you", to a colleague "Paused ·

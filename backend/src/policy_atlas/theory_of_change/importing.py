@@ -1,7 +1,7 @@
-"""Bring your own theory: read an uploaded diagram into the drafter's input (task 054, increment 5).
+"""Bring your own theory: read an uploaded diagram into the drafter's input.
 
 1. **Pages.** A PNG or JPEG is one page; a PDF's first 10 pages are rendered to
-   PNG with PyMuPDF (C8).
+   PNG with PyMuPDF.
 2. **Read.** One frontier vision call (``toc_import_v1``) transcribes boxes,
    layers, connections (drawn, inferred, or grouped by a bracket), and notes.
 3. **Store.** The transcription is a ``toc.import`` event on the task; the
@@ -37,7 +37,7 @@ from policy_atlas.theory_of_change.import_prompt import ImportResponse
 log = structlog.get_logger()
 
 IMPORT_EVENT = "toc.import"
-#: PDF pages read (C8).
+#: PDF pages read.
 MAX_PAGES = 10
 #: PDF rendering resolution: legible box text without huge images.
 PDF_DPI = 150
@@ -241,7 +241,7 @@ def review_message(
 def suggest_from_diagram(
     conn: Connection, *, task_id: uuid.UUID, response: ImportResponse, file_name: str
 ) -> str:
-    """Offer what a diagram uploaded after the draft adds to the canvas (owner, 2026-11-05).
+    """Offer what a diagram uploaded after the draft adds to the canvas.
 
     A box is on the canvas when a box there has the same text (case and
     spacing ignored); the diagram's other boxes, and its drawn arrows the

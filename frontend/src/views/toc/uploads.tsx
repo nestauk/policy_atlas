@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { blobUrl } from "../../lib/blobUrl";
 import { PaperclipIcon } from "../../ui/brand/icons";
 
-// The user's own theory-of-change diagram (task 054, increment 5): the paperclip that picks it, and its preview.
+// The user's own theory-of-change diagram: the paperclip that picks it, and its preview.
 
 /** A paperclip label that opens the file picker for a PNG, JPEG or PDF diagram. */
 export function AttachFileButton({

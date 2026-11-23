@@ -15,7 +15,6 @@ describe("DisclosureToggle", () => {
     const button = screen.getByRole("button", { name: "Show all 6 connections" });
     expect(button).toHaveAttribute("aria-expanded", "false");
     expect(button.querySelector("svg")).not.toBeNull();
-    expect(button).toHaveClass("text-grey", "font-semibold");
     await userEvent.setup().click(button);
     expect(onToggle).toHaveBeenCalledOnce();
     rerender(

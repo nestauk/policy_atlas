@@ -9,7 +9,7 @@ import { Composer } from "../TaskAgentPane";
 import { ChatEmptyState, starterQuestions } from "./ChatEmptyState";
 import { DRAFT_CHAT_ID, stashFirstMessage, useConversationMutations } from "./conversationState";
 
-/** A chat that does not exist yet (`?chat=new`, 038 V8).
+/** A chat that does not exist yet (`?chat=new`).
  *
  * Looks like an empty chat — the invitation, the starter questions and the
  * composer — but nothing is persisted until the first message: sending

@@ -1,9 +1,11 @@
 ---
 type: Integration quirk
 title: PyJWT verifies aud by default whenever the claim is present — removing an audience check needs verify_aud False plus hand-rolled checks
-description: jwt.decode with no audience= argument still rejects any token carrying an aud claim. Moving from audience semantics to Cognito access-token semantics (token_use + client_id) requires options={"verify_aud": False} and explicit claim checks, or valid tokens bounce.
+description: 'jwt.decode with no audience= argument still rejects any token carrying an aud claim. Moving from audience semantics to Cognito access-token semantics (token_use + client_id) requires options={"verify_aud": False} and explicit claim checks, or valid tokens bounce.'
 tags: [auth, jwt, pyjwt, cognito]
-timestamp: 2026-07-28
+generated:
+  by: process:okf-migrate
+  at: 2026-07-28
 ---
 
 # Rule

@@ -3,7 +3,7 @@ import { formatCount } from "./format";
 /**
  * Every user-visible word for the two entities, in one place.
  *
- * Task 038 (ADR 0036) aligned the code word to the screen word: a `task`
+ * ADR 0036 aligns the code word with the screen word: a `task`
  * row is a **Task** on screen — one research question with its own plan,
  * run and report; a `project` row is a **Project** on screen — a named
  * body of related tasks, holding no plan, run or evidence of its own.
@@ -70,14 +70,14 @@ export const COPY = {
   lockedHint: "Available once the analysis has run",
   notDecided: "Not decided yet",
   /** `ChatSidePanel`'s overlay region: the Agent, the one persona a user
-   *  talks to (ADR 0036, contract § V4 / § V8). */
+   *  talks to (ADR 0036). */
   agentAriaLabel: "Agent",
   /** The collapsed overlay's launcher — its `aria-label`, then its `title`. */
   openAgent: "Open the Agent",
   agent: "Agent",
   /** A Task's primary chat: the `kind = task_agent` conversation — the active
    *  one, else the most recently closed. Exactly one row ever carries this
-   *  label (contract § V8, invariant I8 / fold A10). */
+   *  label. */
   taskAgent: `${TASK.one} Agent`,
   newChat: "New chat",
   newChatUnavailable: `New chat — available once the ${TASK.lower} has a result`,
@@ -89,8 +89,8 @@ export const COPY = {
 } as const;
 
 /**
- * Task 033 phase 10b — organisation-tenancy chrome copy (contract § 11,
- * rubric 41). Lead-owned and binding: wired exactly, not rewritten.
+ * Organisation-tenancy chrome copy.
+ * Lead-owned and binding: wired exactly, not rewritten.
  */
 export const TENANCY_COPY = {
   /** Switcher options, in this order — the component itself carries no label. */

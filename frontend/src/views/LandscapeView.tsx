@@ -22,7 +22,7 @@ import {
 } from "./LandscapeViewCharts";
 import { normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
 
-/** The publisher map, loaded only when the reader asks for it (round 11),
+/** The publisher map, loaded only when the reader asks for it,
  *  so the Landscape page does not carry the atlas. */
 const PublisherMap = lazy(() => import("./LandscapeViewMap"));
 
@@ -48,7 +48,7 @@ const TITLES = {
 
 const sum = (data: Record<string, number>) => Object.values(data).reduce((total, count) => total + count, 0);
 
-/** What "Where sources were published" counts (owner, round 13: on hover). */
+/** What "Where sources were published" counts (on hover). */
 const GEOGRAPHY_NOTE = [
   "The country of the publishing venue, when the database reports it. Sources without one are counted as “Not reported”.",
   "This is not necessarily where the study took place.",
@@ -57,7 +57,7 @@ const GEOGRAPHY_NOTE = [
 /**
  * Landscape: distributions over the screened-in set ONLY (the funnel is the
  * one surface spanning the full flow). Surfaces without data are hidden,
- * never faked. Task 058 landscape polish (lead rulings 2026-11-05): the
+ * never faked. The
  * sections sit uncarded on the Sources panel, the bar charts are ranked-bar
  * tables in Navy with their values at the bar ends, each heading carries the
  * population it counts, and a one-value chart is a sentence instead.
@@ -71,7 +71,7 @@ export function LandscapeView() {
   const groups = useGroups(taskId);
   const [geographyView, setGeographyView] = useState<"list" | "map">("list");
   // While a stage that feeds the landscape runs, its reads refetch every
-  // 5 s and the rows it will fill breathe a placeholder (owner, round 8).
+  // 5 s and the rows it will fill breathe a placeholder.
   const stream = useRunStream(taskId);
   const live = liveStages(stream);
   const runLive = stream.run?.status === "running" || stream.run?.status === "paused";
@@ -89,7 +89,7 @@ export function LandscapeView() {
   const findings = typeof funnel.data?.findings === "number" ? funnel.data.findings : null;
 
   // Each funnel row leads to the table filtered to its set, when the table
-  // can filter to it (rounds 11 and 13): Found to every source, Relevant to
+  // can filter to it: Found to every source, Relevant to
   // the screened-in set, Appraised and Full text accessed to theirs (the
   // evidence read's `appraised` and `depth` filters), Cited to the cited
   // sources. Shortlisted has no filter on the table, so it leads nowhere.
@@ -114,7 +114,7 @@ export function LandscapeView() {
   const showTypes = classifying || Object.values(evidenceTypes).some((count) => count > 0);
   const typeSentence = classifying ? null : singleTypeSentence(typeRows);
   const withYear = sum(years);
-  // The relevant count is not restated at the top (round 11: the funnel
+  // The relevant count is not restated at the top (the funnel
   // says it); a heading carries a count only when it differs from it.
   const yearsFigure = relevant !== null && withYear < relevant ? population.withYear(withYear) : null;
   const typeHref = (label: string) => `${allSources}?${new URLSearchParams({ type: label }).toString()}`;
@@ -125,9 +125,9 @@ export function LandscapeView() {
     `/tasks/${taskId}/sources/findings?${new URLSearchParams({ facet, group }).toString()}`;
   // A row leads somewhere only when it has sources to show.
   const linkTypes = typeRows.map((row) => (row.count ? { ...row, href: typeHref(row.key) } : row));
-  // A country leads to All sources filtered to it (`country=`, round 10);
+  // A country leads to All sources filtered to it (`country=`);
   // "Not reported" to the sources without one (`country=none`, the evidence
-  // read's sentinel, round 14); the folded tail leads nowhere.
+  // read's sentinel); the folded tail leads nowhere.
   const linkCountries = geographyRows(geographies).map((row) =>
     !row.count
       ? row
@@ -209,8 +209,8 @@ export function LandscapeView() {
           {Object.keys(geographies).length > 0 && (
             <LandscapeSection
               title={TITLES.geographies}
-              // What the section counts, on hover (owner, round 13): it left
-              // the page. Task 031: publisher country only, never the
+              // What the section counts, on hover:
+              // publisher country only, never the
               // authors' countries, which answer a different question.
               hint={<InfoHint label="About where sources were published" note={GEOGRAPHY_NOTE} />}
               control={
@@ -224,7 +224,7 @@ export function LandscapeView() {
               ) : (
                 <>
                   {geographyView === "map" ? (
-                    // The list stays the keyboard's path (round 11): the map
+                    // The list stays the keyboard's path: the map
                     // is for the eye and its countries take no focus.
                     <Suspense fallback={<div aria-hidden="true" className="publisher-map__placeholder" />}>
                       <PublisherMap

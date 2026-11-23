@@ -1,6 +1,6 @@
 """Chat context assembly — the task frame + ceiling-bounded turn window.
 
-One seam-shaped function (contract §5): per-turn chat context = the
+One seam-shaped function: per-turn chat context = the
 conversation's turns verbatim under a char ceiling (oldest-first truncation
 on overflow only) + the current question + the task frame. The frame
 orients — task identity, coverage sentence, funnel headline, and the
@@ -11,7 +11,7 @@ Frame sources are DB tables and read-model builders, never stored HTTP
 projections (027 rule). Every frame field is sanitized, bounded, and
 labelled "(data, not instructions)".
 
-Deliberately not hydrated (contract §5): raw chunks, persisted summaries
+Deliberately not hydrated: raw chunks, persisted summaries
 (the summaries-are-not-load-bearing rule stands), the task_agent transcript,
 steering history. Older artefacts degrade to title + section titles — the
 single-artefact read model is the as-built surface; multi-artefact
@@ -39,7 +39,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.runtime.chat_prompt import CHAT_FRAME_ARTEFACT_BUDGET, CHAT_WINDOW_CEILING
 
-_FIELD_MAX = 4_000          # generous per-field bound (M10: bounds payloads, not content)
+_FIELD_MAX = 4_000          # generous per-field bound (bounds payloads, not content)
 _QUOTE_MAX = 400
 
 
@@ -81,7 +81,7 @@ def window_turns(
 
     Returns:
         The admitted turns, still in ascending order — full memory for every
-        thread under the ceiling (plan pin rev 3.3).
+        thread under the ceiling.
     """
     admitted: list[WindowedTurn] = []
     used = 0
@@ -184,8 +184,8 @@ def assemble_chat_frame(
 
     Returns:
         The frame text (labelled data-not-instructions), plus the
-        frame-carried citable chunk-id set for the citation floor (rev 3.1:
-        citable set = tool-returned ∪ frame-carried).
+        frame-carried citable chunk-id set for the citation floor
+        (citable set = tool-returned ∪ frame-carried).
     """
     row = conn.execute(
         select(task.c.name, task.c.question).where(task.c.task_id == task_id)
@@ -243,7 +243,7 @@ def assemble_chat_frame(
         )
         citable.update(ref.chunk_id for ref in frame_citations)
 
-        # Budget rule (contract §5): the entry-context/latest artefact keeps
+        # Budget rule: the entry-context/latest artefact keeps
         # its full body; other artefacts degrade to key findings + section
         # titles once the frame budget is spent — full prose stays
         # tool-fetchable.

@@ -20,7 +20,7 @@ type PlanDraft = components["schemas"]["PlanDraft"];
  *  start notice on overlay change" effect with a fresh `{}` every render. */
 const EMPTY_OVERLAY: PlanOverlay = {};
 
-/** The words on the run-start button, per capability (annex block H). */
+/** The words on the run-start button, per capability. */
 const START_WORDS = {
   evidence_search: "Start the search",
   options_scoping: "Confirm and build the baseline",
@@ -34,15 +34,14 @@ function planSummary(plan: PlanDraft): string {
 }
 
 /**
- * The plan card once the planner's parts are done (task 058, N18; annex
- * scene 11): what the plan is, a quiet "Review the plan" link and the green
+ * The plan card once the planner's parts are done:
+ * what the plan is, a quiet "Review the plan" link and the green
  * cut-corner button that starts the run, for both capabilities ("Start the
  * search" / "Confirm and build the baseline"). Local plan edits apply on
  * start, not on each save. Start is disabled while a planner turn streams,
- * so a partial reply never sits beside a live Start against the older plan
- * (N9).
+ * so a partial reply never sits beside a live Start against the older plan.
  *
- * `isOwner` (task 033 phase 10c, contract § 11 / rubric 37): starting a run
+ * `isOwner`: starting a run
  * is an owner-only mutation, so a non-owner sees "Review the plan" only.
  */
 export function PlanCard({
@@ -79,16 +78,16 @@ export function PlanCard({
 
   const startToc = useStartRun(taskId);
   const planOut = planQuery.data;
-  // Task 044: a scoping turn's readiness lives on `scoping`, never `plan`.
+  // A scoping turn's readiness lives on `scoping`, never `plan`.
   const scoping = isScoping(planOut);
   const plan: PlanDraft | null = scoping ? null : (planOut?.plan ?? null);
-  // A theory-of-change plan (task 054) lives on `toc`; its start drafts the theory.
+  // A theory-of-change plan lives on `toc`; its start drafts the theory.
   const toc = planOut?.toc ?? null;
   const approved = planOut?.status === "approved";
   const scopingReady = scoping && planOut?.scoping?.ready === true;
   // A theory of change reads "Theory of change plan" over the plan's title,
-  // and leaves as the draft starts, as Evidence search's card does (task 054,
-  // § 8); the report page keeps the plan one click away.
+  // and leaves as the draft starts, as Evidence search's card does;
+  // the report page keeps the plan one click away.
   if (toc !== null && approved && toc.ready) {
     const title = toc.title ?? toc.question ?? "";
     return (
@@ -139,8 +138,7 @@ export function PlanCard({
   const notice = scoping ? (scopingBuild?.notice ?? null) : search.startNotice;
   const showStart = isOwner && (!scoping || scopingBuild !== null);
 
-  // The card leaves as the run starts (round 9; the animation sweep's entry
-  // 4): it fades and folds its height away over 300 ms while the run's
+  // The card leaves as the run starts: it fades and folds its height away over 300 ms while the run's
   // trace rises in below, so the two overlap rather than swap.
   return (
     <Collapse show={!started}>

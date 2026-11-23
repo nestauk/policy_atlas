@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test deploy-migration-wait-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths rules-check prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify frontend-verify-fast fe-api-smoke deploy-build-guard-test deploy-migration-wait-test waf-report-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -27,7 +27,7 @@ setup:
 	@echo "Test DB ready (policy_atlas_test)."
 	$(MAKE) -C backend setup
 
-# Ops CLI wrappers (owner request, 2026-08-25). The old `staging-user` /
+# Ops CLI wrappers. The old `staging-user` /
 # `prod-user` / `cognito-user` targets stay deleted (they took a password on
 # argv, suppressed the invitation, and left the account unenrolled — pinned by
 # test_the_user_provisioning_make_targets_are_deleted). These wrappers avoid
@@ -48,6 +48,10 @@ setup:
 #     confirmation still reaches a human.
 # Usage: make user-create ENV=staging EMAIL=a@b.org NAME="A Name" [ORG="Org"]
 # Omit ORG to create the account in no organisation.
+#        make org-domain-add ENV=staging DOMAIN=b.org ORG="Org"
+#        make user-deactivate ENV=staging EMAIL=a@b.org   (or SUB=<cognito sub>, not both)
+#        make user-reissue ENV=staging EMAIL=a@b.org   (new temporary password)
+#        make user-reset-app ENV=staging EMAIL=a@b.org   (lost phone: show the QR code again)
 # Optional on every target: OPERATOR="ticket-123" (an annotation; the STS ARN
 # is logged regardless).
 # The wrappers forward through scripts/ops_run.sh to the real CLI
@@ -57,10 +61,14 @@ setup:
 ops-require = $(foreach v,$(1),$(if $($(v)),,$(error $(v)=... is required for this target)))
 OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 
-.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke
+.PHONY: org-create user-create user-enrol user-resync user-reissue user-reset-app user-de-enrol rows-assign admin-grant admin-revoke ops-grant ops-revoke org-domain-add org-domain-remove user-deactivate user-reactivate
 
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
+org-domain-add:
+	@$(call ops-require,ENV DOMAIN ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org domain add --domain "$(DOMAIN)" --org "$(ORG)"
+org-domain-remove:
+	@$(call ops-require,ENV DOMAIN) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org domain remove --domain "$(DOMAIN)"
 user-create:
 	@$(call ops-require,ENV EMAIL NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" $(if $(ORG),--org "$(ORG)") $(if $(INVITE),--invite "$(INVITE)")
 user-enrol:
@@ -69,14 +77,24 @@ user-resync:
 	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user resync --email "$(EMAIL)"
 user-reissue:
 	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reissue --email "$(EMAIL)"
+user-reset-app:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reset-app $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 user-de-enrol:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user de-enrol $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+user-deactivate:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user deactivate $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+user-reactivate:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reactivate $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 rows-assign:
 	@$(call ops-require,ENV ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) rows assign $(if $(TASK),--task "$(TASK)") $(if $(PROJECT),--project "$(PROJECT)") --org "$(ORG)"
 admin-grant:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 admin-revoke:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin revoke $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+ops-grant:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) ops grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+ops-revoke:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) ops revoke $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 
 # Run the whole app locally: API on :8000 + Vite on :5173, one Ctrl-C stops
 # both. Self-contained auth: initialises the dev issuer on first run
@@ -88,7 +106,7 @@ dev:
 	@test -d backend/.dev-issuer || \
 	  (cd backend && uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer)
 	@(trap 'kill 0' INT TERM EXIT; \
-	  POLICY_ATLAS_THEORY_OF_CHANGE=1 $(MAKE) -C backend dev & \
+	  POLICY_ATLAS_THEORY_OF_CHANGE=1 TASK_QUOTA_PER_YEAR=100000 $(MAKE) -C backend dev & \
 	  token=$$(cd backend && uv run python -m policy_atlas.api.dev_issuer mint \
 	    --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev \
 	    --ttl 14400 2>/dev/null | tail -1); \
@@ -119,7 +137,7 @@ build:
 okf-validate:
 	uv run --project backend python scripts/okf_validate.py
 
-# Dependency-vulnerability audit (016 contract rev 2.2) — delegates to backend,
+# Dependency-vulnerability audit — delegates to backend,
 # where the locked dependency set actually lives.
 audit:
 	$(MAKE) -C backend audit
@@ -128,6 +146,11 @@ audit:
 # hoisted backend/ path as repo-root-relative instead of backend/-relative.
 audit-paths:
 	uv run --project backend python scripts/audit_paths.py
+
+# Path-scoped rule files (.claude/rules/): fails if a `paths:` pattern matches no
+# tracked file, or a rule names a repository path that no longer exists.
+rules-check:
+	uv run --project backend python scripts/rules_check.py
 
 # Prompt-family content-hash guard: fails if any prompt-bearing
 # module or prompt text file drifted from its committed hash (scripts/prompt_hashes.json) — prompt
@@ -161,7 +184,7 @@ eval-check:
 	uv run --project backend ruff check scripts/evals/post_screening_and_synthesis
 	uv run --project backend ruff format --check scripts/evals/post_screening_and_synthesis
 
-# Installs frontend dependencies from the committed lockfile (task 025 F.1).
+# Installs frontend dependencies from the committed lockfile.
 # A prerequisite for drift-check (and any other frontend gate) in CI, where
 # node_modules doesn't already exist; separated from drift-check itself so
 # CI can cache/install once and reuse it across steps.
@@ -169,13 +192,14 @@ frontend-install:
 	cd frontend && pnpm install --frozen-lockfile
 
 # Regenerates both committed schema-first artifacts from the Pydantic
-# contract (task 025 F.1): the OpenAPI document, then the TypeScript types
+# contract: the OpenAPI document, then the TypeScript types
 # generated from it. Run this whenever `make drift-check` fails.
 openapi-sync:
 	$(MAKE) -C backend openapi
 	cd frontend && pnpm run gen
+	cd frontend && pnpm run gen:ops
 
-# Schema-first drift gate (task 025 F.1): one schema generates both API
+# Schema-first drift gate: one schema generates both API
 # ends, so this fails the build the moment either committed artifact
 # (frontend/openapi.json, frontend/src/api/gen/types.ts) stops matching what
 # the backend contract actually produces. Requires frontend/node_modules
@@ -197,9 +221,23 @@ drift-check:
 		rm -f "$$tmp_types"; exit 1; \
 	fi; \
 	rm -f "$$tmp_types"
+	@tmp_openapi_ops=$$(mktemp) && \
+	uv run --project backend python -m policy_atlas.api.export_openapi "$$tmp_openapi_ops" --mode ops && \
+	if ! diff -u frontend/openapi-ops.json "$$tmp_openapi_ops"; then \
+		echo "ERROR: frontend/openapi-ops.json is stale relative to the ops contract." >&2; \
+		rm -f "$$tmp_openapi_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_openapi_ops"
+	@tmp_types_ops=$$(mktemp) && \
+	(cd frontend && pnpm exec openapi-typescript openapi-ops.json -o "$$tmp_types_ops") && \
+	if ! diff -u frontend/src/api/gen/types-ops.ts "$$tmp_types_ops"; then \
+		echo "ERROR: frontend/src/api/gen/types-ops.ts is stale relative to frontend/openapi-ops.json." >&2; \
+		rm -f "$$tmp_types_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_types_ops"
 	@echo "drift-check: OK"
 
-# Font-binary guard (task 025, contract strand 7): Averta/Zosia are licensed
+# Font-binary guard: Averta/Zosia are licensed
 # for the web app but their binaries must NEVER be committed to this
 # open-source repo — locally they live untracked and load via @font-face;
 # everything must render on the fallback stack without them. Catches an
@@ -210,10 +248,16 @@ font-guard:
 	fi
 	@echo "font-guard: no font binaries tracked"
 
-# The frontend gate lane (task 025 H): typecheck · lint · vitest · build.
+# The frontend gate lane: typecheck · lint · vitest · build.
 # Requires frontend/node_modules (make frontend-install).
 frontend-verify:
 	cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+
+# The quick frontend check for a commit between polish rounds: type check, lint and
+# unit tests, without the production build. `make verify-fast` covers the backend
+# only, so a frontend-only commit needs this target to be green.
+frontend-verify-fast:
+	cd frontend && pnpm typecheck && pnpm lint && pnpm test
 
 # Thin browser smoke against the real local API: fresh dev-issuer credentials,
 # real Postgres, real CORS/base URL/auth transport, and the API SSE stream.
@@ -225,13 +269,17 @@ fe-api-smoke:
 # Verifies deploy.sh's production VITE_* refusal directly once D.1 lands.
 # It deliberately reports a clear skip while that documented interface is absent.
 # CI runs this target, so it also runs the migration-waiter check below.
-deploy-build-guard-test: deploy-migration-wait-test
+deploy-build-guard-test: deploy-migration-wait-test waf-report-test
 	bash scripts/test_deploy_build_guard.sh
 
-# Checks deploy.sh's migration waiter (task 057) against a stubbed `aws`: polls
+# Checks deploy.sh's migration waiter against a stubbed `aws`: polls
 # until STOPPED, fails loudly on a non-zero exit or after MIGRATION_WAIT_MAX_S.
 deploy-migration-wait-test:
 	bash scripts/test_deploy_migration_wait.sh
+
+# Checks the read-only WAF count-week report against recorded-shaped AWS output.
+waf-report-test:
+	bash scripts/test_waf_report.sh
 
 # GitHub Actions and operators share these deployment entry points. DEPLOY_ENV
 # selects one committed environment across infra/*_config.json; deploy-check is
@@ -259,6 +307,7 @@ verify:
 	$(MAKE) eval-check
 	$(MAKE) -C infra test
 	$(MAKE) audit-paths
+	$(MAKE) rules-check
 	$(MAKE) prompt-guard
 	$(MAKE) font-guard
 	$(MAKE) drift-check

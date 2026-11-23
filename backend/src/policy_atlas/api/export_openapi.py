@@ -27,7 +27,7 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import TypeAdapter
 
@@ -49,7 +49,7 @@ _NAMED_UNIONS: tuple[tuple[str, Any], ...] = (
 )
 
 
-def build_settings(tmp_dir: Path) -> Settings:
+def build_settings(tmp_dir: Path, *, mode: Literal["api", "ops"] = "api") -> Settings:
     """Build a synthetic, connection-free `Settings` for schema export.
 
     Args:
@@ -63,6 +63,8 @@ def build_settings(tmp_dir: Path) -> Settings:
         opens a connection.
     """
     key_dir = tmp_dir / "openapi-export-issuer"
+    if mode not in {"api", "ops"}:
+        raise ValueError(f"unsupported OpenAPI export mode: {mode}")
     return Settings(
         oidc_issuer="http://dev-issuer.local",
         oidc_client_id="openapi-export",
@@ -70,20 +72,36 @@ def build_settings(tmp_dir: Path) -> Settings:
         oidc_jwks_path=init(key_dir),
         app_origin="http://app.example.test",
         database_url="postgresql+psycopg://unused/unused",
+        service_role=mode,
+        ops_ui_dir=None,
     )
 
 
-def build_openapi_schema() -> dict[str, Any]:
+def build_openapi_schema(*, mode: Literal["api", "ops"] = "api") -> dict[str, Any]:
     """Build the app's OpenAPI document, with SSE/check-in unions folded in.
 
     Returns:
         The full OpenAPI schema dict, safe to serialize.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        settings = build_settings(Path(tmp))
+        settings = build_settings(Path(tmp), mode=mode)
         app = create_app(settings=settings)
         schema = app.openapi()
-    _fold_named_unions(schema)
+    if mode == "api":
+        _fold_named_unions(schema)
+    else:
+        schema["info"]["title"] = "Policy Atlas Ops API"
+        schema["servers"] = [
+            {
+                "url": "https://ops.{domain}",
+                "variables": {
+                    "domain": {
+                        "default": "policyatlas.uk",
+                        "enum": ["policyatlas.uk", "v3.policyatlas.uk"],
+                    }
+                },
+            }
+        ]
     return schema
 
 
@@ -106,14 +124,14 @@ def _fold_named_unions(schema: dict[str, Any]) -> None:
         schemas[name] = union_schema
 
 
-def export(out_path: Path) -> None:
+def export(out_path: Path, *, mode: Literal["api", "ops"] = "api") -> None:
     """Write the deterministic OpenAPI document to `out_path`.
 
     Args:
         out_path: Destination file. Parent directories are created as
             needed.
     """
-    schema = build_openapi_schema()
+    schema = build_openapi_schema(mode=mode)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         json.dumps(schema, sort_keys=True, indent=2, separators=(",", ": ")) + "\n",
@@ -132,8 +150,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("out_path", type=Path, help="Destination path for the OpenAPI JSON.")
+    parser.add_argument("--mode", choices=("api", "ops"), default="api")
     args = parser.parse_args(argv)
-    export(args.out_path)
+    export(args.out_path, mode=args.mode)
     return 0
 
 

@@ -3,7 +3,9 @@ type: Runbook
 title: Serve the commit under measurement from a second worktree, and name what makes a round not like-for-like
 description: A live measurement round serves a detached second worktree (cherry-picks for lever isolation) so agents can edit the main tree meanwhile; a cherry-pick of a commit already in the history aborts the sequence (--quit, then re-pick); a verification.md conflict on the live worktree is always --theirs; never run make verify during a round; zsh needs ${=var} to word-split an argument list. A repeated question after the body-hash store is live is not like-for-like (30 to 50 documents per run come from the store); an adaptive pool at its cap finds the quota's edge by being throttled, which is the probe's cost, not a regression; a per-run row count over chunk_embedding over-counts the ingest stage by the acquire stage's abstract embeddings unless it filters on the snapshot kind.
 tags: [measurement, worktree, live-check, cherry-pick, "057"]
-timestamp: 2026-11-03
+generated:
+  by: process:okf-migrate
+  at: 2026-11-03
 ---
 
 # Runbook

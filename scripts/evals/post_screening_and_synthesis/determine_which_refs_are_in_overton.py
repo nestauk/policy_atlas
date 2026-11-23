@@ -26,7 +26,8 @@ set -a; source ../../../backend/.env; set +a
 ../../../backend/.venv/bin/python determine_which_refs_are_in_overton.py
 ```
 """
-
+import json
+from collections import defaultdict
 import html
 import os
 import re
@@ -43,9 +44,6 @@ from utils import GROUND_TRUTH_DIR, RESULTS_DIR, briefing_path, ref_cache_path
 
 API_KEY = os.environ["OVERTON_API_KEY"]
 API_URL = "https://app.overton.io/documents.php"
-
-import json
-from collections import defaultdict
 
 RUN_DIR = RESULTS_DIR / "2026-11-05-deep-necessary-facts"
 OUTPUT_PATH = RUN_DIR / "overton_title_matches.jsonl"

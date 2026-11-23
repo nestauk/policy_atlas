@@ -4,10 +4,10 @@ import { FoldMarkAnimated } from "../../ui/brand/FoldMarkAnimated";
 import { cn } from "../../ui/brand/cn";
 import { useArrives } from "../../ui/motion/arrivals";
 
-/** The grey action line under an agent's reply while it works (task 058,
- *  N9; annex scene 10): what it is doing, with the Policy Atlas fold mark
- *  turning (owner, 2026-11-05: the mark, not the yellow dot, when the agent
- *  is working). The Task Agent and the chats share it (owner, round 14).
+/** The grey action line under an agent's reply while it works:
+ *  what it is doing, with the Policy Atlas fold mark
+ *  turning (the mark, not the yellow dot, shows the agent
+ *  is working). The Task Agent and the chats share it.
  *  After a dropped connection the mark holds still while the transcript is
  *  re-read. With no words yet the mark stands alone; a screen reader hears
  *  `quietLabel`.

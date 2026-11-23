@@ -3,7 +3,9 @@ type: Convention
 title: Structured-output prompts pin exact key vocabulary and state cross-field constraints as hard rules
 description: A planner-class model invents compound dict keys ("select_extract_group") for grouped reasoning, and pairs fields the schema cannot cross-constrain (stage-2 with landscape) — the schema's extra="forbid" catches both, but the fix belongs in the prompt, and the fail-closed validation loop is the right recovery surface.
 tags: [llm, prompting, structured-output, fail-closed, planner]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

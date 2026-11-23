@@ -1,4 +1,4 @@
-"""The ``toc_judge`` step: one link against one document (task 054, C5, C36).
+"""The ``toc_judge`` step: one link against one document.
 
 Per link, its own search's documents (or, for a link with none, the *K* pool
 documents closest by meaning) are read with one call each; its support,
@@ -83,7 +83,7 @@ from policy_atlas.theory_of_change.graph import (
 log = structlog.get_logger()
 
 
-#: The reason ``toc_judge`` records on a document no link found on topic (C31).
+#: The reason ``toc_judge`` records on a document no link found on topic.
 NOT_ABOUT_REASON = "judged_not_about_any_step"
 
 
@@ -154,10 +154,10 @@ def toc_judge_scope(
     only: set[str] | None = None,
     connect: ConnectFactory | None = None,
 ) -> dict[str, Any]:
-    """Judge each link against its top documents, both questions at once (C5).
+    """Judge each link against its top documents, both questions at once.
 
     Each link's evidence rows are written as soon as its last judge call
-    finishes, in a short transaction of their own (task 054, S8), so the canvas
+    finishes, in a short transaction of their own, so the canvas
     colours the link while the other links are still being judged. The step's
     one ``toc.changed`` event, the whole programme's judgements and the
     screening of documents no link found on topic still wait for the end.
@@ -170,8 +170,8 @@ def toc_judge_scope(
         backend: The ToC model seam.
         ranker: The rerank backend ``select`` uses, or ``None`` to keep order.
         embedder: The embedding backend that picks the closest pool documents
-            for a link with no search of its own (C27), or ``None``.
-        only: The links the second search covers (C44), or ``None``.
+            for a link with no search of its own, or ``None``.
+        only: The links the second search covers, or ``None``.
         connect: Opens one short committed transaction for a link's rows
             (``engine.begin``); ``None`` writes them inside ``conn``, as one
             transaction with the rest of the step.
@@ -185,13 +185,13 @@ def toc_judge_scope(
     named = context.context.get(TOC_LINKS_KEY)
     link_keys, left_out = links_to_check(graph, list(named) if named else None)
     if only is not None:
-        # The second search (C44): these links only, no programme judgements.
+        # The second search: these links only, no programme judgements.
         link_keys, named = [key for key in link_keys if key in only], list(only)
     pool = screened_documents(conn, task_id=task_id, scope_id=context.scope_id)
     pool_by_id = {doc.tss_id: doc for doc in pool}
-    # Each link reads what toc_select picked for it (C31). When no link's search
+    # Each link reads what toc_select picked for it. When no link's search
     # found anything, a link with a search of its own judges nothing.
-    # Find more evidence (C44) reads more documents per link.
+    # Find more evidence reads more documents per link.
     top_k = documents_per_link(context.context)
     own = _walk_picks(conn, task_id=task_id, walk_id=walk_id) or {
         key: set() for key in _child_links(conn, task_id=task_id, walk_id=walk_id).values()
@@ -205,7 +205,7 @@ def toc_judge_scope(
         link = graph.links[key]
         source, target = graph.boxes[link.source], graph.boxes[link.target]
         hashes[key] = item_hash(link, source.text, target.text)
-    # A retried step leaves alone the links an earlier attempt already wrote (S8).
+    # A retried step leaves alone the links an earlier attempt already wrote.
     done = _written_by_this_step(
         conn, task_id=task_id, run_id=run_id, walk_id=walk_id, hashes=hashes
     )
@@ -290,11 +290,11 @@ def toc_judge_scope(
         usage=usage,
         connect=connect if connect is not None else inline_connect(conn),
     )
-    # A link's rows go in once its last call is back (S8).
+    # A link's rows go in once its last call is back.
     waiting = Counter(job.link_key for job in jobs if job.link_key != PROGRAMME_KEY)
     answered: dict[str, list[tuple[_JudgeJob, CallOutcome[Any]]]] = {}
 
-    # The live count (task 054, A4): "n of M documents", one tick per finished
+    # The live count: "n of M documents", one tick per finished
     # call, coalesced by the hub as every stage's ticks are.
     judged_so_far = 0
 
@@ -347,9 +347,9 @@ def toc_judge_scope(
             }
         )
 
-    # Every covered link now counts the judgements of its current wording (C19);
+    # Every covered link now counts the judgements of its current wording;
     # a link with no call to make is moved here, the others moved with their
-    # rows. Find more evidence leaves that alone: what it found waits as pending (C44).
+    # rows. Find more evidence leaves that alone: what it found waits as pending.
     log_ = writer.log
     for key in link_keys if not find_more else []:
         if key in writer.written or key in done:
@@ -363,9 +363,9 @@ def toc_judge_scope(
             observed_revision=row.revision,
             values={"counted_hash": hashes[key], "kept_hash": None, "kept_by": None},
         )
-    # One change record for the whole step, whatever the links committed (S8).
+    # One change record for the whole step, whatever the links committed.
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_judge", log=log_)
-    # Classify and appraise run after the judge, on what it found on topic (C31):
+    # Classify and appraise run after the judge, on what it found on topic:
     # every other document is screened out here. The links' rows are committed
     # by now, so this read (read committed) sees them.
     on_topic = set(
@@ -387,7 +387,7 @@ def toc_judge_scope(
         # Kept for classify and appraise, which weigh them like any document.
         on_topic |= {uuid.UUID(j["tss"]) for j in programme if j["support"] != "not_about"}
     # Only the documents this call read can be screened out: a judge on named
-    # links or on the second search (C40, C44) does not read the whole programme's
+    # links or on the second search does not read the whole programme's
     # documents, whose on-topic judgements live in the programme event, not in
     # the evidence rows, and must stay in for classify and appraise. A retried
     # step also counts what its earlier attempt read.
@@ -416,7 +416,7 @@ def toc_judge_scope(
         "calls": len(jobs),
         "failed_calls": writer.failed,
         "judgements": writer.stored + len(earlier),
-        # The done row's "test them" (task 054, S2): judgements about the step.
+        # The done row's "test them": judgements about the step.
         "test_them": writer.test_them + sum(support != "not_about" for support in earlier),
         "programme_judgements": len(programme),
         "unverified_dropped": writer.unverified,
@@ -430,7 +430,7 @@ def toc_judge_scope(
 
 @dataclass
 class _LinkWriter:
-    """Writes one link's judgements in a short transaction of its own (task 054, S8).
+    """Writes one link's judgements in a short transaction of its own.
 
     The insert of its ``toc_item_evidence`` rows and, outside Find more
     evidence, the move of its ``counted_hash`` to the current wording commit
@@ -534,13 +534,13 @@ class _LinkWriter:
             ),
             "indicator": indicator.text if indicator is not None else None,
             # Stored as the judge said it; it counts only when classify,
-            # which now runs after the judge, also calls it a modelling study (C31).
+            # which now runs after the judge, also calls it a modelling study.
             "robust_model": response.robust_model,
             "item_hash": job.item_hash,
-            # A study the user added (C42) and their earlier decisions on this
-            # document for this link, carried to the new wording (C43).
+            # A study the user added and their earlier decisions on this
+            # document for this link, carried to the new wording.
             "added_by": self.started_by if job.link_key in self.study_links else None,
-            # What Find more evidence found waits for the user's Accept (C44); a
+            # What Find more evidence found waits for the user's Accept; a
             # document not about the step changes nothing, so it does not wait.
             "status": "pending" if self.find_more and about else "counted",
             **self.carried.get((job.link_key, job.document.tss_id), {}),
@@ -557,10 +557,10 @@ def _written_by_this_step(
 ) -> dict[str, list[tuple[uuid.UUID, str]]]:
     """The links an earlier attempt of this step already wrote, at their current wording.
 
-    A link's rows commit as it is judged (S8), so a component retry finds the
+    A link's rows commit as it is judged, so a component retry finds the
     rows the failed attempt wrote. They are this walk's rows at the link's
     current hash, written since this step's first attempt started: rows the
-    walk's first judge wrote before the second search (C44) are older, so the
+    walk's first judge wrote before the second search are older, so the
     second search still judges its links.
 
     Args:
@@ -625,7 +625,7 @@ def toc_search_again_scope(
     embedder: EmbeddingBackend | None = None,
     connect: ConnectFactory | None = None,
 ) -> dict[str, Any]:
-    """One more search for the links the judge left thin, then judge what it found (C44).
+    """One more search for the links the judge left thin, then judge what it found.
 
     The runner has already dispatched and joined one reformulated item search
     per link whose verdict was *Not enough evidence* after the judge (stage
@@ -642,7 +642,7 @@ def toc_search_again_scope(
         backend: The ToC model seam.
         ranker: The rerank backend, or ``None`` to keep order.
         embedder: The embedding backend for the shared pool, or ``None``.
-        connect: Opens the judge's short per-link transactions (S8), or ``None``.
+        connect: Opens the judge's short per-link transactions, or ``None``.
 
     Returns:
         The links searched again, the select counts and the judge counts.

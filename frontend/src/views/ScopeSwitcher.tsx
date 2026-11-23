@@ -10,15 +10,15 @@ export type Scope = "all" | "mine";
 const SWITCHER_RULE_CLASS = cn(GROWING_RULE_CLASS, "after:-bottom-0.5 after:h-0.5");
 
 /**
- * The Mine / Organisation switcher (task 033 phase 10b, contract § 11).
+ * The Mine / Organisation switcher.
  *
- * Two scopes only: Archived is not a scope (owner, round 11) but a toggle
+ * Two scopes only: Archived is not a scope but a toggle
  * at the end of the Tasks page's filters row that lists the archived tasks
  * of whichever scope is open.
  *
  * No component label — the options are the whole affordance (lead-owned
  * copy, binding). Whether the switcher shows at all is the dark-launch
- * invariant (rubric 14: only when `/me` has an organisation) and belongs at
+ * invariant (only when `/me` has an organisation) and belongs at
  * the call site, so this component carries no visibility logic of its own.
  */
 export function ScopeSwitcher({
@@ -29,15 +29,15 @@ export function ScopeSwitcher({
   onChange: (next: Scope) => void;
 }) {
   const options: { value: Scope; label: string }[] = [
-    // Mine first: it is the default (owner, 2026-09-05).
+    // Mine first: it is the default.
     { value: "mine", label: TENANCY_COPY.scopeMine },
     { value: "all", label: TENANCY_COPY.scopeOrganisation },
   ];
-  // The tab language of the whole app (owner, round 10): a 2 px Electric
+  // The tab language of the whole app: a 2 px Electric
   // Blue rule grows from the item's left edge to its centre on hover and
   // focus over 200 ms, runs full width under the active item, and a click
   // carries it on to the right edge; under reduced motion it appears
-  // without growing. Never a fill (lead ruling P4): the page's one blue fill
+  // without growing. Never a fill: the page's one blue fill
   // is its primary. Each label reserves its Extrabold width, so choosing one
   // never nudges the others sideways.
   return (
@@ -69,17 +69,17 @@ export function ScopeSwitcher({
 }
 
 /** The list's heading while the archive is open: "Archived" at Meta
- *  Semibold Navy, 8 px over the frame (owner, round 11). */
+ *  Semibold Navy, 8 px over the frame. */
 export const ARCHIVED_HEADING_CLASS = "mb-2 text-meta font-semibold text-navy";
 
 /**
- * The archived toggle (owner, round 11), on Tasks and Projects: not a scope
+ * The archived toggle, on Tasks and Projects: not a scope
  * but a filter on the open one, and one people will hardly ever use, so it
  * sits at the list's foot, right-aligned after "Show more" (`ListFootRow`),
  * as the quiet control the run trace uses for "See the plan" and "Show
  * steps", at Caption: "Show archived" off, "Hide archived" on. The
- * changing label carries the state, so there is no `aria-pressed` (lead
- * ruling, round 11: it would say the state twice). Its box is the foot
+ * changing label carries the state, so there is no `aria-pressed` (it
+ * would say the state twice). Its box is the foot
  * row's 40 px for a full-height target, and it reserves the wider label's
  * width so the words never shift its edge.
  */

@@ -2,8 +2,8 @@ import { cn } from "../../../ui/brand/cn";
 import { ArrowDownIcon } from "../../../ui/brand/icons";
 
 /** The way back to the end of a transcript once the reader has scrolled up:
- *  a square button floating over the scroll region's bottom edge (owner request,
- *  2026-09-05). Render it inside a `relative` wrapper around the region. */
+ *  a square button floating over the scroll region's bottom edge.
+ *  Render it inside a `relative` wrapper around the region. */
 export function JumpToEnd({ visible, onClick }: { visible: boolean; onClick: () => void }) {
   return (
     <button

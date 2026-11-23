@@ -3,7 +3,9 @@ type: Convention
 title: Gate an index snapshot in a second worktree and commit from the gated tree id, never from the live index or the working tree
 description: In the task 046 builds the lead gated a snapshot (`git write-tree`) in `../policy_atlas-gate` while workers kept editing; the commit is made with `git commit-tree` from the gated tree id and `git update-ref`. Three snapshot faults came from edits landing between `git add` and the gate (regenerated OpenAPI files, a worker's staged deletion, a later phase's test file); `git commit <pathspec>` commits the working tree, not the index; a wrong path in a split list silently commits nothing for that file; a shared test database deadlocks two suites.
 tags: [git, gating, worktree, verification, build-process, task-046]
-timestamp: 2026-10-12
+generated:
+  by: process:okf-migrate
+  at: 2026-10-12
 ---
 
 # Rule

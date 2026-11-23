@@ -1,7 +1,7 @@
-"""The ``toc_choose`` step: choose after grading (task 054, C6).
+"""The ``toc_choose`` step: choose after grading.
 
 Within the 6 / 3 limits, condition supports are recorded, and the critical
-connection is chosen by the C6 rule.
+connection is chosen by the critical-connection rule.
 """
 
 from __future__ import annotations
@@ -49,13 +49,13 @@ log = structlog.get_logger()
 
 
 def critical_link(graph: Graph, verdicts: Mapping[str, LinkVerdict]) -> str | None:
-    """The critical connection by the C6 rule, on verdicts (C36).
+    """The critical connection, chosen on verdicts.
 
     The weakest important step on a success pathway: among links on kept
     success pathways, the one with the lowest verdict; ties go to the link on
     the most kept pathways, then the earlier one in pathway order. A step the
-    evidence supports (Supported or Leaning supports) is never critical
-    (owner, 2026-11-04): when every step is supported, there is none.
+    evidence supports (Supported or Leaning supports) is never critical:
+    when every step is supported, there is none.
 
     Args:
         graph: The theory, with current pathway statuses.
@@ -100,7 +100,7 @@ def toc_choose_scope(
 
     The model is called only when kept pathways exceed a limit or a support
     recorded a condition its link does not name. Code enforces the 6 / 3
-    limits whatever the model says (C6).
+    limits whatever the model says.
 
     Args:
         conn: Open connection inside the component transaction.
@@ -236,7 +236,7 @@ def toc_choose_scope(
         new_hash = item_hash(new_link, graph.boxes[link.source].text, graph.boxes[link.target].text)
         reason = f"Added a condition the evidence recorded: {condition}"
         # kept_by = choose: the condition came from evidence already judged, so
-        # the link stays checked, not pending (C19).
+        # the link stays checked, not pending.
         if store.update(
             conn,
             log_,
@@ -261,7 +261,7 @@ def toc_choose_scope(
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_choose", log=log_, changes=changes)
     summary = {
         "called_model": called,
-        # The done row's "kept" (task 054, S2): the pathways still kept after this step.
+        # The done row's "kept": the pathways still kept after this step.
         "kept": len(kept_paths) - set_aside,
         "set_aside": set_aside,
         "conditions_added": conditions_added,
@@ -283,7 +283,7 @@ def _pick_critical(
     verdicts: Mapping[str, LinkVerdict],
     changes: list[store.Change],
 ) -> bool:
-    """Re-pick the critical connection; a user-marked one is kept (C6)."""
+    """Re-pick the critical connection; a user-marked one is kept."""
     current = {
         str(row.link_id): row
         for row in conn.execute(select(toc_link).where(toc_link.c.task_id == task_id))
@@ -294,7 +294,7 @@ def _pick_critical(
     choice = critical_link(graph, verdicts)
     if marked and str(marked[0].link_id) == choice:
         return False
-    # Unmark first: at most one critical link per task (W10).
+    # Unmark first: at most one critical link per task.
     for row in marked:
         store.update(
             conn,

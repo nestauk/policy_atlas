@@ -326,7 +326,7 @@ def paper_key(record: dict[str, Any]) -> str:
     are the same paper only when the title and the full author list match; a shared
     title with other authors (a common review title, say) stays two papers.  A record
     with no title, or no author names, is never merged with anything: there is not
-    enough evidence that it is the same work (review finding, 2026-10-12).
+    enough evidence that it is the same work.
 
     Args:
         record: An OpenAlex work record.

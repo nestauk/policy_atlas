@@ -7,9 +7,12 @@ made on it, in order, so a test can read back what each attempt carried. A fake
 
 from __future__ import annotations
 
+import contextvars
+import threading
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from typing import Any
 
 import botocore.exceptions
@@ -19,6 +22,8 @@ import pytest
 from structlog.testing import capture_logs
 
 from policy_atlas.core import liveness, tracing
+from policy_atlas.core.openai_client import send_turn, stream_turn
+from tests.helpers import text_response, text_stream_events
 
 _REQUEST = httpx.Request("POST", "https://provider.test/v1/chat/completions")
 
@@ -175,6 +180,8 @@ def test_a_timeout_then_success_makes_two_traced_attempts() -> None:
         "attempt": 2,
         "logical_call_id": first.metadata()["logical_call_id"],
         "prompt_version": "v1",
+        # A call that never reached the provider has no request id: its start time instead.
+        "started_at": second.metadata()["started_at"],
     }
     assert seen == ["ok"]
     [retry] = [entry for entry in logs if entry["event"] == "model_call.retry"]
@@ -381,3 +388,79 @@ def test_without_langfuse_the_liveness_hooks_still_run(
     assert result == "ok"
     assert waits == []
     assert [event for event, _payload in hub.events] == ["verb", "opened", "closed"]
+
+
+def _provider(*answers: Callable[[], httpx.Response]) -> openai.OpenAI:
+    """An SDK client whose network layer gives each scripted answer in turn."""
+    queue = list(answers)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return queue.pop(0)()
+
+    return openai.OpenAI(
+        api_key="throwaway",
+        base_url="http://model.test/v1",
+        max_retries=0,
+        http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+    )
+
+
+def _times_out() -> httpx.Response:
+    raise httpx.ReadTimeout("no answer")
+
+
+def test_each_attempt_records_its_own_request_id_or_its_start_time() -> None:
+    langfuse = _FakeLangfuse()
+    client = _provider(
+        lambda: httpx.Response(503, headers={"x-request-id": "req_busy"}, json={}),
+        _times_out,
+        lambda: httpx.Response(
+            200, headers={"x-request-id": "req_ok"}, json=text_response("hi").to_dict()
+        ),
+    )
+
+    def _call() -> str:
+        return send_turn(client, label="test turn", model="gpt-test", messages=[]).text
+
+    result, _waits = _run(_call, langfuse)  # type: ignore[arg-type]
+
+    assert result == "hi"
+    busy, cut, answered = (span.metadata() for span in langfuse.spans)
+    assert busy["request_id"] == "req_busy"
+    assert "request_id" not in cut
+    assert datetime.fromisoformat(cut["started_at"]).utcoffset() == timedelta(0)
+    assert answered["request_id"] == "req_ok"
+    assert "started_at" not in answered
+
+
+def test_a_streamed_call_records_the_request_id_of_its_response_headers() -> None:
+    events = "".join(
+        f"event: {event.type}\ndata: {event.to_json(indent=None)}\n\n"
+        for event in text_stream_events(["hi"])
+    )
+    client = _provider(
+        lambda: httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream", "x-request-id": "req_stream"},
+            content=events.encode(),
+        )
+    )
+
+    with tracing.request_id_scope() as holder:
+        assert list(stream_turn(client, label="test stream", model="gpt-test", messages=[])) == [
+            "hi"
+        ]
+
+    assert holder.request_id == "req_stream"
+
+
+def test_a_request_id_noted_on_a_copied_context_thread_reaches_the_scope() -> None:
+    with tracing.request_id_scope() as holder:
+        context = contextvars.copy_context()
+        thread = threading.Thread(
+            target=context.run, args=(tracing.note_request_id, "req_thread")
+        )
+        thread.start()
+        thread.join()
+
+    assert holder.request_id == "req_thread"

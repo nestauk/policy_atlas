@@ -9,7 +9,7 @@ import {
  * Report download: PDF via the existing print stylesheet, markdown as a
  * file. Word is skipped — it needs a library this slice does not add.
  * The Markdown is headed with the question, as the page is; the generated
- * title names the file (task 058, round 10, D1).
+ * title names the file.
  */
 export function ArtefactDownload({
   artefact,

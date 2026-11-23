@@ -1,7 +1,7 @@
 """Environment safety: prove the AWS account and the database are the same estate.
 
-Contract § 9 calls this "the single highest-consequence operational failure in
-the design", and it is an unusual shape of failure: **the two halves of an
+A mismatch here is the single highest-consequence operational failure in
+the design, and it is an unusual shape of failure: **the two halves of an
 operator command are addressed completely differently.** Cognito is reached
 through ambient AWS credentials (a profile, a role, an SSO session); Postgres is
 reached through an SSM port-forward that always lands on ``localhost:15432``
@@ -17,7 +17,7 @@ three legs.
 operator has configured for ``--env``. The expected id comes from the operator's
 own environment (``PA_OPS_ACCOUNT_STAGING`` / ``PA_OPS_ACCOUNT_PROD``, or
 ``--expected-account``) and **never from the repository**: this repo is public
-and account ids are env-injected by policy (task 026 decision 4).
+and account ids are env-injected by policy.
 
 **Leg 2 — the pool.** The user-pool id likewise comes from operator
 configuration (``PA_OPS_USER_POOL_STAGING`` / ``PA_OPS_USER_POOL_PROD``, or
@@ -29,10 +29,8 @@ the AWS half.
 **Leg 3 — the database, which is the leg that actually matters.** Legs 1 and 2
 say which AWS account the operator is in. They say nothing about which cluster
 the tunnel reaches, and that is the failure being defended against. There is no
-environment marker in the schema to read: contract § 9 offered "a row in
-``organisation`` or a settings table naming the environment", but the schema
-gate (§ Constraints) enumerated exactly two new tables and neither is a settings
-table, and a magic ``organisation`` row would be a value the tenancy code could
+environment marker in the schema to read: there is no settings table, and a
+magic ``organisation`` row would be a value the tenancy code could
 join against by accident. So this leg proves the pairing from data that is
 already there and already load-bearing: **``app_user.user_id`` is the Cognito
 ``sub``.** Sample the most recently created subjects from the connected database
@@ -78,17 +76,19 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import boto3
 import structlog
 from botocore.exceptions import ClientError
-from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from sqlalchemy import desc, or_, select
 from sqlalchemy.engine import Connection, make_url
 
 from policy_atlas.core.schema import app_user
 from policy_atlas.ops.errors import OpsError
+
+if TYPE_CHECKING:
+    from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 
 log = structlog.get_logger()
 

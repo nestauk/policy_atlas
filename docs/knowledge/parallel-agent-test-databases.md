@@ -1,9 +1,11 @@
 ---
 type: Testing rule
 title: Each parallel agent gets its own test database at 127.0.0.1, created with the vector extension, and never runs the shared suite
-description: An agent that must run tests while the lead's gate or other agents use Postgres creates its own `policy_atlas_test_<name>` database (`createdb` then `CREATE EXTENSION IF NOT EXISTS vector`; the engine fixture migrates it), addresses it as 127.0.0.1 (localhost resolves to ::1 first and is refused), runs pytest with -p no:xdist on named files, and never `make test` or `make verify`. Timings taken under concurrent suites are not planning figures (the rev2 backfill took 49 minutes contended, 20 alone). A test token with a fixed short lifetime is a deadline too: a 60 s token failed a walk that took over a minute under load.
+description: 'An agent that must run tests while the lead''s gate or other agents use Postgres creates its own `policy_atlas_test_<name>` database (`createdb` then `CREATE EXTENSION IF NOT EXISTS vector`; the engine fixture migrates it), addresses it as 127.0.0.1 (localhost resolves to ::1 first and is refused), runs pytest with -p no:xdist on named files, and never `make test` or `make verify`. Timings taken under concurrent suites are not planning figures (the rev2 backfill took 49 minutes contended, 20 alone). A test token with a fixed short lifetime is a deadline too: a 60 s token failed a walk that took over a minute under load.'
 tags: [testing, postgres, agents, xdist, "057"]
-timestamp: 2026-11-03
+generated:
+  by: process:okf-migrate
+  at: 2026-11-03
 ---
 
 # Rule
@@ -30,3 +32,5 @@ Task 057's build ran nine agent databases beside the gate; the review ran three.
 `localhost` refusal and the missing extension each cost an agent a round. The HEAD gate's
 one failure at the review was a 60 s token on a walk that took longer than that at a load
 average of 170.
+
+In a git worktree (065) there is no `backend/.env`, and `docker compose` cannot find the shared database by itself. Run make targets with `COMPOSE_PROJECT_NAME=policy_atlas`.

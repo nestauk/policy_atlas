@@ -40,7 +40,7 @@ const BLOCK: Record<Exclude<Support, "not_about">, { background: string; opacity
 const PX_PER_WEIGHT = 40;
 
 /**
- * The evidence balance (C36): four columns, Refutes to Strongly supports, each
+ * The evidence balance: four columns, Refutes to Strongly supports, each
  * document a block whose height is proportional to its weight. Hovering or
  * focusing a block shows its document as the document list shows it; clicking
  * it opens the document's citation, as the list does.
@@ -82,7 +82,7 @@ type ScoredDocument = Pick<TocDocument, "support" | "quality" | "relevance" | "r
 /** A document's facts after its support: "quality 3", "relevance 2", the judge's
  *  scores beside the user's, who added it, and why it is relevant. */
 function documentFactsAfterSupport(doc: ScoredDocument): string[] {
-  // The user's scores count (C42); the judge's stay visible beside them.
+  // The user's scores count; the judge's stay visible beside them.
   const judge =
     doc.scored_by != null && doc.judge_support != null ? `your scores (judge: ${SUPPORT_LABEL[doc.judge_support].toLowerCase()} · relevance ${doc.judge_relevance})` : null;
   const added = doc.added_by != null ? `added by ${doc.added_by}` : null;
@@ -136,8 +136,7 @@ export interface TocCitation {
 
 /** One citation's block in the sheet, as the Evidence search's: the source
  *  (its title the way into its dossier), its evidence type and strength from
- *  the dossier, then its quote inside the passage it came from (task 054,
- *  A15). */
+ *  the dossier, then its quote inside the passage it came from.*/
 function CitationBlock({
   taskId,
   citation,
@@ -187,7 +186,7 @@ function WithMarks({
 
 /** The Evidence search's citation sheet, for ToC citations: "Evidence for
  *  this claim", the claim, then one box per source. A source's title opens
- *  its dossier over the sheet, with "Back to the claim" (task 054, A15). */
+ *  its dossier over the sheet, with "Back to the claim". */
 export function CitationSheet({ taskId, claim, citations, numbered = true, onClose }: { taskId: string; claim: string | null; citations: TocCitation[]; numbered?: boolean; onClose: () => void }) {
   const [source, setSource] = useState<string | null>(null);
   if (source !== null) {
@@ -245,7 +244,7 @@ export function DocumentItem({
   /** In place of the document's own facts line ("Removed by …"). */
   chips?: string;
   onOpen?: () => void;
-  /** Editing controls under the document (C42). */
+  /** Editing controls under the document. */
   actions?: ReactNode;
   /** Greyed: removed from the link by the user. */
   muted?: boolean;
@@ -283,7 +282,7 @@ function figureSource(figure: TocFigure): string {
 }
 
 /**
- * Figures as the panels show them (C37): each figure leads with its plain
+ * Figures as the panels show them: each figure leads with its plain
  * statement, then its source line with a citation marker and its quote in
  * italics, as every listed item in the panel does. Two or more figures with the same measure and unit get a
  * bold "Evidence suggests A to B" line first: a range, never an average.

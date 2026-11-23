@@ -1,10 +1,9 @@
 """The one source of run-progress copy: stage labels, blurbs, card rows, verbs, counts.
 
-Task 058 (N17, D4): every word a run page shows about a stage comes from this
+Every word a run page shows about a stage comes from this
 module. The client has no stage copy of its own; it renders the labels the
 frames and the plan steps carry, the activity line a ``tick`` carries, and the
-counts this table names. The voice is a short label, then one plain sentence
-(owner, 2026-11-04).
+counts this table names. The voice is a short label, then one plain sentence.
 
 Internal names must never leave the API: ``StageKey`` is the pinned contract
 vocabulary (spec § SSE); labels and blurbs are presentation and may change.
@@ -49,10 +48,10 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     ),
     "constrain": ("Applying your constraints", "Each option checked against the plan's limits."),
     "theme": ("Grouping into themes", "Included options grouped into themes."),
-    # Task 055 (PG3): its own key, so the Evidence search's "select" blurb (a
+    # Its own key, so the Evidence search's "select" blurb (a
     # ranking claim) never describes the shortlist proposal.
     "shortlist": ("Shortlisting", "Proposing options for close reading."),
-    # Task 054, the 058 alignment (S1, § 8): the theory of change. A fan-out of
+    # The theory of change. A fan-out of
     # item searches has its own key and its step's label, so the two read as
     # one row.
     "toc_draft": ("Drafting the theory", "Boxes, connections and pathways from the plan."),
@@ -91,15 +90,14 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
         "Plain titles and one sentence per connection.",
     ),
     # One call writes the whole report in this pass: no claim check, no
-    # section-by-section writing (plan § 3, decision 4).
+    # section-by-section writing (decision 4).
     "toc_report": ("Writing the report", "The report, as it is written."),
 }
 
-#: The card row each stage belongs to (D5, direction C). Stages with the same
+#: The card row each stage belongs to (direction C). Stages with the same
 #: row key render as one row: classify and appraise as "Classifying". Search
-#: and screen are two rows again, "Searching" and "Screening" (owner round 8,
-#: 2026-11-05). The client groups by this key and decides nothing about rows
-#: itself.
+#: and screen are two rows, "Searching" and "Screening". The client groups
+#: by this key and decides nothing about rows itself.
 STAGE_ROW: dict[StageKey, str] = {
     "acquire": "search",
     "screen": "screen",
@@ -126,7 +124,7 @@ STAGE_ROW: dict[StageKey, str] = {
     "toc_select": "toc_select",
     "toc_discover": "toc_discover",
     "toc_merge": "toc_merge",
-    # A fan-out shares its step's row (S1).
+    # A fan-out shares its step's row.
     "toc_search_new": "toc_search_new",
     "toc_new_link_searches": "toc_search_new",
     "toc_judge": "toc_judge",
@@ -140,7 +138,7 @@ STAGE_ROW: dict[StageKey, str] = {
 
 #: The ``stage.completed.summary`` keys a done row shows, in order, each with
 #: its noun: ``312 found · 118 relevant``. Chosen per stage, not an allow-list
-#: (N17); the loops guarantee each named key is a top-level integer.
+#: ; the loops guarantee each named key is a top-level integer.
 STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
     "acquire": (("acquired", "found"),),
     "screen": (("relevant", "relevant"),),
@@ -161,7 +159,7 @@ STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
     "constrain": (("excluded", "excluded"),),
     "theme": (("themes", "themes"),),
     "shortlist": (("shortlisted", "shortlisted"),),
-    # Task 054 (S2): the counts the theory-of-change trace once worked out in
+    # The counts the theory-of-change trace once worked out in
     # the browser ("test them", "kept") are summary keys of their own.
     "toc_draft": (("boxes", "boxes"), ("links", "connections"), ("pathways", "pathways")),
     "toc_read": (("boxes", "boxes"), ("links", "connections"), ("pathways", "pathways")),
@@ -181,7 +179,7 @@ STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
 }
 
 #: The plain verb shown while a model call of this route step is in flight and
-#: the stage's loop has published no line of its own (N1). Keyed by the step
+#: the stage's loop has published no line of its own. Keyed by the step
 #: ids in ``model_routes.toml [steps]``; a test pins the coverage. Steps that
 #: run outside a harness (chat, the agents) publish nothing; their verb is
 #: here so the table is complete.
@@ -246,7 +244,7 @@ STEP_VERBS: dict[str, str] = {
     "option_profile_setting": "Judging the setting",
     "option_profile_fold": "Folding duplicate options",
     "option_profile_place_sentences": "Describing the places",
-    # Task 054, the theory of change: the trace's own words where it has them
+    # The theory of change: the trace's own words where it has them
     # (``TocTrace.tsx``), else one plain line per call.
     "task_agent_toc": "Drafting the plan",
     "toc_draft": "Drafting the theory",
@@ -264,25 +262,24 @@ STEP_VERBS: dict[str, str] = {
     "toc_verdict": "Weighing the whole theory",
 }
 
-#: Activity-line templates (N2, N3, N21). The loops format these with their
+#: Activity-line templates. The loops format these with their
 #: own counts and publish the result as the tick's ``activity``; the client
 #: renders the string as it is. Field names are the ``str.format`` keys.
 ACTIVITY: dict[str, str] = {
-    # acquire and screen stage 1: no honest total, so a running count (N2;
-    # "new" and "so far" dropped, owner round 9)
+    # acquire and screen stage 1: no honest total, so a running count
     "search.writing_queries": "Writing search queries",
     "acquire.searching": "searching · {found:,} found",
     "acquire.searching_again": "Search {pass_number} · {found:,} found",
-    # round 9: the topic or semantic query out last, cut on a word
+    # The topic or semantic query out last, cut on a word
     "acquire.searching_query": "searching · {found:,} found · {query}",
     "acquire.searching_again_query": "Search {pass_number} · {found:,} found · {query}",
-    # round 9: the passes that look works up by id
+    # The passes that look works up by id
     "acquire.following": "following citations · {found:,} found",
-    # round 9 (lead ruling): while the ranked pool is kept, counted against
+    # While the ranked pool is kept, counted against
     # the search's candidates, so the count never reads as a drop
     "acquire.keeping": "keeping {kept:,} of {found:,} candidates",
     "screen.abstracts": "screening {remaining:,} abstracts · {relevant:,} relevant",
-    # round 9: how a citations or lookup pass is named in the search's query
+    # How a citations or lookup pass is named in the search's query
     # list (``search.query``), never by its ids
     "search.citations_from": "Following citations from {count:,} sources",
     "search.citations_from_one": "Following citations from 1 source",
@@ -290,7 +287,7 @@ ACTIVITY: dict[str, str] = {
     "search.lookup_works_one": "Looking up 1 cited work",
     "search.lookup_documents": "Looking up {count:,} cited documents",
     "search.lookup_documents_one": "Looking up 1 cited document",
-    # round 11: the same passes once the search has ended, as the saved
+    # The same passes once the search has ended, as the saved
     # coverage names them
     "search.citations_followed": "Followed citations from {count:,} sources",
     "search.citations_followed_one": "Followed citations from 1 source",
@@ -301,11 +298,11 @@ ACTIVITY: dict[str, str] = {
     # loops with a known total: "n of M <unit>"
     "screen.full_texts": "reading {done} of {total} full texts for relevance",
     "classify.progress": "{done:,} of {total:,} classified",
-    # owner round 9: the stage fetches and indexes; it does not read
+    # the stage fetches and indexes; it does not read
     "ingest.progress": "collecting {done} of {total}",
     "extract.progress": "{done} of {total} read for findings",
     "extract_interventions.progress": "{done:,} of {total:,} abstracts read",
-    # batch stages: "batch n of M" (N2)
+    # batch stages: "batch n of M"
     "select.batches": "Ranking sources · batch {done} of {total}",
     "characterise.batches": "Assigning themes · batch {done} of {total}",
     "group.batches": "Assigning findings · batch {done} of {total}",
@@ -315,10 +312,9 @@ ACTIVITY: dict[str, str] = {
     "constrain.batches": "Checking constraints · batch {done} of {total}",
     "option_profile.typing": "Typing options · batch {done} of {total}",
     "option_profile.places": "Describing the places · {done} of {total} options",
-    # the option-search count, from the fan-out to the join (N21; "so far"
-    # dropped, owner round 9 and round 12)
+    # the option-search count, from the fan-out to the join
     "option_searches.progress": "{done} of {total} searches done · {sources:,} sources",
-    # the writer (N3): the section line rides on ``tick.section``
+    # the writer: the section line rides on ``tick.section``
     "synthesise.section": "Section {number} of {total} · {title}",
     "synthesise.looking_for": "Looking for: {query}",
     "synthesise.reading_findings": "Reading findings",
@@ -331,14 +327,14 @@ ACTIVITY: dict[str, str] = {
     "synthesise.sources": "Listing the sources",
     "synthesise.case_studies": "Writing the case studies",
     "synthesise.source_note": "Writing a source note",
-    # round 8: the note's source, by its short name ("Smith 2023")
+    # The note's source, by its short name ("Smith 2023")
     "synthesise.source_note_named": "Writing a source note · {name}",
     "synthesise.intro": "Writing the introduction",
     "synthesise.summaries": "Summarising the sections",
-    # round 14: the summaries pass, section by section, and its checks
+    # The summaries pass, section by section, and its checks
     "synthesise.summary_section": "Summarising the sections · {done} of {total}",
     "synthesise.summary_check": "Checking the summaries",
-    # Task 054, the 058 alignment (A4): the theory of change's loops. The
+    # The theory of change's loops. The
     # three fan-outs of item searches share one line.
     "toc_searches.progress": "{done} of {total} searches done · {found:,} found",
     "toc_select.progress": "{done:,} of {total:,} read · {relevant:,} relevant",
@@ -380,7 +376,7 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "constrain": "constrain",
     "theme": "theme",
     "shortlist": "shortlist",
-    # Task 054: every theory-of-change step and fan-out by its own name. The
+    # Every theory-of-change step and fan-out by its own name. The
     # upload's read (``toc_read``) is the ``toc_draft`` component: the runner
     # stamps it on the payload (:func:`stage_for_payload`).
     "toc_draft": "toc_draft",
@@ -407,12 +403,12 @@ def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     stage frame: its progress shows as a line on the "Screening" row (task
     058, N2; its own row since owner round 8). The guard tests the composed ``component``,
     because the full-text screen's ``run.started`` payload carries
-    ``registry_component = "screen"`` (the duplicate Screening row seen on
-    staging and production, owner 2026-11-04).
+    ``registry_component = "screen"`` (testing that would show a duplicate
+    Screening row).
 
     A payload the runner stamped with a public ``stage`` reports under it
     first: an uploaded theory's read is the ``toc_draft`` component, reported
-    as ``toc_read`` (task 054, S1).
+    as ``toc_read``.
     """
     stamped = payload.get("stage")
     if isinstance(stamped, str) and stamped in STAGE_KEYS:
@@ -421,7 +417,7 @@ def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     from policy_atlas.runtime.task_plan import canonical_steer_point, registry_component_for
 
     # The baseline gate's card is about the baseline, so its stage word is
-    # stated here rather than inherited from the component name (task 044, P11).
+    # stated here rather than inherited from the component name (P11).
     if canonical_steer_point(payload.get("steer_point")) == BASELINE_CONFIRM:
         return "synthesise"
     component = payload.get("component")

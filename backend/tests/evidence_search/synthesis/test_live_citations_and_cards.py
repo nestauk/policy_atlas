@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -46,7 +45,14 @@ from tests.evidence_search.synthesis.test_synthesise_baseline import (
     _RecordingEmitter,
     _seed_baseline_corpus,
 )
-from tests.helpers import seed_scope, seed_task_and_run
+from tests.helpers import (
+    FakeResponsesClient,
+    FakeStream,
+    seed_scope,
+    seed_task_and_run,
+    spy_calls,
+    text_stream_events,
+)
 
 # --- Item A and B through a whole synthesis run -------------------------------------
 
@@ -275,28 +281,13 @@ def test_reference_numbering_skips_unknown_chunks(conn: Connection) -> None:
 # --- Item B: the streamed case-studies call --------------------------------------------
 
 
-def _content_chunk(text: str) -> Any:
-    return SimpleNamespace(
-        choices=[SimpleNamespace(delta=SimpleNamespace(content=text))], usage=None
-    )
-
-
-class _StreamCompletions:
-    def __init__(self, text: str, size: int) -> None:
-        self._chunks = [_content_chunk(text[at : at + size]) for at in range(0, len(text), size)]
-        self._chunks.append(SimpleNamespace(choices=[], usage=None))
-        self.calls: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> Iterator[Any]:
-        self.calls.append(kwargs)
-        return iter(self._chunks)
-
-
-def _backend(text: str, size: int) -> tuple[OpenAISynthesisBackend, _StreamCompletions]:
+def _backend(text: str, size: int) -> tuple[OpenAISynthesisBackend, FakeResponsesClient]:
+    """A backend whose client streams ``text`` in ``size``-character pieces."""
     backend = OpenAISynthesisBackend(api_key="sk-test-live")
-    completions = _StreamCompletions(text, size)
-    cast("Any", backend)._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    return backend, completions
+    pieces = [text[at : at + size] for at in range(0, len(text), size)]
+    client = FakeResponsesClient(FakeStream(text_stream_events(pieces)))
+    cast("Any", backend)._client = client
+    return backend, client
 
 
 _CARDS = {
@@ -345,18 +336,20 @@ def cards(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, str, str]]:
 
 @pytest.mark.parametrize("size", [1, 3, 17, 100_000])
 def test_each_card_is_published_as_it_closes_and_the_parse_is_unchanged(
-    size: int, cards: list[tuple[int, str, str]]
+    size: int, cards: list[tuple[int, str, str]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     text = json.dumps(_CARDS)
-    backend, completions = _backend(text, size)
+    calls = spy_calls(monkeypatch, sb, "stream_turn")
+    backend, client = _backend(text, size)
     wire, _usage = backend.write_case_studies_stream(_SEED, index=1)
 
     assert cards == [(1, card["title"], card["prose"]) for card in _CARDS["cards"]]
     assert wire == CaseStudyWire.model_validate_json(text)
     assert backend.stream_fallbacks == 0
     # The same request as the structured call, streamed.
-    [call] = completions.calls
-    assert call["stream"] is True
+    [sent] = client.calls
+    assert sent["stream"] is True
+    [call] = calls
     assert call["response_format"]["type"] == "json_schema"
     assert call["response_format"]["json_schema"]["name"] == "CaseStudyWire"
     assert call["response_format"]["json_schema"]["strict"] is True
@@ -368,7 +361,7 @@ def test_a_card_without_a_title_or_text_is_not_published(
     payload = json.loads(json.dumps(_CARDS))
     payload["cards"][0]["title"] = "  "
     text = json.dumps(payload)
-    backend, _completions = _backend(text, 9)
+    backend, _client = _backend(text, 9)
     wire, _usage = backend.write_case_studies_stream(_SEED, index=1)
     assert [title for _i, title, _p in cards] == ["Bristol — Walking buses"]
     # The parse is still the whole reply; the card checks decide what stays.
@@ -386,7 +379,7 @@ def test_a_broken_reply_resets_the_slot_and_falls_back_once(
     )
     good = json.dumps(_CARDS["cards"][0])
     text = '{"cards": [' + good + ", {broken"
-    backend, _completions = _backend(text, 5)
+    backend, _client = _backend(text, 5)
     fallback = CaseStudyWire.model_validate({"cards": _CARDS["cards"][1:]})
     calls: list[dict[str, Any]] = []
 

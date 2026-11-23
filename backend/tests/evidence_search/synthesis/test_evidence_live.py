@@ -34,6 +34,7 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     source_labelling,
     source_short_name,
 )
+from tests.helpers import text_stream_events
 
 TSS_A = str(uuid.UUID(int=0xA))
 TSS_B = str(uuid.UUID(int=0xB))
@@ -83,25 +84,36 @@ def test_the_decoder_stops_after_the_array_closes() -> None:
 # --- Streamed claim markers --------------------------------------------------------
 
 
-def _content_chunk(text: str) -> Any:
-    return SimpleNamespace(
-        choices=[SimpleNamespace(delta=SimpleNamespace(content=text))], usage=None
-    )
+class _Stream:
+    """Stream events as an iterator the code can ``close()``."""
+
+    def __init__(self, events: list[Any]) -> None:
+        self._events = iter(events)
+
+    def __iter__(self) -> Iterator[Any]:
+        return self._events
+
+    def close(self) -> None:
+        pass
 
 
 class _StreamCompletions:
-    def __init__(self, text: str, size: int) -> None:
-        self._chunks = [_content_chunk(text[at : at + size]) for at in range(0, len(text), size)]
-        self._chunks.append(SimpleNamespace(choices=[], usage=None))
+    """Fake Responses client: a streamed text answer cut into ``size``-character pieces."""
 
-    def create(self, **_kwargs: Any) -> Iterator[Any]:
-        return iter(self._chunks)
+    def __init__(self, text: str, size: int) -> None:
+        pieces = [text[at : at + size] for at in range(0, len(text), size)]
+        self._events = text_stream_events(pieces)
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        return _Stream(self._events)
 
 
 def _backend(text: str, size: int) -> OpenAISynthesisBackend:
     backend = OpenAISynthesisBackend(api_key="sk-test-live")
     completions = _StreamCompletions(text, size)
-    cast("Any", backend)._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    cast("Any", backend)._client = SimpleNamespace(responses=completions)
     return backend
 
 

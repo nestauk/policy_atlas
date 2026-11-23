@@ -12,7 +12,7 @@ import { CAPTION_LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
 import { formatCount } from "../lib/format";
 import { DisclosureChevron } from "../ui/brand/Disclosure";
 
-/** The block's heading, live and finished (owner, round 12: plain). */
+/** The block's heading, live and finished (plain). */
 export const SEARCH_QUERIES_TITLE = "Search queries";
 
 /** One row of the block, from the stream or the committed coverage. */
@@ -26,7 +26,7 @@ export type QueryRow = {
   /** Null until the query returns. */
   results: number | null;
   /** The key the table filters on (`?query=`, the coverage row's
-   *  `query_id`, round 12); null on a live row while the stream carries
+   *  `query_id`); null on a live row while the stream carries
    *  none, which then reads as plain words. */
   queryId: string | null;
 };
@@ -39,7 +39,7 @@ function queryIdOf(item: object): string | null {
 }
 
 /** The block's rows grouped by backend, Overton first, then OpenAlex, then
- *  any other in the order it first appears (owner, 2026-11-09); within a
+ *  any other in the order it first appears; within a
  *  group, in the order the queries went out. */
 export type QueryGroup = { backend: string; rows: QueryRow[] };
 
@@ -47,7 +47,7 @@ export type QueryGroup = { backend: string; rows: QueryRow[] };
  *  committed coverage already says "OpenAlex"). */
 const BACKEND_NAMES: Record<string, string> = { openalex: "OpenAlex", overton: "Overton" };
 
-/** The groups' order: the policy database first (owner, 2026-11-09). */
+/** The groups' order: the policy database first. */
 const BACKEND_ORDER = ["Overton", "OpenAlex"];
 
 function backendRank(backend: string): number {
@@ -68,13 +68,13 @@ export function settledPassWords(query: string): string {
 }
 
 /**
- * The rows the block shows (task 058, owner round 9): while the search runs,
+ * The rows the block shows: while the search runs,
  * the queries as they go out; once it has ended, the committed coverage's
  * queries when the read has them (they replace the live rows in place),
  * else the live rows still (their passes reworded in the past tense). The
  * committed coverage lists each backend's written queries, then its passes
- * in the order they ran, already worded for a finished search (round 11:
- * "a citation pass as its own row").
+ * in the order they ran, already worded for a finished search (each
+ * citation pass its own row).
  *
  * Args:
  *   live: The stream's queries, if any.
@@ -129,8 +129,8 @@ export function queryGroups(
   return groups.sort((a, b) => backendRank(a.backend) - backendRank(b.backend));
 }
 
-/** "Found with 12 queries and 3 citation passes": the folded line's words
- *  (round 11). A pass that looks cited works up counts as a citation pass. */
+/** "Found with 12 queries and 3 citation passes": the folded line's words.
+ * A pass that looks cited works up counts as a citation pass. */
 export function queryTotals(groups: readonly QueryGroup[]): string {
   const rows = groups.flatMap((group) => group.rows);
   const passes = rows.filter((row) => row.pass !== null).length;
@@ -148,14 +148,14 @@ export function findQueryRow(groups: readonly QueryGroup[], param: string): Quer
 }
 
 /** The applied query filter's words: "Query: " and the first 40 characters,
- *  an ellipsis when cut (round 12, as the Country chip reads). */
+ *  an ellipsis when cut (as the Country chip reads). */
 export function queryChipLabel(text: string): string {
   const words = text.trim();
   return words.length > 40 ? `${words.slice(0, 40).trimEnd()}…` : words;
 }
 
 /** The query or pass as a prose link that filters the table to the records
- *  it returned (round 12): the row's colour over a Line 2 underline, Electric
+ *  it returned: the row's colour over a Line 2 underline, Electric
  *  Blue on hover. A row without a key reads as plain words. */
 function QueryLink({ row, hrefFor }: { row: QueryRow; hrefFor: (param: string) => string }) {
   if (row.queryId === null) return <>{scrub(row.query)}</>;
@@ -179,13 +179,13 @@ function ResultsPulse() {
 }
 
 /**
- * The search queries at the top of All sources while the search runs (task
- * 058, owner round 9): open under the heading "Search queries", one row per
+ * The search queries at the top of All sources while the search runs:
+ * open under the heading "Search queries", one row per
  * query as it goes out: the backend once per group as a small grey label,
  * the query (a citation pass's or lookup's description in grey), and in the
  * Results column a pulsing bar until the count returns, then the count in
- * tabular figures, right-aligned (the owner: good as it is). Each query is a
- * link that filters the table to what it returned (round 12). When the
+ * tabular figures, right-aligned. Each query is a
+ * link that filters the table to what it returned. When the
  * search ends the block folds over 200 ms and `QueriesSummary` takes over in
  * the count row.
  */
@@ -216,9 +216,7 @@ export function SearchQueries({
 }
 
 /**
- * The one queries table, live and finished (owner, 2026-11-09: the finished
- * block had its own layout, a Database column and no group labels; one
- * layout now, the live one). Hairline rows at Meta size, the Query and
+ * The one queries table, live and finished, in one layout. Hairline rows at Meta size, the Query and
  * Results columns headed in the table-header label style, each backend once
  * per group as a row-group label (Label treatment at Caption size, Grey),
  * the query in Navy (a pass's description in Grey), the results count
@@ -278,15 +276,14 @@ function QueriesTable({
 }
 
 /**
- * The finished search as a section of its own above the filter bar (owner,
- * round 12: the search came before the filtering). One line in the
+ * The finished search as a section of its own above the filter bar (the
+ * search comes before the filtering). One line in the
  * Landscape's section pattern: the Label-style heading "Search queries" at
  * the left and, right-aligned on the same line, the Body sentence
  * in Ink "Found with 12 queries and 3 citation passes · Show", "Show" the
  * quiet control with the disclosure chevron ("Hide" when open); on phones the
  * sentence wraps under the heading. The hairline runs under that line; open,
- * the same table the live block shows (`QueriesTable`; owner, 2026-11-09:
- * one layout), each query a link that filters the table (round 12). Hidden
+ * the same table the live block shows (`QueriesTable`), each query a link that filters the table. Hidden
  * while the live list shows.
  */
 export function QueriesSummary({
@@ -301,7 +298,7 @@ export function QueriesSummary({
   if (groups.length === 0) return null;
   return (
     <section aria-label={SEARCH_QUERIES_TITLE} data-testid="search-queries-summary" className="min-w-0">
-      {/* The whole line is the disclosure (owner, round 14): one button
+      {/* The whole line is the disclosure: one button
           spanning the Landscape section's heading row (LandscapeSection, its
           content padding left out so the section ends at its hairline when
           shut), the Label heading at the left, the sentence and Show / Hide

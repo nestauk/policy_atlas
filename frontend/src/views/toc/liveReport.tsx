@@ -4,8 +4,7 @@ import type { LiveClaim, LiveSection, RunStreamState } from "../../store";
 import { useRevealedText } from "../streamPacing";
 
 /*
- * The theory of change's report while it is written (task 054's 058
- * alignment, S6, S7, A13). The server streams today's one report call
+ * The theory of change's report while it is written. The server streams today's one report call
  * through Evidence search's live frames: a skeleton of the page's parts,
  * then each field in the order the model writes it, each in its page place.
  * Nothing here changes the report's content: the live view shows the
@@ -116,7 +115,7 @@ export function partText(key: TocPartKey, section: LiveSection): string {
 const CITATION = /\s*\[(\d+(?:\s*[,–-]\s*\d+)*)\]/g;
 
 /**
- * The model's "[n]" markers as the shared live page's pending chips (S5):
+ * The model's "[n]" markers as the shared live page's pending chips:
  * the numbers leave the text, and each becomes a claim ending on the word
  * before it, which the page shows as the muted "[·]" with the source's name
  * on hover. A number the sources frame does not name keeps the chip with no

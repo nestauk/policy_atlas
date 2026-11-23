@@ -11,7 +11,7 @@ import { sourcesSubtabChoice, type SourcesSubtab } from "./lifecycle";
 
 /**
  * The Sources tab's first page: Themes, or (for a theory of change, which has
- * no themes; task 054) a redirect to All sources. Nothing until the task is
+ * no themes) a redirect to All sources. Nothing until the task is
  * known, so Themes never flashes first.
  */
 export function SourcesIndex() {
@@ -25,7 +25,7 @@ export function SourcesIndex() {
  * Sources layout: Themes, Landscape and All sources always render (a theory
  * of change has no Themes tab: All sources is its first page); Findings
  * is a fourth tab present ONLY when the funnel reports a nonzero findings
- * count (rubric 24) — an analysis that never ran deep enough to extract
+ * count — an analysis that never ran deep enough to extract
  * findings gets no tab to click into, not a disabled or empty one.
  *
  * Read-model freshness while a run is in progress comes from the
@@ -52,7 +52,7 @@ export function SourcesLayout() {
             Extrabold Navy over the growing 3px Electric Blue rule, a Line
             hairline under the row (an inset shadow, so the rule sits on it
             without overflowing the scroller); one line, scrolling sideways
-            when it does not fit (task 058, landscape polish entry 16). */}
+            when it does not fit (landscape polish entry 16). */}
         <nav
           aria-label="Sources"
           className="flex overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)] [scrollbar-width:none]"
@@ -63,19 +63,19 @@ export function SourcesLayout() {
               to={`${base}${tab.subtab}`}
               end={tab.end}
               // The reader's choice wins over the stage-driven landing from
-              // now on, on this task (owner, round 10).
+              // now on, on this task.
               onClick={() => sourcesSubtabChoice.remember(taskId, tab.subtab)}
               className={({ isActive }) =>
                 cn(
                   "flex-1 shrink-0 whitespace-nowrap border-b-[3px] border-transparent px-4 py-2.5 text-center text-meta no-underline max-md:px-2.5",
                   "transition-colors duration-150 ease-[ease] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue",
-                  // The tab language of the whole app (owner, consistency
-                  // pass): the rule grows from the left edge to the centre
+                  // The tab language of the whole app:
+                  // the rule grows from the left edge to the centre
                   // on hover and focus, and runs full width when active.
                   GROWING_RULE_CLASS,
                   isActive
                     ? cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold text-navy")
-                    : // Inactive reads as greyed (owner, round 11): Grey at
+                    : // Inactive reads as greyed: Grey at
                       // the medium weight (Averta, with no 500, sets it
                       // Regular), Navy on hover; Grey is AA on white.
                       "font-medium text-grey hover:text-navy",

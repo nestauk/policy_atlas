@@ -2,7 +2,7 @@ import type { components } from "../api/gen/types";
 import { hasResult } from "./lifecycle";
 
 /**
- * What exists and what is active (task 045, S15; ADR 0039 decision 5).
+ * What exists and what is active (ADR 0039 decision 5).
  *
  * An options-scoping task runs several walks — the baseline, the longlist,
  * the longlist's option searches (its children) and the searches a chat
@@ -28,7 +28,7 @@ export interface TaskActivity {
 
 const ACTIVE_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>(["running", "paused"]);
 
-/** Whether this is a theory-of-change task (task 054). */
+/** Whether this is a theory-of-change task. */
 export function isToc(task: TaskActivity | null | undefined): boolean {
   return task?.capability === "theory_of_change";
 }
@@ -76,7 +76,7 @@ export function statusRun(task: TaskActivity | null | undefined): LatestRun | nu
  * The run status the lifecycle tabs are computed from.
  *
  * `latest_run` for both kinds. For a scoping task that is the latest walk
- * that is neither a child nor an option search (S15), so an option search
+ * that is neither a child nor an option search, so an option search
  * starting or finishing never opens or locks a tab; the results that exist
  * (`hasBaseline`, `hasLonglist`) open Result on top of it.
  */
@@ -91,7 +91,7 @@ export function hasLonglist(task: TaskActivity | null | undefined): boolean {
 }
 
 /**
- * Whether the task has a result to ask about (038 V8 — chats open only
+ * Whether the task has a result to ask about (chats open only
  * then).
  *
  * An Evidence search: its latest run finished with a report. A scoping
@@ -112,7 +112,7 @@ export function hasTaskResult(
   return hasLonglist(task) || options?.hasBaseline === true || hasResult(task?.latest_run?.status);
 }
 
-/** Whether this artefact is an options-scoping baseline (task 044): the
+/** Whether this artefact is an options-scoping baseline: the
  *  roll-up's own `template` word (written by synthesise in baseline mode),
  *  never inferred from the section titles or the task's kind. */
 export function isBaselineArtefact(artefact: { template?: string | null } | null | undefined): boolean {

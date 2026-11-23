@@ -41,7 +41,7 @@ anywhere.
 > **One deploy at a time per environment.** GitHub Actions serializes each
 > environment and never cancels an active deploy. There is no cross-system lock:
 > a local `deploy.sh` can still interleave with Actions, so coordinate local
-> recovery/bootstrap work human-to-human (deferred seam — see `docs/deferred.md`).
+> recovery/bootstrap work human-to-human (deferred: see `docs/deferred.md` § Infrastructure and deployment).
 
 ### GitHub Actions, Environments, and AWS OIDC
 
@@ -137,7 +137,9 @@ instead. Do not replace the exact match with a repository-wide wildcard.
 The role needs the permissions already required by this runbook: use the CDK
 bootstrap deploy/file/image roles; read the named deploy SSM parameters and app
 secret metadata; run/inspect the migration task; update/inspect the ECS service;
-sync the two deployment buckets; create/wait for the CloudFront invalidation; and
+sync the two deployment buckets; create/wait for the CloudFront invalidation;
+list the account's WAF API keys (`wafv2:ListAPIKeys`, read-only; task 064b, so the
+deploy can give the frontend its CAPTCHA settings, see § 4 "The firewall"); and
 the tightly conditioned `iam:PassRole` grant below. Scope these permissions to the
 environment's account and v3 resources. Do not add static AWS access-key secrets.
 
@@ -266,6 +268,25 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
    stack's **Parameters** tab in CloudFormation: it shows the resolved value the
    rule was last deployed with.
 
+7. **WAF CAPTCHA API key created (task 064b; only where `backend.waf.captcha` is
+   `true` in `pa_config.json`).** The firewall's CAPTCHA puzzle needs a public
+   key that belongs to the AWS account and region, not to the stack, and that
+   is created once by hand:
+
+   ```bash
+   aws wafv2 create-api-key --scope REGIONAL --region eu-west-2 \
+     --token-domains <domain_name>
+   ```
+
+   `<domain_name>` is the environment's `domain_name` in `pa_config.json`
+   (`v3.policyatlas.uk` on staging, `policyatlas.uk` in production). A key
+   cannot be changed afterwards; a new domain needs a new key. The deploy
+   script only *lists* keys and takes the one whose token domains equal
+   `[<domain_name>]`; with none it stops before touching AWS state and prints
+   this command. The key and the script URL it comes with are public by
+   design (they ship in the browser bundle), so they are not secrets. See § 4
+   "The firewall".
+
 ## 3. First deploy (staged bootstrap)
 
 Bootstrap is staged, not circular: `Vpc.from_lookup` in the consumer stacks is a
@@ -334,26 +355,72 @@ synth-time context query and must not run before the VPC exists.
      takes **no password**: Cognito emails the invitation. The former
      `make staging-user` / `make prod-user` / `make cognito-user` targets are
      **deleted** — they suppressed the invitation, set a password from argv, and
-     left the account unenrolled. For prod, use `--env prod`, the
-     `PA_OPS_*_PROD` variables and prod-account credentials, not
-     `AWS_PROFILE=pa-dev`.
+     left the account unenrolled. For prod, use `ENV=prod` and
+     `PA_OPS_ACCOUNT_PROD` with the make wrappers (`--env prod` and the
+     `PA_OPS_*_PROD` variables with the direct form) and prod-account
+     credentials, not `AWS_PROFILE=pa-dev`.
 
-     **When the invitation email is not viable** (the `COGNITO_DEFAULT` sender
-     is `no-reply@verificationemail.com`, which spam filters routinely
-     swallow), add `INVITE=manual` (CLI: `--invite manual`): the email is
+     **When the invitation email does not arrive**, add `INVITE=manual` (CLI:
+     `--invite manual`): the email is
      suppressed and the CLI **mints** a single-use temporary password, printed
      once for out-of-band handover — the person sets their own at first
      sign-in (`FORCE_CHANGE_PASSWORD`, 30-day validity). The CLI still accepts
      no password from anyone, and the mode needs no IAM beyond
      `AdminCreateUser`. If that password expires or is lost before first
      sign-in, `make user-reissue ENV=<env> EMAIL=<user-email>` mints and prints
-     a replacement on the same terms (it refuses any account that has already
-     signed in; needs `AdminSetUserPassword`). The durable fix is SES-backed pool email
-     (docs/deferred.md § Organisations — SES entry).
+     a replacement on the same terms (needs `AdminSetUserPassword`, and
+     `AdminGetUser` to check that the account is not deactivated). The same
+     command resets the password of an account that has already signed in: the
+     account gets a temporary password that must be changed at the next sign-in.
+     Until that sign-in, expect "Forgot password" not to work for the account
+     (Cognito is known to refuse a reset in that state; not yet checked on our
+     pool), so a lost temporary password needs another reissue. A deactivated account is refused: reactivate it first.
+     Use it for an address with no mailbox (a shared test account, for example).
+     A person with a working mailbox should use "Forgot password" on the sign-in
+     page instead. SES-backed pool email is now in
+     place through task 065; see [Pool email through SES (task 065)](#pool-email-through-ses-task-065).
 
-     The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
-     `EmailConfiguration`), which is capped at 50 messages a day and needs a
-     real deliverable mailbox.
+     **Removing a person's access (task 064a, Q10; task 066).** `user de-enrol`
+     changes the database only: the person's Cognito account still signs in and
+     their public links stay public. `user deactivate` is the command to use when
+     someone leaves (it replaced `user offboard` in task 066). The ops pages have
+     the same action as "Deactivate…" on People.
+
+     ```bash
+     export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+     make user-deactivate ENV=staging EMAIL=<user-email>
+     # or: make user-deactivate ENV=staging SUB=<cognito-subject>
+     # to undo: make user-reactivate ENV=staging EMAIL=<user-email>
+     ```
+
+     Deactivate runs these steps in this order and prints each one: (1) in Cognito,
+     disable the account and revoke its refresh tokens (`AdminDisableUser`,
+     `AdminUserGlobalSignOut`), so the person cannot sign in again or renew a
+     session; (2) in the database, set `app_user.deactivated_at`, clear the
+     admin and ops roles (each removal writes the same trace line as `admin
+     revoke`), and set every task they own to not public, so their share links
+     stop working. **The person keeps their organisation, tasks, projects and
+     cohorts** (owner ruling, 2026-11-19), so `user reactivate` is a clean undo:
+     it turns the login back on (`AdminEnableUser`) and clears the mark, but does
+     not give back a role or a public link. No role can be granted while a person
+     is deactivated. Adding a deactivated address again from the ops pages
+     reactivates it; approving their waitlist request, or the self-signup sweep,
+     refuses instead. Cognito goes first on purpose: if the database step fails,
+     the account is already disabled and running the command again finishes the
+     rest. Two things it cannot do: an access token already issued stays valid
+     for up to 60 minutes (and, with the organisation kept, can read the
+     organisation's shared work in that window), and a progress stream that is
+     open when the command runs stays open until the run ends.
+
+     **Deleting an organisation (task 066).** `org delete --org <name>` or
+     "Delete…" on the Organisations page. It works only when no person, task,
+     project or signup domain points at the organisation, and otherwise says
+     what is still there.
+
+     With `email.enabled` false the invitation goes through the `COGNITO_DEFAULT`
+     sender, which is capped at 50 messages a day; with it true it goes through
+     SES (see [Pool email through SES (task 065)](#pool-email-through-ses-task-065)).
+     Either way it needs a real deliverable mailbox.
 
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit
@@ -403,6 +470,91 @@ before the service first starts against the restored database, then delete the
 orphaned secret. With no data source connected yet, a lost key costs only the
 re-entry of source credentials.
 
+### Pool email through SES (task 065)
+
+Check production access before enabling the sender:
+
+```bash
+aws sesv2 get-account --region eu-west-2
+```
+
+Confirm `ProductionAccessEnabled` is true. Verify the SES identity first,
+then obtain production access, set `email.enabled` to true in
+`pa_config.json`, and deploy. The daily sending limit is SES's own
+`SendQuota`, returned by the same command. Use `--invite manual` only as
+the fallback when an invitation email does not arrive.
+
+### The ops service (task 065)
+
+The ops service is a second ECS (Elastic Container Service) service built from
+the same image as the API. It serves the ops pages and the `/api/v1/ops/*`
+routes, and nothing else. The load balancer lets in only allowlisted addresses.
+
+**The ops address.** `https://ops.<domain>`, from `ops.subdomain` in
+`pa_config.json` (staging: `https://ops.v3.policyatlas.uk`).
+
+**The allowlist parameter.** `/policy_atlas_v3/ops/allowed_cidrs` in Parameter
+Store (the AWS settings store). A CIDR (Classless Inter-Domain Routing) range is
+an address block such as `203.0.113.0/24`. The parameter is a `StringList` of up
+to 8 IPv4 CIDRs, checked by the same validator as Metabase's. Create it by hand
+before the first deploy; the deploy fails loudly if it is missing or invalid.
+
+**The ops database secret.** `policy_atlas_v3/ops_db` in Secrets Manager.
+CDK (Cloud Development Kit) generates it with the username `pa_ops` and a random
+password. The migration task writes `db_connection_string` into it after every
+migration, so the ops service always logs in as the restricted `pa_ops`
+database role.
+
+**First-deploy order.**
+
+1. Create the allowlist parameter.
+2. Deploy with `ops.desired_count` set to 0. The service exists but runs no
+   tasks.
+3. Grant the first ops role from your machine:
+
+   ```bash
+   export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+   make ops-grant ENV=staging EMAIL=<email>
+   ```
+
+   Only the CLI can grant `is_ops`; no web page can.
+4. Set `ops.desired_count` to 1 and deploy again.
+
+   The committed staging config already has `desired_count` 1. On an
+   environment where the ops service has never run, set it to 0 for step 2,
+   then back to 1.
+
+**Self-signup.** `self_signup.enabled` in `pa_config.json` is false by default
+(`max_per_hour` caps the invitations the sweep sends, and its failed attempts, per hour; an enrolment of an existing account sends nothing and is not capped). Before switching it on, make sure the
+Nesta organisation exists and has its domain:
+
+```bash
+export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+make org-create ENV=staging NAME=Nesta
+make org-domain-add ENV=staging DOMAIN=nesta.org.uk ORG=Nesta
+```
+
+Then set `enabled` to true and deploy. On production, do this only after the
+WAF (web application firewall) rate rule from task 064b is live.
+
+**Rollback, one step at a time.**
+
+- Email (SES): set `email.enabled` to false and deploy. The pool goes back to
+  the default sender and templates.
+- Ops service: set `ops.desired_count` to 0 and deploy. If the schema must go
+  too, stop both services first, then run `alembic downgrade b1e7c3a9d5f2` (the
+  revision before task 065). It removes all three 065 migrations, newest first:
+  the first-sign-in and rejected-request columns, the cohort tables, then
+  `is_ops`, `invited_at`, the four quota columns, `ops_action`, the domain table,
+  the waitlist stamp columns, the trigger and the `pa_ops` role. The public API
+  reads the quota and cohort tables and writes the first-sign-in column, so it
+  must be stopped, and the API image you start afterwards must be one from
+  before task 065.
+- Self-signup: set `self_signup.enabled` to false and deploy. The sweep stops.
+  Its schema is removed only by the full downgrade above.
+
+A rollback never drops a table while a service that reads it is running.
+
 ## 4. Steady-state deploys + the deploy invariant
 
 **`desired_count=0` is template-pinned.** A `cdk deploy` that changes the app
@@ -412,9 +564,14 @@ deploy — a no-op deploy leaves the scaled-up service running, so the script
 also scales to 0 explicitly before its stop-wait. The steady-state order
 (`deploy.sh update`):
 
+0. when the environment's `backend.waf.captcha` is on: look up the CAPTCHA
+   script URL and API key in the account (`aws wafv2 list-api-keys`) and fail
+   if the key is missing — *before* `cdk deploy`, so a missing key or
+   permission changes nothing (task 064b; see "The firewall" below)
 1. `cdk deploy` (new task definition registered; service → 0 if the stack changed)
 2. resolve + validate the frontend publish config (SSM exports, production
-   build guard) — fail-fast, *before* any outage-inducing step
+   build guard, which also requires the two CAPTCHA values when the CAPTCHA is
+   on) — fail-fast, *before* any outage-inducing step
 3. explicit scale to 0, then wait for tasks stopped
 4. migration task + fail-loud wait on exit code (`describe-tasks`, polled every
    15 s up to `MIGRATION_WAIT_MAX_S`; see "Waiting for the migration task" below)
@@ -446,6 +603,51 @@ call counts as one more poll, not a failure. The previous
 `aws ecs wait tasks-stopped` gave up after about 10 minutes, too short for task
 057's backfill. `make deploy-migration-wait-test` checks the loop against a
 stubbed `aws`.
+
+**Readiness check after the service is stable (task 064a, Q4).** The load
+balancer's health check now asks the API only "is the process alive"
+(`/healthz`), not "can you reach the database" (`/readyz`). That is deliberate:
+with the old check a short database outage made ECS replace the only container
+and kill every run on it. The price is that a deploy with a broken database
+secret would look healthy. So after `services-stable`, `deploy.sh` calls
+`/readyz` once (up to ten tries, 15 seconds apart) and fails the deploy if it
+never returns 200. `/readyz` stays available for diagnosis.
+
+**Before each deploy: who is at the task quota (task 064a, Q8).** Each person
+may create at most `backend.task_quota_per_year` tasks (50) in any rolling
+365-day window; administrators are exempt. Someone already at or over the limit
+sees the quota banner and cannot create tasks from the moment the slice is
+deployed. Run this over the § 6 tunnel before the deploy so the owner knows who
+that is (it is informational; nothing in the deploy depends on it):
+
+```sql
+SELECT owner_user_id, count(*) AS tasks_in_last_365_days
+FROM task
+WHERE created_at >= now() - interval '365 days'
+GROUP BY owner_user_id
+HAVING count(*) >= 50
+ORDER BY tasks_in_last_365_days DESC;
+```
+
+**After task 064a's first deploy: search the old logs once (review finding
+H-06).** Until task 064a, every JSON error log carried the local variables of
+each stack frame, so user text and the first characters of a secret could have
+reached CloudWatch. The fix stops new leaks; it does nothing about lines already
+stored (CloudWatch keeps them 30 days). Someone with console access opens
+CloudWatch Logs Insights, selects the API service's log group for the
+environment, and runs:
+
+```
+fields @timestamp, @message
+| filter @message like /"locals"/ or @message like /api_key/ or @message like /password/ or @message like /dbadmin/
+| sort @timestamp desc
+| limit 200
+```
+
+If a real secret value appears, rotate the database password (the cluster
+secret) and the provider keys in `policy_atlas_v3/app`, then force a new
+deployment. Record the result, found or not found, in the task's
+`verification.md`. Do this on both environments.
 
 **Task 057 release: run its two migrations before the deploy (recommended).**
 Task 057 adds two revisions that are safe to run while the service is up:
@@ -665,6 +867,385 @@ database schema, may fail twice and land in the dead-letter queue (the alarm
 fires). This is expected around a deploy: the run records the document as not
 read and carries on. Deploy in quiet windows, as for the API.
 
+### The firewall (task 064b)
+
+**What it is.** A firewall (AWS WAF, Web Application Firewall) sits on the
+shared load balancer and looks at every request before the API sees it. Its
+rules live in one object, the **web ACL** (`policy-atlas-v3-api`, built by
+`infra/infra/components/waf.py` in the app stack and attached to the load
+balancer). Each rule can **count** a request (note that it matched and let it
+through), **block** it (answer 403), or ask for a **CAPTCHA** (answer 405 until
+the browser presents a solved-puzzle token). The general rules are scoped to
+three hosts on that load balancer: the API, the ops pages and (where it is
+deployed) Metabase. The waitlist rules are scoped to the waitlist path. The ops
+pages and Metabase also keep their own allowlists of addresses. ADR 0047 has
+the reasoning.
+
+**The rules, in order.** `waitlist-captcha` (only when the CAPTCHA is on: a
+`POST` to `/api/v1/waitlist` without a valid token is refused with 405 and the
+header `x-amzn-waf-action: captcha`); `waitlist-rate` (more than 50 waitlist
+posts in 5 minutes from one address are blocked, always); `general-rate` (more
+than 6,000 requests in 5 minutes from one address to the three hosts
+together);
+`managed-common`, `managed-known-bad-inputs`, `managed-ip-reputation` (AWS's
+own rule groups for common web attacks, known bad inputs and bad-reputation
+addresses, applied to the three hosts except `/healthz` and `/readyz`, so the
+load balancer's health check and the deploy's readiness call can never be
+refused by them). The common group's `SizeRestrictions_BODY` rule (a body over
+8 KB) is always counted and never blocks, because chat messages, plan edits
+and theory-of-change imports are often larger. The exclusion list is
+hard-coded in the component (`COMMON_RULES_ALWAYS_COUNTED`); a second name goes
+there too, and becomes a config key only if the list keeps growing.
+
+**The three keys** under `backend.waf` in `pa_config.json`, per environment:
+
+| Key | Values | Effect |
+| --- | --- | --- |
+| `enabled` | `true` / `false` | `false` synthesises no firewall at all (the rollback). |
+| `mode` | `"count"` / `"block"` | Whether `general-rate` and the three managed groups block or only count. The waitlist rules are not governed by it. |
+| `captcha` | `true` / `false` | Adds the CAPTCHA rule and makes the deploy give the frontend its CAPTCHA settings. `true` needs `enabled: true`. |
+
+A missing key, a wrong value or `captcha` without `enabled` fails both `cdk
+synth` and `deploy.sh check`.
+
+**The count week.** A new environment, and any environment after a rule change,
+runs with `mode: count` for a week so the rules show what they *would* block
+without blocking anyone. Right after the deploy, do the deliberate pass: sign
+in, open the task list, send one chat message over 8 KB, edit a plan, import a
+theory-of-change image, open a public task view, and submit the waitlist form.
+Also use the ops pages (open each page, change one quota) and Metabase (open a
+dashboard, run and save one question): `mode` is one switch for all three
+hosts, and Metabase sends long queries that a managed rule may match.
+Then run the report:
+
+```bash
+AWS_PROFILE=<profile> scripts/waf_report.sh <staging|prod> [days] [--addresses]
+```
+
+It prints, per rule, the counted, blocked and CAPTCHA totals for the last
+`days` days (default 7) from CloudWatch metrics, then one query over the
+firewall log giving the request count per **rule inside a group** (the metrics
+only name the group) and the paths it matched. Client addresses are printed
+only with `--addresses`; do not paste them into a public record. The script
+reads and never writes. After the week, decide per rule: a rule that matched
+only normal use is excluded (below); everything else is ready to block.
+
+**Switching to block.** Set `mode` to `"block"` in `pa_config.json` for that
+environment, merge and deploy the normal way. **Repeat the deliberate pass at
+once**, because a managed group in count mode stops at its first matching rule,
+so a second rule can only surface after the first is excluded. If anything is
+refused, set `mode` back to `"count"` (or use the emergency switch below),
+exclude the rule, and try again. Staging leads by one release: staging blocks
+before production does.
+
+**Excluding one rule.** Add its name to `COMMON_RULES_ALWAYS_COUNTED` in
+`infra/infra/components/waf.py` (for a rule in another group, give that group
+its own `rule_action_overrides` the same way) and deploy. The rule then reports
+`EXCLUDED_AS_COUNT` in the log, which the report shows.
+
+**Turning the firewall off.** `enabled: false` and a deploy removes the web
+ACL, its association, the log group and the logging configuration; the deploy
+then resolves no CAPTCHA values and the form shows no puzzle. Nothing has to
+be restored. `captcha: false` alone removes the CAPTCHA rule and the puzzle at
+the next deploy.
+
+**Emergency off switch (production, a false positive that cannot wait for a
+release).** Detach the web ACL from the load balancer in seconds, no deploy:
+
+```bash
+aws wafv2 disassociate-web-acl --region eu-west-2 \
+  --resource-arn "$(aws ssm get-parameter --region eu-west-2 \
+    --name /policy_atlas_v3/shared_alb/arn --query Parameter.Value --output text)"
+```
+
+**A deploy does not re-attach it**: CloudFormation updates only what changed in
+the template and does not see a detached association, so the firewall stays
+off until someone puts it back. Make the config change (`mode: count` or an
+exclusion), deploy, and then re-attach by hand:
+
+```bash
+aws wafv2 associate-web-acl --region eu-west-2 \
+  --web-acl-arn "$(aws wafv2 list-web-acls --scope REGIONAL --region eu-west-2 \
+    --query "WebACLs[?Name=='policy-atlas-v3-api'].ARN" --output text)" \
+  --resource-arn "$(aws ssm get-parameter --region eu-west-2 \
+    --name /policy_atlas_v3/shared_alb/arn --query Parameter.Value --output text)"
+```
+
+`scripts/waf_report.sh` is the quick check that the firewall is attached and
+counting again. A deploy-time check of the association is a deferred seam.
+
+**The token domain and where the CAPTCHA values come from.** The CAPTCHA
+puzzle runs on the splash page (`<domain_name>`) and its token is spent on the
+API (`api.<domain_name>`). The web ACL's token domain list therefore holds the
+environment's `domain_name`, which covers both as subdomains. The page needs
+two public values to show the puzzle: the account's CAPTCHA script URL and its
+API key (§ 2, precondition 7). `deploy.sh` reads them with `aws wafv2
+list-api-keys` before `cdk deploy` and passes them to the frontend build as
+`VITE_WAF_CAPTCHA_SCRIPT_URL` and `VITE_WAF_CAPTCHA_API_KEY`; the production
+build guard refuses a build without them while the CAPTCHA is on. They are
+not secrets and may appear in the deploy log. When the CAPTCHA is off neither
+is set and the form behaves as before.
+
+**The log.** Matched requests only (counted, blocked, CAPTCHA'd or
+counted-by-override) go to the CloudWatch log group
+`aws-waf-logs-policy-atlas-v3` (the `aws-waf-logs-` prefix is AWS's rule),
+kept for one month. Ordinary traffic is never logged. The records hold client
+addresses and request headers; the `authorization`, `cookie` and
+`x-aws-waf-token` headers are redacted before writing, so a signed-in
+person's bearer token never reaches the log. The log group is private to the
+account.
+
+**Capacity, and the dry run.** A web ACL may use 1,500 capacity units; these
+rules use 1,003 with the three hosts of staging (`aws wafv2 check-capacity`,
+2026-11-23; 987 when they matched the API host only). The same command is the
+dry run for any rule change: it validates every statement against the WAF
+service without creating anything (the synth tests cannot, see
+`docs/knowledge/cdk-any-typed-property-takes-cloudformation-dict.md`). Take the
+`Rules` list from the synthesised `PaV3AppStack.template.json`, base64-encode
+each `SearchString`, and pass it as `--rules file://rules.json`.
+
+**Cost.** About $11 a month per environment (the web ACL, six rules), plus
+$0.60 per million requests and $0.40 per thousand CAPTCHA puzzles.
+
+### Security headers (task 064c)
+
+**What it is.** CloudFront adds a set of security headers to every response
+of the web app: the pages, the scripts, the fonts, and the deep links that
+the error responses answer with `/index.html`. A **response headers policy**
+(`policy-atlas-v3-security-headers`, built by
+`infra/infra/components/security_headers.py` in the app stack) holds them and
+is attached to both cache behaviours (the default one and `/index.html`). It
+replaced AWS's managed `SECURITY_HEADERS` policy, which cannot be changed.
+The API's responses come from the load balancer and the ops pages (task 065)
+from the backend, so neither gets these headers. The ops service sends its own
+Content Security Policy instead (see "The ops pages" below). ADR 0048 has the
+reasoning.
+
+**The headers.**
+
+| Header | Value | Why |
+| --- | --- | --- |
+| `Strict-Transport-Security` (HSTS) | `max-age=31536000; includeSubDomains` | Browsers use only HTTPS for this host and every subdomain, for one year. |
+| `X-Frame-Options` | `SAMEORIGIN` | Only our own pages may show the app in a frame (older browsers). |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Other sites see only our host name, never the page path. |
+| `X-XSS-Protection` | `1; mode=block` | Kept from the managed policy; modern browsers ignore it. |
+| `X-Content-Type-Options` | `nosniff` | The browser trusts the declared file type. |
+| `Permissions-Policy` | eight features off: accelerometer, camera, geolocation, gyroscope, magnetometer, microphone, payment, usb | The app uses none of them, so nothing on the page may. |
+| `Content-Security-Policy` or `Content-Security-Policy-Report-Only` | the CSP below | The browser refuses scripts, network calls and frames from any source not listed. |
+
+The first five have the managed policy's values and override flags (only
+`X-Content-Type-Options` replaces a value sent by the origin), with one
+change: HSTS adds `includeSubDomains`. The two new headers always replace an
+origin value, so a header from S3 can never weaken them.
+
+**HSTS `includeSubDomains` has a long tail.** A browser that saw it forces
+HTTPS on every subdomain of the domain for up to a year, even after a
+rollback. Every web name under `policyatlas.uk` and `v3.policyatlas.uk`
+served HTTPS on 2026-11-18. Do not add a plain-HTTP subdomain under either.
+
+**The CSP (Content Security Policy).** The component builds it from
+`pa_config.json`; it is never written by hand. Each directive lists the
+sources the browser may use for one kind of resource. `'self'` means the
+app's own host.
+
+| Directive | Sources | Where each source comes from |
+| --- | --- | --- |
+| `default-src` | `'self'` | Anything not listed below. |
+| `script-src` | `'self'`, plus `https://*.<aws_region>.captcha-sdk.awswaf.com https://*.<aws_region>.captcha.awswaf.com https://*.<aws_region>.token.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script `jsapi.js` (`backend.waf.captcha`). The page asks for it at the integration URL `<id>.<region>.captcha-sdk.awswaf.com`, which redirects (307) to `<id>.<id>.<region>.captcha.awswaf.com`; a CSP checks both. `jsapi.js` loads `challenge.js` from `<id>.<id>.<region>.token.awswaf.com`. Never `'unsafe-inline'` or `'unsafe-eval'`. |
+| `style-src` | `'self' 'unsafe-inline'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. The CAPTCHA's font stylesheet. |
+| `img-src` | `'self' data: blob:` | Upload previews (`blob:`) and theory-of-change image exports (`data:`). |
+| `font-src` | `'self'`, plus `https://static.captcha.awswaf.com` when the CAPTCHA is on | The self-hosted fonts under `/fonts/`; the font files that the CAPTCHA stylesheet names. |
+| `media-src` | `'self' data:`, only when the CAPTCHA is on | The audio puzzle plays its clip from a `data:` address. Without the CAPTCHA, `default-src` covers media. |
+| `connect-src` | `'self'`, `https://<backend_subdomain>.<domain_name>`, `https://cognito-idp.<aws_region>.amazonaws.com`, `https://<cognito_domain_prefix>.auth.<aws_region>.amazoncognito.com`, plus the same three regional CAPTCHA hosts as `script-src` when the CAPTCHA is on | The API (including the progress stream); the Cognito sign-in settings; the Cognito token exchange and refresh; the CAPTCHA's own calls (`problem` and `verify` on the captcha host; `inputs`, `mp_verify`, `telemetry` and `voucher` on the token host; `captcha-sdk` in case the script fetches from its own address). |
+| `frame-src` | `'self'`, the Cognito hosted domain | The sign-in library's hidden-frame fallback: the frame opens the Cognito domain, which sends it back to our own address. |
+| `frame-ancestors` | `'self'` | Who may show our page in a frame (same as `X-Frame-Options`). |
+| `form-action` | `'self'` | Where a form may post. |
+| `object-src` | `'none'` | No plug-ins. |
+| `base-uri` | `'self'` | No `<base>` tag pointing elsewhere. |
+
+Sign-in and sign-out are page redirects to Cognito, which a CSP does not
+govern. CloudFront allows at most 1,783 characters in the header; synth fails
+above that.
+
+**The key** `csp_mode` in `policy_atlas_config`, per environment:
+
+| Value | Effect |
+| --- | --- |
+| `"report-only"` | The policy goes in `Content-Security-Policy-Report-Only`. The browser blocks nothing and prints a "[Report Only]" line in the console for each violation. |
+| `"enforce"` | The policy goes in `Content-Security-Policy`. The browser blocks every violation. |
+
+The website never gets both headers at once (the ops pages do in report-only
+mode, see "The ops pages" below). A missing key or any other value fails `cdk
+synth`, which the deploy runs before it changes anything in AWS.
+`deploy.sh` does not read the key.
+
+**The manual pass.** There is no report collector, so the browser console is
+the only place a violation shows. Run the pass after the first deploy in
+report-only mode, again after the switch to enforce, and again whenever a
+change adds a third-party library, script or host. In Chrome, open an
+Incognito window (browser extensions add their own `font-src` lines in a
+normal profile), open the developer console, turn on "Preserve log", and
+sign in. To keep the whole log, right-click in the console and select
+"Save as…".
+
+1. **First, the proof.** In the console, run `fetch("https://example.com")`.
+   In report-only mode it must print a "[Report Only]" line naming
+   `connect-src`; in enforce mode, a refusal line. If no line appears, stop:
+   console silence then proves nothing.
+2. Use every surface once: the splash page and the waitlist puzzle including
+   its audio option (where the CAPTCHA is on); sign-in; sign-out; a token
+   refresh (keep a signed-in tab open past the access token's one-hour
+   lifetime, then use the app); the task list; a new task with an image upload
+   preview; a running task with its progress stream; a side sheet; the
+   sources view and its CSV and JSON downloads; the map view; a theory of
+   change with its PNG, SVG and draw.io exports and print; a report's print;
+   a public task view; the legal page; a deep link opened directly in a new
+   tab (for example `/tasks/<id>`).
+3. Record each console line that names the Content Security Policy, with the
+   page and the blocked address. Never record tokens or user data.
+
+Check the headers themselves with `curl`; the deep link proves the policy
+reaches the error-response path:
+
+```bash
+for p in / /index.html /tasks/x; do
+  echo "== $p"; curl -sI "https://<domain_name>$p" \
+    | grep -iE 'content-security|permissions-policy|strict-transport|x-frame|referrer|x-content-type|x-xss'
+done
+```
+
+**The ops pages.** The ops service sends its own policy, because CloudFront
+does not serve those pages. The app stack builds it with the same function and
+gives it to the ops container (`OPS_CONTENT_SECURITY_POLICY`). It is stricter
+than the website's: no API origin, no CAPTCHA hosts, and `frame-ancestors
+'none'`. The same `csp_mode` key governs it. In report-only mode the ops pages
+still enforce `frame-ancestors 'none'` in a second header. Run the same manual
+pass on `https://ops.<domain_name>`: the proof in step 1, then sign-in,
+sign-out, every ops page, one change that shows a toast, and a deep link. Both
+sites must pass before the switch to enforce.
+
+**Switching to enforce.** After a report-only pass with no unexplained line,
+set `csp_mode` to `"enforce"` for that environment, merge and deploy the
+normal way, run the `curl` check, and repeat the manual pass at once: apart
+from the refusal of the deliberate `fetch` in step 1, it must show zero CSP
+lines. Staging leads by one release: staging enforces before
+production does.
+
+**Adding a source.** When a pass shows a real need (for example the CAPTCHA
+script loading an image from `awswaf.com`), add the source in
+`security_headers.py`, update its literal expected string in
+`infra/tests/unit/test_security_headers.py`, and deploy. Never edit the policy
+in the CloudFront console as a fix. CloudFormation rewrites the policy only
+when the code's version of it changes, so a console edit can stay in place,
+unseen, through many deploys, and then disappear at an unrelated policy
+change. Never add `'unsafe-inline'` or `'unsafe-eval'` to `script-src`; a
+library that needs either is a design question, not a header change.
+
+**Rollback.** Set `csp_mode` back to `"report-only"` and deploy. CloudFormation
+updates the policy in place; CloudFront applies it within minutes, and
+`index.html` has a 60-second cache. For an emergency that cannot wait for a
+deploy, edit the policy in the CloudFront console (Policies → Response headers
+→ `policy-atlas-v3-security-headers`): move the CSP out of the security headers
+or delete it. Then make the config change and deploy at once: that deploy
+changes the policy, so it puts the code's version back. A deploy that does not
+change the policy leaves a console edit in place. A full revert of the 064c change restores the managed policy. The
+HSTS subdomain setting stays in browsers that saw it (above).
+
+**Cost.** Nil. Response headers policies are free (20 custom policies per
+account; this is the first).
+
+### Sign-in: authenticator codes, branded page, own address (task 064d)
+
+ADR 0049. One block in `infra/pa_config.json` under `policy_atlas_config`
+turns each part on. With no block, nothing changes (production today; a test
+compares production's template with a saved copy).
+
+```json
+"sign_in": {"mfa": "app", "page": "managed", "domain": "auth.v3.policyatlas.uk"}
+```
+
+| Key | Values | What it does |
+|---|---|---|
+| `mfa` | `"app"`, `"off"` | `"app"`: everyone must type a code from an authenticator app after the password (MFA, multi-factor authentication, by TOTP, a time-based one-time password). SMS and email codes are never used. Password reset by email stays as it is. |
+| `page` | `"managed"`, `"classic"` | `"managed"`: Cognito's newer sign-in page ("managed login") with our logo and colours from `infra/branding/`. `"classic"`: the plain AWS page, named explicitly so a rollback really goes back. |
+| `domain` | `"auth.<domain_name>"` | The sign-in page on our own address. Adds a certificate in us-east-1 (cert stack), the address in Cognito, a DNS record, and the address in the CSP. The authenticator app names the entry after it. The old `amazoncognito.com` address keeps working. |
+
+**Before the first deploy in an environment.**
+
+1. DNS preflight: list what the zone already has for the name.
+   ```bash
+   aws route53 list-resource-record-sets --hosted-zone-id <zone-id> \
+     --query "ResourceRecordSets[?starts_with(Name,'auth.') || starts_with(Name,'\\052')]"
+   ```
+   An existing `auth.<domain_name>` record stops the deploy: remove or rename it
+   first. A wildcard (`*.`) record is fine; the new exact record takes priority
+   for that one name. (Staging checked 2026-11-19: none.)
+2. Send the user warning (below) at least one working day before.
+3. Deploy outside working hours. The first deploy with `domain` takes about
+   eight minutes longer than usual: Cognito sets up a CloudFront distribution
+   for the address.
+
+**User warning (send to every user of the environment).**
+
+> Policy Atlas sign-in is getting a second step. From <date>, after your
+> password you will type a six-digit code from an authenticator app on your
+> phone (for example Google Authenticator, Microsoft Authenticator or
+> 1Password). The first time, the sign-in page shows a QR code: scan it with
+> the app, then type the code it shows. The sign-in page also moves to
+> auth.<domain> and carries the Policy Atlas logo. If you are signed in when the
+> change happens, you stay signed in; the new step appears at your next sign-in.
+> Lost or changed your phone? Contact <support> and we will reset it.
+
+**After the deploy.** The change phases in: a session that was open keeps
+working until its refresh token runs out (at most 30 days). Admins and ops
+users should sign out and in again at once, so the stronger sign-in applies to
+the accounts that matter most. Then run the live checks in
+`docs/tasks/064d-mfa/contract.md` § Acceptance checks.
+
+**A lost or replaced phone.** The person cannot sign in until an operator
+clears their app link. First confirm who is asking (for example a reply from
+their known email address): the next person to sign in with that password
+links their own phone. Then run:
+
+```bash
+make user-reset-app ENV=staging EMAIL=<user-email>
+# or: make user-reset-app ENV=staging SUB=<cognito-subject>
+```
+
+It signs the person out everywhere, then removes the app link, and records the
+action with your AWS identity. At their next sign-in they get the QR setup
+again. If it fails part way, it says which step failed; running it again is
+safe. It refuses a deactivated person. What it does for a person who never
+linked an app is not yet tested (staging live check 5 covers it).
+
+**Codes that do not work.** The phone's clock must be right (codes change every
+30 seconds). After five wrong codes Cognito slows further tries down for a
+while. Waiting a few minutes and using a fresh code is the fix; a reset is only
+for a lost phone.
+
+**Rollback**, in this order, each step a config change and a deploy, each
+followed by one operator sign-in. Stop and escalate if the sign-in page does
+not load or a test user cannot sign in.
+
+1. Branding: set `page` to `"classic"`. Tested: the classic page also asks for
+   the app code. (Removing the `page` key is not a rollback: the address stays
+   on the newer page with no branding.)
+2. MFA: set `mfa` to `"off"`. Tested: one deploy, password-only sign-in. People's
+   app links stay stored; turning `mfa` back on reuses them.
+3. Address, last resort and **not tested**: remove `domain`. Cognito's
+   discovery document then names the `amazoncognito.com` address again. After
+   the deploy, reload the app, check
+   `https://cognito-idp.<region>.amazonaws.com/<pool-id>/.well-known/openid-configuration`
+   names the `amazoncognito.com` endpoints, then sign in and out.
+
+**Production prerequisites.** Staging live checks passed and recorded in
+`docs/tasks/064d-mfa/verification.md`; the DNS preflight for
+`auth.policyatlas.uk`; the warning sent to production users; then add the
+block to the `prod` section and deploy.
+
+**Cost.** Nil beyond today's Essentials plan. The certificate and the custom
+domain are free.
+
 ## 5. Env & secret map
 
 Generated from `settings.py`'s required/optional calls plus the direct
@@ -682,6 +1263,7 @@ fixture corpus are intentionally omitted from the deployed task.
 | `DATABASE_URL` | Secrets Manager field: DB secret `db_connection_string` | `api/settings.py`, `core/db.py` |
 | `DB_MAX_OVERFLOW` | config value: `backend.db_max_overflow` | `api/settings.py` |
 | `DB_POOL_SIZE` | config value: `backend.db_pool_size` | `api/settings.py` |
+| `FORWARDED_ALLOW_IPS` | stack value: the VPC's address range (`vpc_cidr_block` from the app stack's VPC lookup; task 064a, Q11) | uvicorn (not the application): only a proxy inside the VPC, which is the load balancer, may set the client address in `X-Forwarded-For`; `*` would let any client write it |
 | `LANGFUSE_HOST` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_HOST` | `core/tracing.py` |
 | `LANGFUSE_BASE_URL` | omitted (equivalent alias of `LANGFUSE_HOST`) | `core/tracing.py` |
 | `LANGFUSE_PUBLIC_KEY` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_PUBLIC_KEY` | `core/tracing.py` |
@@ -704,6 +1286,8 @@ fixture corpus are intentionally omitted from the deployed task.
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
+| `RUNS_PER_USER` | config value: `backend.runs_per_user` (3 in both environments; task 064a, Q7): how many runs one person may have running at once; administrators are exempt | `api/settings.py` |
+| `TASK_QUOTA_PER_YEAR` | config value: `backend.task_quota_per_year` (50 in both environments; task 064a, Q8): how many tasks one person may create in a rolling 365 days; administrators are exempt | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |
 
@@ -735,7 +1319,10 @@ deployment, like any other secret.
 
 **Capacity values** (sized together for a 10-concurrent-run ceiling):
 `RUN_EXECUTOR_MAX=10`, `DB_POOL_SIZE=15`, `DB_MAX_OVERFLOW=10`, task 2 vCPU /
-8 GB (initial hypothesis — measured under load, not just arithmetic).
+8 GB (initial hypothesis — measured under load, not just arithmetic). Within
+that ceiling one person may hold at most `RUNS_PER_USER=3` running runs (task
+064a, Q7); administrators are exempt, like the task quota. No single ordinary user can take every slot.
+A run waiting at a check-in is paused and does not count.
 
 **Shared-provider-rate-limit caveat:** OpenAI rate limits are shared across all
 concurrent runs on the one instance. At full concurrency, runs degrade to
@@ -767,7 +1354,11 @@ wrappers (`make user-create ENV=... EMAIL=... NAME=... [ORG=...]` — see the
 Makefile's ops block; `scripts/ops_run.sh` performs this section's setup
 and tunnel automatically, reusing an already-open one), under the operator's own IAM
 (Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser` +
-`cognito-idp:AdminSetUserPassword`, nothing more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
+`cognito-idp:AdminSetUserPassword`, plus `cognito-idp:AdminDisableUser` and
+`cognito-idp:AdminUserGlobalSignOut` for `user deactivate` since task 064a, and
+`cognito-idp:AdminGetUser` plus `cognito-idp:AdminEnableUser` for `user reactivate`
+since task 066, and `cognito-idp:AdminDeleteSoftwareToken` for `user reset-app`,
+nothing more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
 task: Cognito permission belongs to the human operator, not to a task
 role, and the API task role gains no Cognito permission. Every command
 verifies the resolved AWS account and user pool against the connected
@@ -835,7 +1426,9 @@ in committable form — CI's font-guard stays green.
   real safety net is the dark launch: with no organisations enrolled the
   behaviour is byte-identical to pre-033, and **de-enrolling an
   organisation reverts it without a deploy**. A schema downgrade is a last
-  resort requiring a backup restore first (Aurora keeps 7 days).
+  resort requiring a backup restore first (Aurora keeps automatic backups for
+  7 days on staging and 35 days on production, `backup_retention_days` in
+  `db_config.json` since task 064a).
 - **Manual downgrade procedure (last resort — the ECS migration task runs
   `alembic upgrade head` only and has no downgrade path):** scale the API
   to zero → restore or snapshot the cluster → open the § 6 tunnel → from
@@ -863,6 +1456,20 @@ in committable form — CI's font-guard stays green.
   revisions above the refusal already undone and committed; check `alembic current`
   afterwards and decide whether to upgrade back to head or carry on. Before task 057 a
   refusal rolled the whole downgrade back.
+- **Task 064a (security quick wins):** every change reverts by deploying the
+  previous image and CDK state, with four notes. The one migration adds an
+  index only; its downgrade drops the index. The Cognito pool now has deletion
+  protection: a deliberate pool replacement must turn it off first, which is
+  the point. Lowering `backup_retention_days` again discards the backups older
+  than the new value. The 12-character password minimum cannot be undone for
+  people who already set a longer password, which is harmless.
+- **Task 064b (firewall and CAPTCHA):** three levels, no data to restore.
+  `waf.mode: count` undoes a block without removing anything; `waf.captcha:
+  false` removes the CAPTCHA rule and the puzzle; `waf.enabled: false` removes
+  the whole firewall, its log group included. Each is a config change and a
+  normal deploy. The emergency switch in § 4 "The firewall" detaches the
+  firewall in seconds without a deploy. The WAF API key is harmless to leave
+  behind.
 - **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
   stop new deploys, then revert the workflow change. This does not repair an
   already interrupted stop→migrate→scale sequence; use the recovery procedure in

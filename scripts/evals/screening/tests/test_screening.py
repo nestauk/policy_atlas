@@ -302,6 +302,17 @@ def test_metrics_and_cost() -> None:
         )
         == 0.20
     )
+    # The default screen model, as the Bedrock route names it: the prefix does not
+    # change the price.
+    assert (
+        cost_usd(
+            "global.openai.gpt-6-luna",
+            prompt_tokens=2_000_000,
+            cached_tokens=1_000_000,
+            completion_tokens=1_000_000,
+        )
+        == 0.10 + 0.01 + 0.50
+    )
     assert (
         cost_usd("gpt-unknown", prompt_tokens=10, cached_tokens=0, completion_tokens=10)
         is None

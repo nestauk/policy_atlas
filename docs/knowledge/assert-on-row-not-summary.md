@@ -3,7 +3,9 @@ type: Testing rule
 title: Assert contract-required keys on the written row, not the component summary
 description: A component's completed-event summary and its persisted roll-up row are built separately and can drift; tests that assert a contracted key on the summary can stay green while the row a downstream reader consumes lacks it. Anchor the assertion on the row.
 tags: [testing, rollup, summary, drift, review-lesson, group]
-timestamp: 2026-07-07
+generated:
+  by: process:okf-migrate
+  at: 2026-07-07
 ---
 
 # Rule
@@ -29,6 +31,14 @@ moving the computation into `build_groups_payload` with a sum-identity check in
 The general failure shape: **evidence anchored on the ephemeral artifact (event/summary/log)
 instead of the durable one (row) proves the wrong thing.** Downstream readers consume rows.
 
-Related: [facet-grouping-exhaustive-partition](facet-grouping-exhaustive-partition.md)
+A second shape, same lesson (064a review stack, 2026-11-16): a test that proves "stored
+nothing" **through a status code** loses its proof the day the code changes. The waitlist
+honeypot test showed the trapped request inserted no row by signing the same address up
+again and expecting a 201 rather than the duplicate's 409; when Q2 made a duplicate a 201
+too, the test stayed green while proving nothing. When a slice removes or changes an
+error code, grep the tests for assertions that used that code as evidence of state, and
+re-anchor them on the row.
+
+Related: `assert_grouping_invariants` in the group stage
 (the invariant the fix extended), [event-log-sequence](event-log-sequence.md) (events are
 an append-only trail, not the read surface).

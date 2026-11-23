@@ -71,10 +71,11 @@ STEER_POINTS: tuple[str, ...] = (
     "synthesis_shape",
 )
 
-# --- Stored steer-point compatibility (task 038, contract V3/A3) -----------
+# --- Stored steer-point compatibility --------------------------------------
 #
-# Task 038 renamed the P2 point's id. Stored plan payloads and pause records
-# are NOT rewritten, and `validate_steer_point` is fail-closed, so an old
+# The P2 point's id was renamed from ``evidence_base_coverage`` to
+# ``evidence_search_coverage``. Stored plan payloads and pause records written
+# before the rename are NOT rewritten, and `validate_steer_point` is fail-closed, so an old
 # payload would fail validation before any reader saw it. Canonicalisation
 # therefore happens at deserialisation — the `mode="before"` validator on
 # `SteerPointDefault.steer_point` — and the pause-record readers call this same
@@ -113,7 +114,7 @@ DISCRETIONARY_COMPONENTS: tuple[DiscretionaryComponent, ...] = (
     "group",
 )
 ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
-#: The steps only an options-scoping chain composes (task 045, ADR 0039). Each
+#: The steps only an options-scoping chain composes (ADR 0039). Each
 #: is its own registry component (``registry_component_for`` is the identity
 #: for them); :func:`_validate_registry` checks them with the rest so a chain
 #: can never name a component the harness does not dispatch.
@@ -127,7 +128,7 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "theme",
     "shortlist",
 )
-#: The steps only a theory-of-change chain composes (task 054, S3).
+#: The steps only a theory-of-change chain composes (S3).
 TOC_STEPS: tuple[str, ...] = (
     "toc_draft",
     "toc_select",
@@ -230,23 +231,23 @@ NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
 }
 
 # Display bands are seeded from measured anchors, not from the target comments.
-# 017 live check (2026-07-10, heat-pump question, standard x standard, budget
+# A live check (heat-pump question, standard x standard, budget
 # 10, 22 full texts): acquire 21s + screen 63s + classify 36s + appraise 0.1s +
 # ingest 107s + stage2 47s + characterise 53s + select 37s+38s + extract 393s +
 # group 569s + synthesise 1047s = ~40 min end to end — the standard-depth rows
-# below are seeded from that run. Landscape rows keep the 016 anchors (acquire
+# below are seeded from that run. Landscape rows keep earlier anchors (acquire
 # 24s, screen 36s, ingest 134.8s; landscape-profile synthesis unmeasured live);
-# deep-depth rows keep the demo deep prior (~95 min) + 015's full search
+# deep-depth rows keep the demo deep prior (~95 min) + a measured full search
 # episode (343s). Targets remain calibration notes only (lighter <= ~10 min,
 # standard ~15-30 min, deeper ~90 min); the standard target-vs-measured gap
-# (~40 min measured) is the recorded depth-seam calibration item for 018/eval.
+# (~40 min measured) is a known depth-seam calibration item.
 TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
-    # The three presets read 5-10, 10-20 and 20-30 (owner, 2026-11-05).
+    # The three presets read 5-10, 10-20 and 20-30.
     ("rapid", "landscape"): "~5-10 min",
     ("standard", "landscape"): "~15-20 min",
     ("deep", "landscape"): "~20-25 min",
     ("rapid", "standard"): "~30-45 min",
-    # Re-seeded from the 019 Phase E measured run (2026-07-12, heat-pump
+    # Seeded from a measured run (heat-pump
     # question, standard x standard WITH select-at-standard, 58 docs acquired,
     # 20 full-text screened): 805 s ≈ 13.4 min end to end incl. the task_agent
     # turn — acquire 12s + screen_abstract 14s + classify 58s + appraise 0.1s
@@ -293,8 +294,7 @@ _DISCRETIONARY_COMPONENT_SET = set(DISCRETIONARY_COMPONENTS)
 # (plan.py) regardless of which plan-vocabulary step invokes it: both
 # screen_abstract (mandatory spine, stage 1) and screen_full (discretionary,
 # stage 2) dispatch to it. Every other step name is its own registry
-# component, so a function replaces what was previously a mostly-identity
-# dict (task 019 item 10b).
+# component.
 _SCREENING_STEPS = frozenset(("screen_abstract", "screen_full"))
 
 
@@ -996,7 +996,7 @@ class TaskPlan(BaseModel):
         # (question + criteria block, via the real composer) must fit the
         # prompt-assembly cap, or criteria would be silently truncated away
         # while the plan row claims they governed screening. The composer
-        # enforces the cap itself (fail-closed, review fix); translate its
+        # enforces the cap itself (fail-closed); translate its
         # error into the plan grammar's ValueError so pydantic wraps it.
         try:
             _compose_screen_intent(self.question, self.screening_criteria)

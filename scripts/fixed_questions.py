@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Start the four task 056 fixed questions as fresh tasks on the local app.
+"""Start the four fixed cost questions as fresh tasks on the local app.
 
 What this does
 --------------
-Task 056 measures cost on four fixed questions (contract O5): three Evidence
+Cost is measured on four fixed questions: three Evidence
 search questions at standard analysis depth and one Options scoping question.
 Each measurement must start from a brand-new task, so this script creates a
 fresh task for every question each time it runs, exactly as the web app does:
@@ -65,7 +65,7 @@ FOLLOW_UP = (
 
 @dataclass(frozen=True)
 class FixedQuestion:
-    """One of the contract's fixed questions (task 056, O5)."""
+    """One of the contract's fixed questions."""
 
     key: str
     capability: str  # "evidence_search" or "options_scoping"
@@ -157,8 +157,12 @@ class Api:
     def call(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
         """Send one request and return the decoded JSON (``None`` in a dry run).
 
+        A streamed (NDJSON, one JSON event per line) answer returns its last
+        event, the ``completed`` one.
+
         Raises:
-            RuntimeError: On an HTTP error, with the status and the API's detail.
+            RuntimeError: On an HTTP error, with the status and the API's detail,
+                or when a streamed answer ends with a ``failed`` event.
         """
         url = f"{self.base_url}{path}"
         if self.dry_run:
@@ -173,10 +177,21 @@ class Api:
         try:
             with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
                 raw = response.read()
+                ndjson = response.headers.get_content_type() == "application/x-ndjson"
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")[:500]
             raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from None
-        return json.loads(raw) if raw else None
+        text = raw.decode().strip()
+        if not text:
+            return None
+        if not ndjson:
+            return json.loads(text)
+        # The Task Agent route streams one JSON event per line; the last is the
+        # outcome: ``{"type": "completed", "turn": {...}}`` or a ``failed`` event.
+        last = json.loads(text.split("\n")[-1])
+        if last.get("type") == "failed":
+            raise RuntimeError(f"{method} {path} -> turn failed: {last.get('error')}")
+        return last
 
 
 def mint_dev_token() -> str:
@@ -245,7 +260,7 @@ def start_question(api: Api, q: FixedQuestion, *, steering: str, max_turns: int)
             },
         )
         if reply:
-            out["conversation_id"] = reply.get("conversation_id")
+            out["conversation_id"] = reply["turn"].get("conversation_id")
         plan = api.call("GET", f"{base}/plan")
         if api.dry_run or (plan and plan.get("status") == "approved"):
             break

@@ -1,39 +1,30 @@
 """The ToC backend sends the step's reasoning effort and timeout with each call."""
 
-from types import SimpleNamespace
-from typing import Any
+import pytest
 
 from policy_atlas.core.model_routes import route
+from policy_atlas.theory_of_change import backend as toc_backend
 from policy_atlas.theory_of_change.backend import OpenAITocBackend
 from policy_atlas.theory_of_change.check.judge_prompt import JudgeResponse
+from tests.helpers import FakeResponsesClient, spy_calls, structured_response
 
 
-class _Client:
-    def __init__(self) -> None:
-        self.kwargs: dict[str, Any] = {}
-        parsed = JudgeResponse(
-            support="not_about",
-            quote=None,
-            relevance=0,
-            relevance_reason=None,
-            condition=None,
-            case_study=None,
-            indicator=None,
-            robust_model=None,
-        )
-        message = SimpleNamespace(parsed=parsed, refusal=None)
-        self._response = SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
-        self.chat = SimpleNamespace(completions=SimpleNamespace(parse=self._parse))
-
-    def _parse(self, **kwargs: Any) -> Any:
-        self.kwargs = kwargs
-        return self._response
-
-
-def test_the_judge_call_carries_the_step_s_effort_and_timeout() -> None:
-    client = _Client()
+def test_the_judge_call_carries_the_step_s_effort_and_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = spy_calls(monkeypatch, toc_backend, "traced_parse")
+    answer = JudgeResponse(
+        support="not_about",
+        quote=None,
+        relevance=0,
+        relevance_reason=None,
+        condition=None,
+        case_study=None,
+        indicator=None,
+        robust_model=None,
+    )
     backend = OpenAITocBackend.__new__(OpenAITocBackend)
-    backend._client = client  # type: ignore[assignment]
+    backend._client = FakeResponsesClient(structured_response(answer))  # type: ignore[assignment]
     backend._langfuse_client = None
     backend._session_id = None
     backend.judge(
@@ -45,6 +36,7 @@ def test_the_judge_call_carries_the_step_s_effort_and_timeout() -> None:
         year=2000,
         text="abc",
     )
-    assert client.kwargs["model"] == route().model_for("toc_judge")
-    assert client.kwargs["reasoning_effort"] == route().effort_for("toc_judge")
-    assert client.kwargs["timeout"] == route().timeout_for("toc_judge")
+    [kwargs] = calls
+    assert kwargs["model"] == route().model_for("toc_judge")
+    assert kwargs["reasoning_effort"] == route().effort_for("toc_judge")
+    assert kwargs["timeout_s"] == route().timeout_for("toc_judge")

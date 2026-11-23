@@ -1,11 +1,11 @@
 """The label resolver: a document's evidence type and quality tier, with provenance.
 
-Task 045, D23 / S5 (ADR 0039 decision 9). An options-scoping task inherits a
-linked Evidence search task's documents; their classification and appraisal
+An options-scoping task inherits a linked Evidence search task's documents
+(ADR 0039 decision 9); their classification and appraisal
 are **read across**, never copied or re-run. One resolver answers "what type
 and tier does this document carry, and where did that come from" for every
 reader that shows a label: the Sources tab read models, the Result's
-citations, the answer core's citation labels, and (Phase 5) the longlist's
+citations, the answer core's citation labels, and the longlist's
 coverage.
 
 Resolution order, per document of this task:
@@ -28,7 +28,7 @@ when every label is this task's, ``absent`` when there is none.
 
 **The rubric rule.** An inherited appraisal whose ``rubric_version`` differs
 from the current rubric is not mixed in: its ``quality_score`` is withheld and
-``stale_rubric`` is set; the appraise skip (task 045 S6) leaves such a
+``stale_rubric`` is set; the appraise skip leaves such a
 document to appraise, which re-appraises it deterministically.
 
 **Reach.** A task with no inbound link resolves own rows only and reads no
@@ -57,10 +57,10 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC_VERSION
 
-#: Rubric versions whose scores an inherited appraisal may carry as current. Task 056
-#: bumped the version to add the Unrated state; the 1 to 5 scores did not change, so
-#: rows scored under the previous version are not stale (the lead's call, 2026-11-02;
-#: without it every linked Evidence search task would re-classify every document).
+#: Rubric versions whose scores an inherited appraisal may carry as current. The
+#: current version adds the Unrated state; the 1 to 5 scores are the same, so
+#: rows scored under ``v2-hierarchy-v1`` are not stale (without this every
+#: linked Evidence search task would re-classify every document).
 COMPATIBLE_RUBRIC_VERSIONS: frozenset[str] = frozenset({"v2-hierarchy-v1", DEFAULT_RUBRIC_VERSION})
 
 #: Where a document's labels came from.
@@ -86,7 +86,7 @@ class DocumentLabels:
         type_inherited: ``True`` when the evidence type came through the link.
         tier_inherited: ``True`` when the appraisal came through the link.
         unrated: ``True`` when the appraisal is Unrated: a row with no score
-            for a document typed Unknown or Other (task 056, D7). Read it with
+            for a document typed Unknown or Other. Read it with
             :func:`~policy_atlas.evidence_search.assess.appraise.appraisal_label`.
     """
 

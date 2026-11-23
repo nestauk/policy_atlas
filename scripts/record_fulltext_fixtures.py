@@ -1,4 +1,4 @@
-"""Dev-time recorder for task 008 full-text ingestion fixtures.
+"""Dev-time recorder for the full-text ingestion fixtures.
 
 Fetches the approved real documents with stdlib urllib, derives deterministic
 edge-case documents with PyMuPDF, writes the committed fixture manifest, and

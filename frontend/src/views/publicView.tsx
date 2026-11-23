@@ -1,9 +1,9 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 /**
- * Whether the surrounding task view is the public (link-shared) view —
- * task 037. Default `false`: the full signed-in app never sets it, so
- * every existing surface keeps today's behaviour.
+ * Whether the surrounding task view is the public (link-shared) view.
+ * Default `false`: the full signed-in app never sets it, so
+ * every signed-in surface behaves as normal.
  *
  * The public view renders the same Results and Sources components but must
  * issue only public-surface requests: consumers use this bit to disable the

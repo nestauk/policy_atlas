@@ -1,9 +1,11 @@
 ---
 type: Invariant
 title: The extraction fingerprint covers sub-backend knobs too — model and effort, not just prompt version
-description: "Every output-affecting knob enters the memo fingerprint" includes attached sub-backends' own model and reasoning-effort settings — the vetter filters which findings persist, so a vetter model/effort change with an unchanged fingerprint would reuse stale records. Latent since 018 C5, caught by the 020 review stack; per-knob sensitivity is test-pinned.
+description: '"Every output-affecting knob enters the memo fingerprint" includes attached sub-backends'' own model and reasoning-effort settings — the vetter filters which findings persist, so a vetter model/effort change with an unchanged fingerprint would reuse stale records. Latent since 018 C5, caught by the 020 review stack; per-knob sensitivity is test-pinned.'
 tags: [fingerprint, memoisation, extraction, vetter, provenance]
-timestamp: 2026-07-12
+generated:
+  by: process:okf-migrate
+  at: 2026-07-12
 ---
 
 # Rule

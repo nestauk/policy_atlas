@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -15,6 +14,7 @@ from policy_atlas.core.openai_client import (
     with_system_breakpoint,
 )
 from policy_atlas.evidence_search.synthesis.cache_modes import CACHE_MODES, cache_mode_for
+from tests.helpers import FakeResponsesClient, structured_response
 
 _OFF_BODY = {"prompt_cache_options": {"mode": "explicit"}}
 _MESSAGES = [
@@ -29,19 +29,13 @@ class _Answer(BaseModel):
     text: str
 
 
-class _RecordingCompletions:
-    def __init__(self) -> None:
-        self.kwargs: dict[str, Any] = {}
-
-    def parse(self, **kwargs: Any) -> Any:
-        self.kwargs = kwargs
-        message = SimpleNamespace(parsed=_Answer(text="ok"))
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+#: ``_MESSAGES`` as Responses input items, untouched (no breakpoint).
+_INPUT = [{"role": message["role"], "content": message["content"]} for message in _MESSAGES]
 
 
 def _parse(prompt_cache: Any) -> dict[str, Any]:
-    completions = _RecordingCompletions()
-    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    """Run ``parse_structured`` against a fake client; return the Responses request it sent."""
+    client = FakeResponsesClient(structured_response(_Answer(text="ok")))
     parsed, _usage = parse_structured(
         client,
         messages=_MESSAGES,
@@ -54,7 +48,14 @@ def _parse(prompt_cache: Any) -> dict[str, Any]:
         timeout_s=45,
     )
     assert parsed == _Answer(text="ok")
-    return completions.kwargs
+    [request] = client.calls
+    assert request["model"] == "gpt-test"
+    assert request["reasoning"] == {"effort": "low"}
+    assert request["store"] is False
+    assert request["text"]["format"]["type"] == "json_schema"
+    assert request["text"]["format"]["name"] == "_Answer"
+    assert request["text"]["format"]["strict"] is True
+    return request
 
 
 def test_openai_kwargs_off_adds_the_extra_body() -> None:
@@ -126,7 +127,21 @@ def test_with_system_breakpoint_refuses_a_content_part_system_message() -> None:
 
 def test_parse_structured_breakpoint_sends_the_rewritten_messages() -> None:
     kwargs = _parse("breakpoint")
-    assert kwargs["messages"] == with_system_breakpoint(_MESSAGES)
+    # The first system message (index 1) carries the breakpoint; the rest go out unchanged.
+    assert kwargs["input"] == [
+        _INPUT[0],
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": "stable system prompt",
+                    "prompt_cache_breakpoint": {"mode": "explicit"},
+                }
+            ],
+        },
+        *_INPUT[2:],
+    ]
     assert kwargs["extra_body"] == _OFF_BODY
     assert _MESSAGES[1] == {"role": "system", "content": "stable system prompt"}
 
@@ -134,12 +149,12 @@ def test_parse_structured_breakpoint_sends_the_rewritten_messages() -> None:
 def test_parse_structured_off_sends_the_extra_body() -> None:
     kwargs = _parse("off")
     assert kwargs["extra_body"] == _OFF_BODY
-    assert kwargs["messages"] is _MESSAGES
+    assert kwargs["input"] == _INPUT
 
 
 def test_parse_structured_auto_sends_messages_unchanged() -> None:
     kwargs = _parse("auto")
-    assert kwargs["messages"] is _MESSAGES
+    assert kwargs["input"] == _INPUT
     assert "extra_body" not in kwargs
 
 

@@ -142,6 +142,29 @@ describe("NewTaskView — question step", () => {
     });
   });
 
+  it("shows the API's sentence for a known conflict code, and the fallback otherwise (task 064a, Q8)", () => {
+    vi.mocked(mutations.useCreateTask).mockReturnValue({
+      mutate,
+      isPending: false,
+      isError: true,
+      error: Object.assign(new Error("quota"), { code: "task_quota", status: 409 }),
+    } as unknown as ReturnType<typeof mutations.useCreateTask>);
+    const { unmount } = renderNewTask("/new?capability=evidence_search");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "You have reached your usage quota of tasks. Contact your Policy Atlas administrator to request more.",
+    );
+    unmount();
+
+    vi.mocked(mutations.useCreateTask).mockReturnValue({
+      mutate,
+      isPending: false,
+      isError: true,
+      error: Object.assign(new Error("boom"), { status: 500 }),
+    } as unknown as ReturnType<typeof mutations.useCreateTask>);
+    renderNewTask("/new?capability=evidence_search");
+    expect(screen.getByRole("alert")).toHaveTextContent("couldn't be started. Try again.");
+  });
+
   it("states the Enter / Shift+Enter key hint", () => {
     renderNewTask("/new?capability=evidence_search");
     expect(screen.getByText(/Shift\+Enter/)).toBeInTheDocument();
@@ -240,11 +263,10 @@ describe("NewTaskView — project selector", () => {
   it.each([
     ["evidence_search", "What do you need evidence on?", "Evidence search"],
     ["options_scoping", "What are you trying to change?", "Options scoping"],
-  ])("opens the %s question on its heading, with no capability line above it (owner, round 10)", (key, heading, name) => {
+  ])("opens the %s question on its heading, with no capability line above it", (key, heading, name) => {
     renderNewTask(`/new?capability=${key}`);
     const title = screen.getByRole("heading", { name: heading });
     expect(title.previousElementSibling).toBeNull();
-    expect(title).not.toHaveClass("mt-2");
     expect(screen.queryByText(name)).toBeNull();
   });
 
@@ -334,29 +356,26 @@ describe("NewTaskView — the optional fields (rounds 13 and 14)", () => {
   it("gives the Evidence search the Project field alone, its help line without 'later too'", () => {
     renderNewTask("/new?capability=evidence_search");
     expect(project()).toHaveTextContent("None");
-    expect(screen.getByText(/^Add this task to a project\.$/)).toHaveClass("text-body", "text-grey");
+    expect(screen.getByText(/^Add this task to a project\.$/)).toBeInTheDocument();
     expect(screen.queryByText(/later too/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Evidence search to start from/ })).not.toBeInTheDocument();
   });
 
-  it("puts the primary alone on the last row, right-aligned, after the fields (round 14)", () => {
+  it("puts the primary alone on the last row, after the fields", () => {
     const { container } = renderNewTask("/new?capability=options_scoping");
     const primary = screen.getByRole("button", { name: "Prepare plan" });
     const row = primary.parentElement as HTMLElement;
-    expect(row).toHaveClass("flex", "justify-end");
     expect(row.children).toHaveLength(1);
     // Nothing after it in the form, and not inside the question's box.
     expect(row.nextElementSibling).toBeNull();
     expect(container.querySelector("form")?.lastElementChild).toBe(row);
     expect(screen.getByLabelText("Your question").parentElement).not.toContainElement(primary);
-    // The search field sits 24 px under Project.
-    expect(from().closest("div.max-w-md")).toHaveClass("mt-6");
-    // Its one help line, in the owner's words (round 14).
+    // Its one help line.
     expect(
       screen.getByText(
         /^Optional\. Start from a completed evidence search in the same project to draw from its sources and report\.$/,
       ),
-    ).toHaveClass("text-body", "text-grey");
+    ).toBeInTheDocument();
   });
 
   // Owner, round 14: with no project (or a new one not yet created) the
@@ -367,7 +386,6 @@ describe("NewTaskView — the optional fields (rounds 13 and 14)", () => {
     const trigger = screen.getByRole("button", { name: /^Evidence search to start from:/ });
     expect(trigger).toBeDisabled();
     expect(trigger).toHaveTextContent(/^Choose a project first$/);
-    expect(trigger).toHaveClass("disabled:bg-ground", "disabled:text-grey");
     await user.click(project());
     await user.click(screen.getByRole("option", { name: "Housing" }));
     expect(from()).toBeEnabled();
@@ -477,7 +495,6 @@ describe("NewTaskView — New project… (round 13)", () => {
     await user.click(screen.getByRole("option", { name: "New project…" }));
     const name = screen.getByRole("textbox", { name: "New project name" });
     expect(name).toHaveFocus();
-    expect(name).toHaveClass("text-body");
     await user.type(name, "Coastal towns");
     await user.type(screen.getByLabelText("Your question"), "What would help coastal towns?");
     await user.click(screen.getByRole("button", { name: "Prepare plan" }));

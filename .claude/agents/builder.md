@@ -5,8 +5,7 @@ description: >
   mocks, prototypes, in the scratch or gitignored directory the brief names, and
   runs them. Use when something must be built and measured to answer a question.
   NOT for product code under backend/ or frontend/, prompt-bearing work, or
-  design decisions (owner ruling 2026-09-29: builds go to Opus; the lead keeps
-  the decisions and writes the brief).
+  design decisions (the lead keeps the decisions and writes the brief).
 model: opus
 effort: high
 tools: Read, Write, Edit, Bash, Grep, Glob

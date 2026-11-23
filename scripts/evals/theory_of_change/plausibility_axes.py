@@ -1,4 +1,4 @@
-"""Experiment 2 (task 054, red team, 2026-11-03): mechanism and evidence as two axes.
+"""Experiment 2 (red team): mechanism and evidence as two axes.
 
 The first experiment (``plausibility.py``) used one scale (established /
 plausible / doubtful / implausible), which mixed two things: whether the

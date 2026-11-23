@@ -3,7 +3,9 @@ type: Integration quirk
 title: Langfuse usage buckets are exclusive; send one usage shape, read usageDetails
 description: Langfuse maps the OpenAI usage shape server-side into exclusive buckets (input_cached_tokens, input_cache_write_tokens, output_reasoning_tokens) and forwards usage_details untouched, so sending both shapes double counts; the older usage field stays inclusive and totalCost is null.
 tags: [langfuse, tracing, cost, usage, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Rule

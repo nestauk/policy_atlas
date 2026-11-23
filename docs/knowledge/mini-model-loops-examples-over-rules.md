@@ -3,7 +3,9 @@ type: Convention
 title: On a mini model, a worked example moves behaviour where a rule does not, and a loop past two targeted rounds measures noise
 description: In the task 046 record-prompt loops the only round that moved the hospital-as-place family was the one that added a second few-shot example; a "never X" rule about an edge case was read as "leave X out" (not-stated faults rose and the round was reverted); each added rule moved faults between families; a screen model quoted the criterion's own words back ("not in Greater Manchester") whatever the rule beside it said; asking for the reason before the label, and closing both exits of a two-way rule, bound better than more words.
 tags: [prompting, mini-model, refine-loop, few-shot, extraction, screening, task-046]
-timestamp: 2026-10-12
+generated:
+  by: process:okf-migrate
+  at: 2026-10-12
 ---
 
 # Rule

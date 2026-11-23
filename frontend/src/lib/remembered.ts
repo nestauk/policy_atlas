@@ -1,5 +1,5 @@
 /*
- * A reader's remembered choices (task 058, round 12 consolidation): small
+ * A reader's remembered choices: small
  * per-viewer conveniences kept in `localStorage`, one key per task, under
  * one key scheme, `policy-atlas:<name>:<taskId>`. Each choice says how its
  * value is written and how a stored string is read back; a stored string

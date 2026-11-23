@@ -3,7 +3,9 @@ type: Testing rule
 title: A poll-deadline test that fails under load is re-run alone, then checked for a race, then widened, never its assertion
 description: Thread tests with a fixed deadline or sleep fail under the parallel suite or several agents' load; re-run the file alone to tell a flake from a red; a second failure is usually a race (a child cancelled before it started, a sleep real work outlasts) fixed with an event or sentinel, not a wider margin; only a genuine bound is widened, never the assertion; two xdist suites on one Postgres also collide on worker names, so the per-worker database carries the process id.
 tags: [testing, xdist, timing, flake, postgres, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Rule
@@ -22,10 +24,6 @@ timestamp: 2026-11-02
 3. **Only then widen the deadline, never the assertion.** A genuine deadline (a "fails fast"
    bound, a vitest interaction timeout) is widened once (2 → 10 s) and recorded in the slice's
    verification.md as a test change.
-4. **Two suites on one Postgres need the process id in the worker database name.**
-   pytest-xdist workers are named `gw0, gw1, ...` in every suite, so a second suite's `gw0`
-   drops the first's database mid-run; `tests/conftest.py` names each copy
-   `<base>_test_<worker>_<pid>`.
 
 # Why
 

@@ -5,8 +5,7 @@ import { TASK } from "../lib/vocabulary";
 type Visibility = components["schemas"]["TaskOut"]["visibility"];
 
 /**
- * The one binding visibility-outcome line (contract § 11, rubric 41 —
- * lead-owned copy, stated not asked). A project cascade appends how many
+ * The one binding visibility-outcome line (stated, not asked). A project cascade appends how many
  * Tasks follow, singular-correct; a plain Task change has no count.
  */
 export function visibilityOutcomeLine(next: Visibility, taskCount?: number): string {
@@ -18,12 +17,9 @@ export function visibilityOutcomeLine(next: Visibility, taskCount?: number): str
 }
 
 /**
- * Owner-only visibility toggle (task 033 phase 10b).
+ * Owner-only visibility toggle.
  *
- * Renders nothing unless the caller owns the row: this introduces a brand
- * new mutation trigger, and Phase 10c — not this phase — is where the rest
- * of the affordance matrix (rename, archive, …) gets its owner gating. A
- * fresh control should not ship pre-broken in the same way.
+ * Renders nothing unless the caller owns the row.
  */
 export function VisibilityControl({
   visibility,

@@ -26,7 +26,7 @@ export interface OutlineSection {
  * The one-line summary a collapsed section shows (028 strand 5/13):
  * the VERIFIED block summary where one exists; the section's own first
  * sentence as the honest fallback — rendered unmarked, indistinguishable
- * from a verified summary (owner ruling, batch 12: the checked/fallback
+ * from a verified summary (the checked/fallback
  * distinction is provenance for reviewers, not users). `focus` never
  * renders (live data shows it is the writing brief). Never generated at
  * render time.
@@ -62,7 +62,7 @@ export const SECTION_EXPAND_LINK_CLASS = `${LINK_CLASS} print-hide shrink-0 text
 export type SectionHeadingLevel = 2 | 3;
 
 /**
- * A collapsible section's heading (round 10, finding 5): the GOV.UK
+ * A collapsible section's heading: the GOV.UK
  * accordion pattern, a heading holding a button, so the heading stays in a
  * screen reader's list of headings and the button carries `aria-expanded`
  * (a heading inside a button is invalid, and Safari drops it from the
@@ -151,8 +151,8 @@ export function requestOpenSection(id: string): void {
 }
 
 /*
- * The report's expand state, one piece per task, in memory (owner, round
- * 12). A reader who watched the report being written finds its sections all
+ * The report's expand state, one piece per task, in memory.
+ * A reader who watched the report being written finds its sections all
  * open and the control reading "Hide all"; a reader who opens a finished
  * report fresh finds them shut; moving between the task's tabs (Sources and
  * back) keeps whatever the reader left. Each tab is its own route, so the
@@ -273,8 +273,8 @@ export function FullReportExpandProvider({ children }: { children: React.ReactNo
   return <FullReportExpandContext.Provider value={value}>{children}</FullReportExpandContext.Provider>;
 }
 
-/** "Show all" / "Hide all" beside the Full report heading (round 10, C7:
- *  the disclosure vocabulary, a quiet control at Meta). */
+/** "Show all" / "Hide all" beside the Full report heading (the
+ *  disclosure vocabulary, a quiet control at Meta). */
 export function FullReportExpandAllButton() {
   const control = useContext(FullReportExpandContext);
   if (control == null) return null;
@@ -388,8 +388,7 @@ export function ContentsSidebar({
       const scroller = root;
       // The current section is the last whose heading has passed a line a
       // quarter of the way down the pane (at most 160 px): a heading the
-      // reader is reading under counts, not only one at the very top
-      // (round 10, finding 6).
+      // reader is reading under counts, not only one at the very top.
       const top = scroller != null ? scroller.getBoundingClientRect().top : 0;
       const height = scroller != null ? scroller.clientHeight : window.innerHeight;
       const line = top + Math.min(160, height * 0.25);
@@ -484,7 +483,7 @@ function subscribeNarrow(onChange: () => void): () => void {
 }
 
 /**
- * The contents on a phone (round 10, D3): a closed "Contents" disclosure
+ * The contents on a phone: a closed "Contents" disclosure
  * under the title block, below `md` only. Opened, it lists the same entries
  * as the sidebar; choosing one closes it and opens and scrolls to that
  * section, as the sidebar does. `ReportPage` places it.
@@ -545,8 +544,8 @@ export function MobileContents({ entries }: { entries: SidebarEntry[] }) {
  * marker; a failed summary never renders as a summary.
  *
  * The report while it is written renders its sections through this same
- * component, not collapsible, so the committed report updates them in place
- * (task 058, owner round 7): a section that was showing when it becomes
+ * component, not collapsible, so the committed report updates them in place:
+ * a section that was showing when it becomes
  * collapsible stays open, and its "Collapse −" control fades in.
  */
 export function SectionDisclosure({
@@ -579,7 +578,7 @@ export function SectionDisclosure({
   /** A class for controls that arrive with the committed report (the
    *  swap's fade-in), empty otherwise. */
   arrivingClass?: string;
-  /** `h3` inside a report part, `h2` on a page without parts (round 10). */
+  /** `h3` inside a report part, `h2` on a page without parts. */
   level?: SectionHeadingLevel;
   children: React.ReactNode;
 }) {
@@ -599,7 +598,7 @@ export function SectionDisclosure({
   const Heading = level === 3 ? "h3" : "h2";
   // The meta moves to its own line as a whole when it does not fit beside
   // the title, and wraps inside itself when it is wider than the column (a
-  // list with no themes puts every lever noun on one line; 390 px, task 058).
+  // list with no themes puts every lever noun on one line; 390 px).
   const metaSpan = meta !== undefined && (
     <span className="ml-2 inline-block max-w-full text-meta font-normal text-grey max-md:ml-0 max-md:block">{meta}</span>
   );
@@ -628,8 +627,7 @@ export function SectionDisclosure({
       )}
       {subhead}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
-          fallback distinction is provenance for reviewers, not users
-          (owner, 2026-08-05). */}
+          fallback distinction is provenance for reviewers, not users.*/}
       {!expanded && summaryNode !== undefined && <div className="mt-2">{summaryNode}</div>}
       {!expanded && summaryNode === undefined && summary !== null && (
         <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
@@ -644,10 +642,10 @@ export function SectionDisclosure({
 }
 
 /**
- * Mobile-only secondary disclosure toggle (040 D8): the heading row hides its
+ * Mobile-only secondary disclosure toggle: the heading row hides its
  * disclosure word below md, so collapsible sections render this tappable
  * twin after the summary (collapsed) or at the section end (expanded), in
- * the same vocabulary (the chevron, "Show" or "Hide"; round 10, C7). The
+ * the same vocabulary (the chevron, "Show" or "Hide"). The
  * heading row remains a toggle too; this one carries its own aria-expanded.
  */
 export function MobileDisclosureToggle({
@@ -675,14 +673,14 @@ export function MobileDisclosureToggle({
  * the report cites, with the compact whole-search funnel line and the
  * Landscape pointer for the full corpus. Counts label "Documents".
  */
-/** The method section's heading, and its entry in the contents (round 10, C2). */
+/** The method section's heading, and its entry in the contents. */
 export const GATHERED_SECTION_TITLE = "How the evidence was gathered";
 
 /**
  * Whether "How the evidence was gathered" renders, from the cited-scope
  * landscape read it is built on: not when the read failed or came back with
- * nothing to show. The contents leave its entry out on the same test
- * (round 10, finding 6). While the read is in flight the section shows.
+ * nothing to show. The contents leave its entry out on the same test.
+ * While the read is in flight the section shows.
  */
 export function gatheredSectionShows(landscape: {
   isError: boolean;
@@ -699,10 +697,10 @@ export function gatheredSectionShows(landscape: {
   );
 }
 
-/** The method's tables (owner, round 11): ruled rows at Body, the label
+/** The method's tables: ruled rows at Body, the label
  *  left and the figure right-aligned in one column of tabular figures, every
  *  table one width so the figures line up down the section. */
-/* The method's tables (owner, round 14): one width, the report's prose
+/* The method's tables: one width, the report's prose
    measure, so the section reads as one column; one figure column at the
    right of every table, the same width in each, the numbers Navy in
    tabular figures, so they line up down the whole section; the rows ruled
@@ -717,7 +715,7 @@ const GATHERED_COUNT_CELL_CLASS = "w-20 whitespace-nowrap py-2 text-right align-
  * The run's stages from the search to the report, in the Landscape funnel's
  * words (`FUNNEL_STAGES`), each with its count; a stage without one is left
  * out. Five rows: found, relevant (screened in), full text, shortlisted,
- * cited (owner, round 11).
+ * cited.
  */
 export function gatheredCounts(
   funnel: { found?: number | null; relevant?: number | null; read_in_full?: number | null; selected?: number | null; cited?: number | null } | undefined,
@@ -743,7 +741,7 @@ export function gatheredCountHref(allSources: string, label: string): string | u
   if (label === "Found") return `${allSources}?status=all`;
   if (label === "Relevant") return `${allSources}?status=Included`;
   if (label === "Cited") return `${allSources}?cited=true`;
-  // The table's depth filter (round 13): the sources read in full.
+  // The table's depth filter: the sources read in full.
   if (label === "Full text") return `${allSources}?depth=full_text`;
   return undefined;
 }
@@ -751,7 +749,7 @@ export function gatheredCountHref(allSources: string, label: string): string | u
 /** A row's label: a link where the table can filter to it, plain
  *  otherwise (the clickable-only rule). The References' quiet title link
  *  (Navy, the Line 2 underline turning Navy on hover), not Electric Blue,
- *  so the table stays calm (owner, round 13). */
+ *  so the table stays calm. */
 function GatheredLabel({ href, children }: { href: string | undefined; children: React.ReactNode }) {
   if (href === undefined) return <>{children}</>;
   return (
@@ -771,7 +769,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
   const funnel = useFunnel(taskId);
   const cited = landscape.data;
   // Each row leads to the sources table where the table can filter to it,
-  // with the filters the Landscape's rows use (owner, round 12): the counts
+  // with the filters the Landscape's rows use: the counts
   // to their set, a distribution's value and a theme to the cited sources
   // with that value. A row the table cannot filter to stays plain.
   const allSources = `/tasks/${taskId}/sources/all`;
@@ -824,7 +822,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
       {open && (
         <div className="mt-4 space-y-8">
           {/* The search to the report, one stage a row, the numbers in one
-              column (owner, round 11); the stages carry the Landscape
+              column; the stages carry the Landscape
               funnel's names. */}
           {counts.length > 0 && (
             <table aria-labelledby={headingId} className={GATHERED_TABLE_CLASS}>
@@ -866,7 +864,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
               </table>
               {row.label === "Where published" && (
                 <p className="mt-2 max-w-prose-measure text-meta text-grey">
-                  {/* Task 031: the read model reads the publishing venue's country only —
+                  {/* The read model reads the publishing venue's country only —
                       never the authors' affiliations, and never where the study was set. */}
                   The country of the publishing venue, when the database reports it — not where
                   each study was set. Sources without one are counted as “Not reported”.

@@ -13,7 +13,7 @@ documents) is for a setting that already looks good on ``mini``.
     uv run --project backend --env-file backend/.env \\
         python scripts/evals/screening/checks/run_screen.py
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/screening/checks/run_screen.py --reps 1 --model gpt-5.6-luna
+        python scripts/evals/screening/checks/run_screen.py --vote majority --reps 1 --model gpt-5.6-luna
     uv run --project backend --env-file backend/.env \\
         python scripts/evals/screening/checks/run_screen.py --dataset full
 """
@@ -34,7 +34,7 @@ from typing import Any
 import _bootstrap  # noqa: F401
 import pandas as pd
 from adapter import MISSING_ABSTRACT, SIZES, dataset_manifest, load_and_adapt_dataset
-from metrics import PRICE_AS_OF, PRICE_PER_MILLION, calculate_metrics, cost_usd
+from metrics import PRICE_AS_OF, calculate_metrics, cost_usd, rates_for
 from targets import TARGETS_JSON, select_targets
 from vote import combine_adaptive, combine_reps
 
@@ -128,9 +128,7 @@ def use_settings(
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         label = f"{system_prompt.stem}@{digest}"
     product_backend.SCREEN_MODEL = model
-    product_backend.SCREEN_FULL_MODEL = (
-        model  # task 056: the full-text stage is its own step
-    )
+    product_backend.SCREEN_FULL_MODEL = model  # The full-text stage is its own step
     product_backend.parse_structured = _PRODUCTION["parse"]
     if effort is not None:
         product_backend.parse_structured = functools.partial(
@@ -464,7 +462,7 @@ def run(args: argparse.Namespace) -> Path:
             completion_tokens=run_usage.completion,
         ),
         "price_per_million_usd": {
-            "rates": PRICE_PER_MILLION.get(args.model),
+            "rates": rates_for(args.model),
             "as_of": PRICE_AS_OF,
         },
         "targets": summaries,

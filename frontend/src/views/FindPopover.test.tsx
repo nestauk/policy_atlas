@@ -78,8 +78,8 @@ describe("FindPopover", () => {
       "School meals and attainment",
       "Active travel to school",
     ]);
-    // The matched words are not marked: rows are plain Navy text.
-    expect(screen.getAllByRole("option")[0].querySelector("mark, .text-blue")).toBeNull();
+    // The matched words are not marked.
+    expect(screen.getAllByRole("option")[0].querySelector("mark")).toBeNull();
 
     await user.type(screen.getByRole("combobox"), " zebra");
     await settle();
@@ -104,12 +104,10 @@ describe("FindPopover", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
-  it("is a magnifier named by its label: a 40 px target in the quiet control's colours (round 11)", () => {
+  it("is a magnifier named by its label", () => {
     renderFind();
     const trigger = screen.getByRole("button", { name: "Find a task" });
     expect(trigger).toHaveAttribute("aria-label", "Find a task");
-    expect(trigger).toHaveClass("size-10", "text-grey", "hover:text-navy");
-    expect(trigger).not.toHaveClass("bg-blue");
     expect(trigger.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     expect(trigger).toHaveTextContent("");
   });

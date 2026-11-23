@@ -21,6 +21,7 @@ from policy_atlas.core.schema import (
     source_tag,
 )
 from policy_atlas.core.usage import TokenUsage, UsageResult
+from policy_atlas.evidence_search.assess import classification_backend
 from policy_atlas.evidence_search.assess.classification_backend import (
     OpenAIClassificationBackend,
     StubClassificationBackend,
@@ -43,13 +44,15 @@ from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests import progress_recorder
 from tests.helpers import (
-    fake_parse_client,
+    FakeResponsesClient,
     now,
     seed_run,
     seed_scope,
     seed_screening_result,
     seed_source,
     seed_task_and_run,
+    spy_calls,
+    structured_response,
 )
 
 # --- Schema ---
@@ -61,7 +64,7 @@ def test_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 52  # task 054 adds toc_figure, toc_proposal and task_upload
+    assert len(metadata.tables) == 56  # task 065 adds four ops and cohort tables
 
 
 # --- Stub logic (pure Python, no DB) ---
@@ -654,7 +657,9 @@ def test_delete_task_data_removes_classification(conn: Connection) -> None:
 # --- Model constant + reasoning-effort seam (018 A1) ---
 
 
-def test_classify_backend_passes_model_and_reasoning_effort() -> None:
+def test_classify_backend_passes_model_and_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     wire = ClassifyWire(
         primary_evidence_type="RCTs and Quasi-Experimental Studies",
         tags=[],
@@ -662,8 +667,8 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
         reason="Randomized trial.",
     )
     backend: OpenAIClassificationBackend = object.__new__(OpenAIClassificationBackend)
-    fake_client = fake_parse_client(parsed=wire)
-    cast("Any", backend)._client = fake_client
+    calls = spy_calls(monkeypatch, classification_backend, "parse_structured")
+    cast("Any", backend)._client = FakeResponsesClient(structured_response(wire))
     cast("Any", backend)._langfuse_client = None
 
     result, usage = backend.classify(
@@ -676,8 +681,8 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     )
 
     assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
-    assert usage is None
-    [kwargs] = fake_client.chat.completions.calls
+    assert usage == TokenUsage(prompt=10, completion=5, total=15, cached=0, reasoning=0)
+    [kwargs] = calls
     assert kwargs["model"] == CLASSIFY_MODEL
     assert kwargs["reasoning_effort"] == "medium"  # task 056 P5: medium
     assert kwargs["reasoning_effort"] == CLASSIFY_EFFORT
@@ -715,7 +720,9 @@ class _FailsOnceClassifier:
         return object(), None
 
 
-def test_classify_publishes_documents_done_of_total(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_classify_publishes_documents_done_of_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls = progress_recorder.install(monkeypatch)
     docs = [
         _ClassifyDoc(

@@ -1,4 +1,4 @@
-"""The ``toc_summarise`` step: the header paragraphs and every sentence (task 054, C20).
+"""The ``toc_summarise`` step: the header paragraphs and every sentence.
 
 Each citation is checked against what the item's judgements allow; a sentence
 whose citations fail is replaced by the fixed fallback.
@@ -43,15 +43,15 @@ from policy_atlas.theory_of_change.graph import (
 log = structlog.get_logger()
 
 
-#: The fixed sentence for a question no document spoke to (C20).
+#: The fixed sentence for a question no document spoke to.
 NO_EVIDENCE_SENTENCE = "No evidence was found in the documents read."
 
 
-#: The fixed sentence that replaces a link sentence whose citations fail (C20).
+#: The fixed sentence that replaces a link sentence whose citations fail.
 UNSETTLED_SENTENCE = "The documents read do not settle this step."
 
 
-#: The fixed box description that replaces one whose citations fail (C20).
+#: The fixed box description that replaces one whose citations fail.
 BOX_FALLBACK_DESCRIPTION = "A step in the theory."
 
 
@@ -63,7 +63,7 @@ def toc_summarise_scope(
     context: ScopeContext,
     backend: TocBackend,
 ) -> dict[str, Any]:
-    """Write each link's title and evidence sentence and each box's texts (C20).
+    """Write each link's title and evidence sentence and each box's texts.
 
     Every citation is checked; a sentence that fails is replaced with a fixed
     one, and a "seen in" note that fails is dropped. The texts are written on
@@ -120,7 +120,7 @@ def toc_summarise_scope(
             item is not None
             and item.sentence
             and item.sentence.strip()
-            # Every cited document is one the item may cite (C20).
+            # Every cited document is one the item may cite.
             and set(item.cites) <= allowed[key]
         ):
             sentence = item.sentence.strip()
@@ -185,7 +185,7 @@ def top_case_studies[T](
 ) -> list[T]:
     """One box's case studies to show, best first (read time).
 
-    Ranks by the document's quality Q (C36), then supporting documents before
+    Ranks by the document's quality Q, then supporting documents before
     others, then the given order; keeps the first of each programme and place
     (case and spacing ignored) and at most :data:`CASE_STUDIES_PER_BOX`.
 

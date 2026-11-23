@@ -1,9 +1,16 @@
 ---
 type: Convention
 title: A code-word sweep inverts prose, identifiers and message strings already written in the screen sense
-description: When the code word and the screen word for one entity differ (ADR 0031 era: code `project` = screen Task), comments, docstrings, a few identifiers and — worst — user-facing message strings are written in the screen sense; a code-word sweep turns "a Task inside a Project" into "a Task inside a Task". Pair removed/added lines that name both entities, and grep message strings for doubled words, before the gate.
+description: 'When the code word and the screen word for one entity differ (ADR 0031 era: code `project` = screen Task), comments, docstrings, a few identifiers and — worst — user-facing message strings are written in the screen sense; a code-word sweep turns "a Task inside a Project" into "a Task inside a Task". Pair removed/added lines that name both entities, and grep message strings for doubled words, before the gate.'
 tags: [rename, vocabulary, sweep, review, task-038]
-timestamp: 2026-09-17
+generated:
+  by: process:okf-migrate
+  at: 2026-09-17
+sources:
+  - resource: "../tasks/038-vocabulary-alignment/verification.md"
+    title: "[038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (\u00a7 Phase 3 \"Screen-sense prose\", \u00a7 Phase 4 \"Screen-sense identifiers\", \u00a7 Review findings R2)"
+  - resource: "backend/src/policy_atlas/api/routers/tasks.py"
+    title: "`backend/src/policy_atlas/api/routers/tasks.py` (the two `visibility_conflict` messages), `backend/tests/api/test_visibility_invariant.py`"
 ---
 
 # Rule
@@ -43,8 +50,3 @@ alongside it and stays green.
   against the entity it names, not against the code.
 - Same family: [stored-json-keys-are-vocabulary-too](stored-json-keys-are-vocabulary-too.md),
   [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md).
-
-# Citations
-
-- [038-vocabulary-alignment/verification.md](../tasks/038-vocabulary-alignment/verification.md) (§ Phase 3 "Screen-sense prose", § Phase 4 "Screen-sense identifiers", § Review findings R2)
-- `backend/src/policy_atlas/api/routers/tasks.py` (the two `visibility_conflict` messages), `backend/tests/api/test_visibility_invariant.py`

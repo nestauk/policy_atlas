@@ -27,8 +27,7 @@ import { ChatsIcon, ExpandIcon, PanelCloseIcon, PlusIcon, iconButtonClass } from
 
 const HEADER_BUTTON = iconButtonClass("chrome");
 
-/** The Agent overlay: side-by-side chat on every task view but the Agent tab
- *  (038 V8).
+/** The Agent overlay: side-by-side chat on every task view but the Agent tab.
  *
  * The panel is URL-addressable: it is open exactly when the route carries
  * `?chat=<cid>`. It is the Agent tab's sidebar folded into one column: the
@@ -39,15 +38,15 @@ const HEADER_BUTTON = iconButtonClass("chrome");
  * rail the Agent tab's sidebar shuts to; the rail's toggle opens the latest
  * chat, or the Task Agent when there is none.
  *
- * The Task Agent here is the same agent as the Agent tab (task 058, N13): it
+ * The Task Agent here is the same agent as the Agent tab: it
  * reads the task's one run stream and shows the same thread, with the run's
- * trace at its place (owner, 2026-11-05: the trace is the sidebar's run
+ * trace at its place (the trace is the sidebar's run
  * view; no separate run line). While a check-in waits, the rail's toggle
  * opens the Task Agent, whose thread opens at its end, on the check-in.
  *
  * Args:
  *   props: The owning task id, and `isOwner` for the task_agent duplicate's
- *     read-only gate (task 033 phase 10c, contract § 11 / rubric 37) — this
+ *     read-only gate — this
  *     is the `ChatSidePanel` duplicate the rubric names alongside the
  *     workspace's own `TaskAgentPane`. `onOpenPlan` overrides how "Review the
  *     plan" and "See plan" open the plan document (the shell's plan panel by
@@ -72,7 +71,7 @@ export function ChatSidePanel({
   const rows = conversations.data?.data ?? [];
   const chatRows = rows.filter((row) => row.kind === "chat");
   const taskAgentId = taskAgentConversationId(rows);
-  // The Task Agent's conversations, closed ones included (round 12): a walk
+  // The Task Agent's conversations, closed ones included: a walk
   // that ends closes the open one (answering the baseline check-in ends the
   // baseline walk), so it leaves the active list while the sidebar is still
   // showing it. Read against the active list alone, the panel took it for a
@@ -82,8 +81,7 @@ export function ChatSidePanel({
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);
-  // The sidebar does not open by itself on any kind of task (task 054,
-  // decision 11, reversing round 7's theory-of-change rule): the run status
+  // The sidebar does not open by itself on any kind of task: the run status
   // bar shows the run, and the reader opens the Task Agent from it.
   const stream = useRunStream(taskId);
   const checkInWaiting = stream.pendingCheckIn != null;
@@ -91,19 +89,19 @@ export function ChatSidePanel({
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.
     if (!conversations.isSuccess) return;
-    // A waiting check-in wins: opening the panel lands on it (task 058, N13).
+    // A waiting check-in wins: opening the panel lands on it.
     if (checkInWaiting) return setActiveConversation(taskAgentId);
     setActiveConversation(chatRows.length > 0 ? chatRows[0].id : taskAgentId);
   };
-  // "Review the plan" and "See plan" open the shell's plan document (task
-  // 058, N13, N15) without leaving the tab.
+  // "Review the plan" and "See plan" open the shell's plan document
+  // without leaving the tab.
   const planPanel = usePlanPanel();
   const openPlan = onOpenPlan ?? planPanel.openPlan;
 
   if (activeConversationId === null) {
-    // Shut, the overlay is the same rail the Agent tab's sidebar shuts to
-    // (owner request 2026-09-05): one object on every task tab.
-    // Below md the rail hides with no stand-in (task 040 amendment A6): the
+    // Shut, the overlay is the same rail the Agent tab's sidebar shuts to:
+    // one object on every task tab.
+    // Below md the rail hides with no stand-in: the
     // bottom tab bar's Agent tab is the mobile way into the conversation.
     return (
       <ConversationRail
@@ -117,8 +115,8 @@ export function ChatSidePanel({
         onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
         recent={recentChats(rows)}
         onSelectChat={setActiveConversation}
-        // The rail's Task Agent mark holds still and carries no run status
-        // (owner, round 8): the run status bar beside it says what the run is
+        // The rail's Task Agent mark holds still and carries no run status:
+        // the run status bar beside it says what the run is
         // doing, and opens the Task Agent.
         className="h-full w-12 flex-col border-r py-2 max-md:hidden"
       />
@@ -162,8 +160,8 @@ export function ChatSidePanel({
             <ChatsIcon />
           </button>
         </Tooltip>
-        {/* The name is the way to the conversation's full-width home (owner,
-            2026-09-05): the Agent tab with this conversation in the main
+        {/* The name is the way to the conversation's full-width home:
+            the Agent tab with this conversation in the main
             column — an explicit hand-over of `?chat=`, which the tab bar
             itself never carries there. No fifth control in the header. */}
         <Tooltip content="View in Agent tab" side="bottom" className={RAIL_TOOLTIP_CLASS}>
@@ -173,7 +171,7 @@ export function ChatSidePanel({
             className="group/name flex min-w-0 flex-1 items-center gap-2 px-1 text-meta font-semibold text-navy hover:underline"
           >
             {taskAgentOpen && <FoldMarkIcon size={10} />}
-            {/* A chat's title as the backend names it (round 14), revealed;
+            {/* A chat's title as the backend names it, revealed;
                 keyed by the chat, so opening another never reads as one. */}
             <ChangingText key={activeConversationId} text={currentTitle} testIdPrefix="chat-title" />
             <ExpandIcon
@@ -215,8 +213,8 @@ export function ChatSidePanel({
           <ConversationList taskId={taskId} onOpen={openRow} selectedId={taskAgentOpen ? taskAgentId : activeConversationId} />
         </div>
       ) : (
-        // `compact-pane`: Lead text reads at Body size in the sidebar (owner,
-        // 2026-11-05), for the Task Agent and the chats alike.
+        // `compact-pane`: Lead text reads at Body size in the sidebar,
+        // for the Task Agent and the chats alike.
         <div className="compact-pane min-h-0 flex-1">
           {taskAgentOpen ? (
             <TaskAgentPane

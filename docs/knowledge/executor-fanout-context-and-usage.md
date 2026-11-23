@@ -3,7 +3,14 @@ type: Convention
 title: Thread fan-outs submit through copy_context and accumulate usage on the submitting thread
 description: tracing.submit_with_context propagates the OTel/Langfuse span context AND structlog bound contextvars in one mechanism (contextvars.copy_context at submit); UsageAccumulator is not thread-safe, so workers return their usage and the submitting thread accumulates in input order.
 tags: [threading, langfuse, tracing, structlog, usage, executor]
-timestamp: 2026-07-12
+generated:
+  by: process:okf-migrate
+  at: 2026-07-12
+sources:
+  - resource: "src/policy_atlas/tracing.py"
+    title: "`src/policy_atlas/tracing.py` (`submit_with_context`); call sites in `screen.py`, `extract.py`, `classify.py`, `characterise.py`"
+  - resource: "../tasks/019-folding-pass/verification.md"
+    title: "[019 verification.md \u00a7 Review findings](../tasks/019-folding-pass/verification.md) (live-trace lane: nesting verified on the D1 traces)"
 ---
 
 # Rule
@@ -40,13 +47,6 @@ the ordering question; returning usage keeps accumulation deterministic.
   regresses to detached root traces silently (nothing fails; the traces just orphan).
 - Parallelizing a loop that touches `UsageAccumulator` means moving the `add` to the
   submitting thread, not locking the accumulator.
-
-# Citations
-
-- `src/policy_atlas/tracing.py` (`submit_with_context`); call sites in `screen.py`,
-  `extract.py`, `classify.py`, `characterise.py`
-- [019 verification.md § Review findings](../tasks/019-folding-pass/verification.md)
-  (live-trace lane: nesting verified on the D1 traces)
 
 # Watch out (055)
 

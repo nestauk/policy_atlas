@@ -41,14 +41,14 @@ from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
 log = structlog.get_logger()
 
-# 48 (task 057, N10d; was 12 since task 044): classify is provider-bound threads,
-# not CPU. E8 measured 12 -> 48 on Bedrock: classify set wall 7.9 -> 4.5 s, no 429s
-# up to 48, per-call latency flat. Measured again on the fixed questions in 057.
+# 48: classify is provider-bound threads,
+# not CPU. Measured 12 -> 48 on Bedrock: classify set wall 7.9 -> 4.5 s, no 429s
+# up to 48, per-call latency flat. Measured again on the fixed questions.
 MAX_CONCURRENT_CLASSIFY = 48
 CLASSIFY_RETRY_CAP = 1
 
 #: The one key of classify's directive (``context["classify"]``) and of
-#: appraise's (task 045, S6; ADR 0039 decision 9): documents whose label the
+#: appraise's (ADR 0039 decision 9): documents whose label the
 #: label resolver already answers from a linked task, which the step leaves
 #: alone. Written per step by the runner's ``leg_directive`` for a longlist
 #: walk; absent everywhere else, and a no-op when absent.
@@ -286,7 +286,7 @@ def _count_effective_skipped(
     scope_id: uuid.UUID,
 ) -> int:
     effective = effective_screen_rows()
-    # task 019: excluded_retracted docs never reach classify eligibility
+    # excluded_retracted docs never reach classify eligibility
     # (_load_relevant_docs filters status == 'relevant') but still have an
     # effective screening row, so they must land in this "skipped" bucket —
     # otherwise the classified+skipped+already_classified funnel invariant
@@ -339,7 +339,7 @@ def _run_classification_calls(
     maximum = baseline * (1 + CLASSIFY_RETRY_CAP)
     log.info("classify.call_budget", baseline=baseline, maximum=maximum)
 
-    # The process-wide classify slots (task 045, S2): every walk in the
+    # The process-wide classify slots: every walk in the
     # process shares one budget of provider calls, so a longlist walk and its
     # option searches do not each take twelve. Imported here, not at module
     # level: the slots module sizes itself from this module's constant.
@@ -353,7 +353,7 @@ def _run_classification_calls(
     errors: dict[int, Exception] = {}
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: one count per document, on the pool's own future; the
+    # One count per document, on the pool's own future; the
     # serial retry below never publishes.
     done = 0
     lock = threading.Lock()
@@ -443,7 +443,7 @@ def classify_sources(
     ``source.classified`` event per successful row. Backend failures leave no
     row, so the same source is retried by the next run.
 
-    Task 045: ``context.context["classify"]`` may carry
+    ``context.context["classify"]`` may carry
     ``{"skip_task_source_snapshot_ids": [...]}`` (parsed fail-closed by
     ``_parse_classify_directive``) — documents whose type the label resolver
     already answers from a linked task. They are left unclassified and

@@ -26,10 +26,7 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "policy_atlas"
 #: Generation observations deliberately NOT opened through ``traced_attempts``,
 #: keyed ``(module path under src/policy_atlas, enclosing class/function path)``.
 #:
-#: The chat prose stream (``OpenAIChatBackend._stream_then_parse`` step 1) is exempt too
-#: (it sends text to the user as it arrives, so a retry would repeat it; its timeout bounds
-#: the wait between chunks, contract D12), but it opens no generation observation, so the
-#: scan cannot list it. The chat tool turn and final parse are wrapped in ``traced_attempts``.
+#: The chat tool turn and final parse are wrapped in ``traced_attempts``.
 NOT_WRAPPED: dict[tuple[str, str], str] = {
     # traced_attempts itself opens one generation per attempt.
     ("core/tracing.py", "traced_attempts"): "the wrapper's own per-attempt observation",
@@ -72,6 +69,11 @@ NOT_WRAPPED: dict[tuple[str, str], str] = {
         "chunks and first_content_s the wait for the first words; one non-streamed run of "
         "report or draft (with its own retries) on failure, in report_stream.write_streamed "
         "and draft_stream.draft_streamed"
+    ),
+    ("runtime/chat_backend_openai.py", "OpenAIChatBackend._reply_attempt"): (
+        "exempt-stream: the chat reply prose reaches the user as it arrives; one traced "
+        "retry before the first text piece, in _stream_reply; the timeout bounds the gap "
+        "between chunks"
     ),
     ("runtime/task_agent.py", "OpenAITaskAgentBackend._stream_attempt"): (
         "exempt-stream: the planner reply reaches the user as it arrives; one traced "

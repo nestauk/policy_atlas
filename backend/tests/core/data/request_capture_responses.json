@@ -1,0 +1,2470 @@
+[
+ {
+  "body": {
+   "input": [
+    "system:c491a82b80471c8a",
+    "user:884d5fb85d4ef249"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "0b6a210c589e307b"
+  },
+  "path": "/openai/v1/responses",
+  "step": "agent_decide",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:af8d5c729869060c",
+    "user:9d4906aa63b381fd"
+   ],
+   "max_output_tokens": 1024,
+   "model": "global.openai.gpt-6-luna",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "c3f2a15fbef888de"
+  },
+  "path": "/openai/v1/responses",
+  "step": "agent_gate_sort",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:27fb83017b00cc12",
+    "user:2452fbb6227fc1f4"
+   ],
+   "max_output_tokens": 1024,
+   "model": "global.openai.gpt-6-luna",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "30facc2d973bfc68"
+  },
+  "path": "/openai/v1/responses",
+  "step": "agent_longlist_sort",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:cf9d7ed016b4f394",
+    "user:70632b8712020b83"
+   ],
+   "max_output_tokens": 4096,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "3b05219f925af2ec"
+  },
+  "path": "/openai/v1/responses",
+  "step": "agent_option_design",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:0a8e5dc27ee34432",
+    "user:1d2ad1393cd652cd"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "dd753a99b653ef0a"
+  },
+  "path": "/openai/v1/responses",
+  "step": "agent_route",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:c86abe4e3708dae2",
+    "user:b3a731f45178342f"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "3885f55dc4d581bd"
+  },
+  "path": "/openai/v1/responses",
+  "step": "agent_suggest",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:02e74aaec11c707d",
+    "user:1219a62e0e12997c"
+   ],
+   "max_output_tokens": 1024,
+   "model": "global.openai.gpt-6-luna",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "6cfc4c09625017eb"
+  },
+  "path": "/openai/v1/responses",
+  "step": "agent_triage",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:b7940f53c7595c3d",
+    "user:3527597addaf7ef2"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "00998eca457f9f18"
+  },
+  "path": "/openai/v1/responses",
+  "step": "characterise_assign",
+  "timeout": {
+   "connect": 30.0,
+   "pool": 30.0,
+   "read": 30.0,
+   "write": 30.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:3107ec3f7248536a",
+    "user:2bf2df8b96deb3b2"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "fcc5a5f35ff47c4f"
+  },
+  "path": "/openai/v1/responses",
+  "step": "characterise_discover",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:02f191e5a5bbf161",
+    "user:211668214623304a",
+    "user:f7e3ee805bd9d99c",
+    "assistant:c49334c62b36085d",
+    "user:b8f8849f6c1c1344",
+    "function_call:bd879f29977c5b96",
+    "function_call_output:a6e5d32c9064da31",
+    "function_call:56b15d8fdc960399",
+    "function_call_output:0620bad7e7441d50",
+    "user:7d1c7ccd6151cfc1",
+    "assistant:d5105a86b7ad6a12",
+    "user:e6538ecc3943e543"
+   ],
+   "max_output_tokens": 4096,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "adc30bc66f9cddd4"
+  },
+  "path": "/openai/v1/responses",
+  "step": "chat",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": "final_parse"
+ },
+ {
+  "body": {
+   "input": [
+    "system:02f191e5a5bbf161",
+    "user:211668214623304a",
+    "user:f7e3ee805bd9d99c",
+    "assistant:c49334c62b36085d",
+    "user:b8f8849f6c1c1344",
+    "function_call:bd879f29977c5b96",
+    "function_call_output:a6e5d32c9064da31",
+    "function_call:56b15d8fdc960399",
+    "function_call_output:0620bad7e7441d50",
+    "user:7d1c7ccd6151cfc1",
+    "user:64ef5f917b289ec2"
+   ],
+   "max_output_tokens": 4096,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "stream": true
+  },
+  "path": "/openai/v1/responses",
+  "step": "chat",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": "reply_stream"
+ },
+ {
+  "body": {
+   "input": [
+    "system:02f191e5a5bbf161",
+    "user:211668214623304a",
+    "user:f7e3ee805bd9d99c",
+    "assistant:c49334c62b36085d",
+    "user:b8f8849f6c1c1344",
+    "function_call:bd879f29977c5b96",
+    "function_call_output:a6e5d32c9064da31",
+    "function_call:56b15d8fdc960399",
+    "function_call_output:0620bad7e7441d50"
+   ],
+   "max_output_tokens": 4096,
+   "model": "global.openai.gpt-6.1-terra",
+   "parallel_tool_calls": true,
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "tool_choice": "required",
+   "tools": {
+    "search_chunks": "64c4932c2a282834",
+    "query_findings": "befa017629d5ba10",
+    "lookup": "6aeb27b6454538df"
+   }
+  },
+  "path": "/openai/v1/responses",
+  "step": "chat",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": "tool_turn"
+ },
+ {
+  "body": {
+   "input": [
+    "system:5f844153f9b72d86",
+    "user:9d6a1d4a6aa2a349"
+   ],
+   "max_output_tokens": 64,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "b94c01f328cf6545"
+  },
+  "path": "/openai/v1/responses",
+  "step": "chat_title",
+  "timeout": {
+   "connect": 20.0,
+   "pool": 20.0,
+   "read": 20.0,
+   "write": 20.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:94f17f1a2995db8c",
+    "user:509293ecd4162e14"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "e9baa1d79b01e48a"
+  },
+  "path": "/openai/v1/responses",
+  "step": "classify_document",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:1e3d4f465164344e",
+    "user:9c1a71f28a34c0f6"
+   ],
+   "max_output_tokens": 4096,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "high"
+   },
+   "store": false,
+   "text": "e8f453344f398271"
+  },
+  "path": "/openai/v1/responses",
+  "step": "extract_annotate_relevance",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:6aabd39bc38ab191",
+    "user:3a6c6b6bee350fc4"
+   ],
+   "max_output_tokens": 32768,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "5f339f4deb4a129b"
+  },
+  "path": "/openai/v1/responses",
+  "step": "extract_icf_findings",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:f97e9e7bccd053c8",
+    "user:b56b0a87daf93082"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "5589a3913d41f337"
+  },
+  "path": "/openai/v1/responses",
+  "step": "extract_interventions",
+  "timeout": {
+   "connect": 35.0,
+   "pool": 35.0,
+   "read": 35.0,
+   "write": 35.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:154282f82a522a4d",
+    "user:3a6c6b6bee350fc4"
+   ],
+   "max_output_tokens": 32768,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "64784a54d03823b5"
+  },
+  "path": "/openai/v1/responses",
+  "step": "extract_iof_findings",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:afc0681554f6a7e5",
+    "user:702aeec56fe876c7"
+   ],
+   "max_output_tokens": 32768,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "67085e5a245aab9d"
+  },
+  "path": "/openai/v1/responses",
+  "step": "extract_vet_icf_findings",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:f64a947b6c4e4bc9",
+    "user:702aeec56fe876c7"
+   ],
+   "max_output_tokens": 32768,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "e5668f2a76ec8d43"
+  },
+  "path": "/openai/v1/responses",
+  "step": "extract_vet_iof_findings",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:d9365286ccc643d1",
+    "user:ccfcbd7d451094ea"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "4e179359efadba3d"
+  },
+  "path": "/openai/v1/responses",
+  "step": "group_assign",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:a02869f535ea69ef",
+    "user:91f034071efb24c2"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "5678b1a5eb675503"
+  },
+  "path": "/openai/v1/responses",
+  "step": "group_discover",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:a0cd9efc6c087132",
+    "user:e366e39946d10c96"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "ceef9189fe3a5a7a"
+  },
+  "path": "/openai/v1/responses",
+  "step": "judge_grounding",
+  "timeout": {
+   "connect": 80.0,
+   "pool": 80.0,
+   "read": 80.0,
+   "write": 80.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:e7a5497acbb75447",
+    "user:206b8b1cd6c06999"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "20dc0c2cfc307523"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_assign",
+  "timeout": {
+   "connect": 50.0,
+   "pool": 50.0,
+   "read": 50.0,
+   "write": 50.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:17f14e4e70f172c7",
+    "user:db4a1294c5cb3939"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "264360356aeb0b4c"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_assign_themes",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:7ada55aeece943ef",
+    "user:20cde3a65e3269fa"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "1e4cf01855ad8d0d"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_authority",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:0d0446db9fb33792",
+    "user:fb2a0e9eb0bdd434"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "eea0d8f279cb5ea8"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_constrain",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:db33de00c2bf7c43",
+    "user:cd2e431e4e8c2cdd"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "44d1eb941056ccb0"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_discover",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:c59417722ee4ee14",
+    "user:fabe957e93a5e61c"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "a60a2e9f454d0168"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_distinct",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:38b1ee77500a75a1",
+    "user:25799292f0ba39a2"
+   ],
+   "max_output_tokens": 4096,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "5051dc757f973726"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_shortlist",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:c010d145efa64a2f",
+    "user:57fb70053d55d620"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "80ece3129db66c0f"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_themes",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:d3e2a7b4e340d695",
+    "user:ee92d395addeb7e5"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "87de2b2df33c2b07"
+  },
+  "path": "/openai/v1/responses",
+  "step": "longlist_type",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:333a060522df4be8",
+    "user:14d7332a943fef1a"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "d35f5617b4aeb3bb"
+  },
+  "path": "/openai/v1/responses",
+  "step": "option_profile_ambition",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:0864cb7c250db890",
+    "user:c821dfbd8df17a15"
+   ],
+   "max_output_tokens": 16000,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "f570fa54c1f858ef"
+  },
+  "path": "/openai/v1/responses",
+  "step": "option_profile_fold",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:3e645b565949e779",
+    "user:19ebe5e6157cd407"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "9a136bc3692f4cce"
+  },
+  "path": "/openai/v1/responses",
+  "step": "option_profile_line",
+  "timeout": {
+   "connect": 85.0,
+   "pool": 85.0,
+   "read": 85.0,
+   "write": 85.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:c53e974d69602e08",
+    "user:580454585717613e"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "8bdc7d6fcb852383"
+  },
+  "path": "/openai/v1/responses",
+  "step": "option_profile_place_sentences",
+  "timeout": {
+   "connect": 35.0,
+   "pool": 35.0,
+   "read": 35.0,
+   "write": 35.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:5324fc83fad67a8f",
+    "user:9d176eaa495e9a3a"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "0bea60c7d673233c"
+  },
+  "path": "/openai/v1/responses",
+  "step": "option_profile_potential_impact",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:2998aec05d63f139",
+    "user:ba3d02a5babd49e3"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "high"
+   },
+   "store": false,
+   "text": "1b791f26b740d0ef"
+  },
+  "path": "/openai/v1/responses",
+  "step": "option_profile_setting",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:a80c6fe806068f0f",
+    "user:99b4843e10ec4dcb"
+   ],
+   "max_output_tokens": 2048,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "4b7a874d2bc78460"
+  },
+  "path": "/openai/v1/responses",
+  "step": "screen_abstract",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:e3b91b0035c95d5c",
+    "user:3b5b4cc3d12bce5a"
+   ],
+   "max_output_tokens": 2048,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "4b7a874d2bc78460"
+  },
+  "path": "/openai/v1/responses",
+  "step": "screen_full",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:5685a815840e2dad",
+    "user:c8a00f9ad65a544c"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "b99d046e322bf739"
+  },
+  "path": "/openai/v1/responses",
+  "step": "search_generate_queries",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:9fe4f760400e4b3b",
+    "user:5933691bba7b6f13"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "84a187d3d01e7505"
+  },
+  "path": "/openai/v1/responses",
+  "step": "search_queries_v2_openalex",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:d532df69680f0ee5",
+    "user:5933691bba7b6f13"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "84a187d3d01e7505"
+  },
+  "path": "/openai/v1/responses",
+  "step": "search_queries_v2_overton",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:9271bd9994fb186a",
+    "user:7a5d941b4d982cad"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "b99d046e322bf739"
+  },
+  "path": "/openai/v1/responses",
+  "step": "search_reformulate",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:9fe4f760400e4b3b",
+    "user:f5ce10dcf00be1f7"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "84a187d3d01e7505"
+  },
+  "path": "/openai/v1/responses",
+  "step": "search_reformulate_v2_openalex",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:d532df69680f0ee5",
+    "user:f5ce10dcf00be1f7"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "84a187d3d01e7505"
+  },
+  "path": "/openai/v1/responses",
+  "step": "search_reformulate_v2_overton",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:d41661fc1080212b",
+    "user:66350fca9fd3d2a4"
+   ],
+   "max_output_tokens": 8192,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "29e30434bbe6b2e9"
+  },
+  "path": "/openai/v1/responses",
+  "step": "search_suggest",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:c27343bf55ca8c38",
+    "user:915649e30478a33f"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "8f52f4143b779e38"
+  },
+  "path": "/openai/v1/responses",
+  "step": "select_rerank",
+  "timeout": {
+   "connect": 25.0,
+   "pool": 25.0,
+   "read": 25.0,
+   "write": 25.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:b3b743bbd41bb4c3",
+    "user:2bad4ea83f0c144b"
+   ],
+   "max_output_tokens": 400,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "53241767d72bd686"
+  },
+  "path": "/openai/v1/responses",
+  "step": "shortlist_note",
+  "timeout": {
+   "connect": 30.0,
+   "pool": 30.0,
+   "read": 30.0,
+   "write": 30.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:2fe109d6e09ad2de",
+    "user:c60ca07cfe3bb9ea"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "60671d3e0e38d6de"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_judge_summary",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:8c48bea6e2c64739",
+    "user:ec530717c57a09ca"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "fefbd0e5a77d3e99"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_propose_sections",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "input": [
+    "system:a6fd86b9125e372f",
+    "user:19b571753975d858",
+    "user:ff3bc79e441f00a2",
+    "function_call:bd879f29977c5b96",
+    "function_call_output:a6e5d32c9064da31",
+    "function_call:56b15d8fdc960399",
+    "function_call_output:0620bad7e7441d50",
+    "user:3be7d06fe44dcbde"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "stream": true,
+   "tool_choice": "none",
+   "tools": {
+    "search_chunks": "64c4932c2a282834",
+    "query_findings": "befa017629d5ba10",
+    "lookup": "ad60411b8f938ad9",
+    "emit_section": "223d1fde258047f6",
+    "write_section": "e500633c4f95eb81",
+    "emit_repairs": "a54bbaa8fd9ace2a"
+   }
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_section_emit",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "input": [
+    "system:a6fd86b9125e372f",
+    "user:19b571753975d858",
+    "user:ff3bc79e441f00a2"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "parallel_tool_calls": true,
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "tool_choice": {
+    "mode": "required",
+    "tools": [
+     {
+      "name": "search_chunks",
+      "type": "function"
+     },
+     {
+      "name": "query_findings",
+      "type": "function"
+     },
+     {
+      "name": "lookup",
+      "type": "function"
+     },
+     {
+      "name": "write_section",
+      "type": "function"
+     }
+    ],
+    "type": "allowed_tools"
+   },
+   "tools": {
+    "search_chunks": "64c4932c2a282834",
+    "query_findings": "befa017629d5ba10",
+    "lookup": "ad60411b8f938ad9",
+    "emit_section": "223d1fde258047f6",
+    "write_section": "e500633c4f95eb81",
+    "emit_repairs": "a54bbaa8fd9ace2a"
+   }
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_section_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "input": [
+    "system:a6fd86b9125e372f",
+    "user:19b571753975d858",
+    "user:ff3bc79e441f00a2",
+    "function_call:bd879f29977c5b96",
+    "function_call_output:a6e5d32c9064da31",
+    "function_call:56b15d8fdc960399",
+    "function_call_output:0620bad7e7441d50",
+    "user:7b07b5e51024da19"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "parallel_tool_calls": true,
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "tool_choice": {
+    "name": "emit_section",
+    "type": "function"
+   },
+   "tools": {
+    "search_chunks": "64c4932c2a282834",
+    "query_findings": "befa017629d5ba10",
+    "lookup": "ad60411b8f938ad9",
+    "emit_section": "223d1fde258047f6",
+    "write_section": "e500633c4f95eb81",
+    "emit_repairs": "a54bbaa8fd9ace2a"
+   }
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_section_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": "forced"
+ },
+ {
+  "body": {
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "input": [
+    "system:a6fd86b9125e372f",
+    "user:19b571753975d858",
+    "user:ff3bc79e441f00a2",
+    "function_call:bd879f29977c5b96",
+    "function_call_output:a6e5d32c9064da31",
+    "function_call:56b15d8fdc960399",
+    "function_call_output:0620bad7e7441d50"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "parallel_tool_calls": true,
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "tool_choice": {
+    "mode": "required",
+    "tools": [
+     {
+      "name": "search_chunks",
+      "type": "function"
+     },
+     {
+      "name": "query_findings",
+      "type": "function"
+     },
+     {
+      "name": "lookup",
+      "type": "function"
+     },
+     {
+      "name": "write_section",
+      "type": "function"
+     }
+    ],
+    "type": "allowed_tools"
+   },
+   "tools": {
+    "search_chunks": "64c4932c2a282834",
+    "query_findings": "befa017629d5ba10",
+    "lookup": "ad60411b8f938ad9",
+    "emit_section": "223d1fde258047f6",
+    "write_section": "e500633c4f95eb81",
+    "emit_repairs": "a54bbaa8fd9ace2a"
+   }
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_section_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": "history"
+ },
+ {
+  "body": {
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "input": [
+    "system:a6fd86b9125e372f",
+    "user:19b571753975d858",
+    "user:ff3bc79e441f00a2",
+    "user:226ea53713aa0743"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "parallel_tool_calls": true,
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "tool_choice": {
+    "name": "emit_repairs",
+    "type": "function"
+   },
+   "tools": {
+    "search_chunks": "64c4932c2a282834",
+    "query_findings": "befa017629d5ba10",
+    "lookup": "ad60411b8f938ad9",
+    "emit_section": "223d1fde258047f6",
+    "write_section": "e500633c4f95eb81",
+    "emit_repairs": "a54bbaa8fd9ace2a"
+   }
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_section_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": "repair"
+ },
+ {
+  "body": {
+   "input": [
+    "system:b390024934bc3087",
+    "user:589b00f9f76a7ba1"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "05b8e0c485d39830"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_artefact_summary",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:416874392328ec1d",
+    "user:53e0f8c393982fa7"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "05b8e0c485d39830"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_block_summary",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:27e064557ecafed2",
+    "user:86120aa7cf798a8a"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "stream": true,
+   "text": "c9e6047fa809c94b"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_case_studies",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:27e064557ecafed2",
+    "user:86120aa7cf798a8a"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "c9e6047fa809c94b"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_case_studies",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": "fallback"
+ },
+ {
+  "body": {
+   "input": [
+    "system:993116079bf91779",
+    "user:c8027903cf46ff69"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "stream": true,
+   "text": "0f218ac6bf629497"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_intro",
+  "timeout": {
+   "connect": 30.0,
+   "pool": 30.0,
+   "read": 30.0,
+   "write": 30.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:993116079bf91779",
+    "user:c8027903cf46ff69"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "0f218ac6bf629497"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_intro",
+  "timeout": {
+   "connect": 30.0,
+   "pool": 30.0,
+   "read": 30.0,
+   "write": 30.0
+  },
+  "variant": "fallback"
+ },
+ {
+  "body": {
+   "input": [
+    "system:e6323837524de9f1",
+    "user:22df292c344acf1a"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "stream": true,
+   "text": "5287d7ffd9f09630"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_key_findings",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "include": [
+    "reasoning.encrypted_content"
+   ],
+   "input": [
+    "system:e6323837524de9f1",
+    "user:22df292c344acf1a"
+   ],
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "tool_choice": {
+    "name": "emit_section",
+    "type": "function"
+   },
+   "tools": {
+    "emit_section": "223d1fde258047f6"
+   }
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_key_findings",
+  "timeout": {
+   "connect": 120.0,
+   "pool": 120.0,
+   "read": 120.0,
+   "write": 120.0
+  },
+  "variant": "fallback"
+ },
+ {
+  "body": {
+   "input": [
+    "system:fef8c0d912a05b1a",
+    "user:2dea9968062e8e1a"
+   ],
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "08120bbe4875674d"
+  },
+  "path": "/openai/v1/responses",
+  "step": "synthesise_write_source_note",
+  "timeout": {
+   "connect": 15.0,
+   "pool": 15.0,
+   "read": 15.0,
+   "write": 15.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:e43a70bb3d821356",
+    "user:cb47d9fd166be406"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "ef3d1f73c3d30e77"
+  },
+  "path": "/openai/v1/responses",
+  "step": "task_agent_scoping_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:e43a70bb3d821356",
+    "user:cb47d9fd166be406"
+   ],
+   "max_output_tokens": 18432,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "stream": true,
+   "text": "2b5ff62fd06cccc7"
+  },
+  "path": "/openai/v1/responses",
+  "step": "task_agent_scoping_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": "stream"
+ },
+ {
+  "body": {
+   "input": [
+    "system:a72e205fb2676db8",
+    "user:ed06fa16c140e9bd"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "a4ad0dda2e72a626"
+  },
+  "path": "/openai/v1/responses",
+  "step": "task_agent_toc",
+  "timeout": {
+   "connect": 180.0,
+   "pool": 180.0,
+   "read": 180.0,
+   "write": 180.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:a72e205fb2676db8",
+    "user:ed06fa16c140e9bd"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "stream": true,
+   "text": "92706baf35317ebc"
+  },
+  "path": "/openai/v1/responses",
+  "step": "task_agent_toc",
+  "timeout": {
+   "connect": 180.0,
+   "pool": 180.0,
+   "read": 180.0,
+   "write": 180.0
+  },
+  "variant": "stream"
+ },
+ {
+  "body": {
+   "input": [
+    "system:a2f64c29b632a7e3",
+    "user:5a1a5d3758e4be65"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "afd54a8045f5c6a5"
+  },
+  "path": "/openai/v1/responses",
+  "step": "task_agent_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:a2f64c29b632a7e3",
+    "user:5a1a5d3758e4be65"
+   ],
+   "max_output_tokens": 16384,
+   "model": "global.openai.gpt-6.1-terra",
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "stream": true,
+   "text": "d1417652c72117f2"
+  },
+  "path": "/openai/v1/responses",
+  "step": "task_agent_turn",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": "stream"
+ },
+ {
+  "body": {
+   "input": [
+    "system:d0b10bc42a6358b1",
+    "user:e8cc7d93dfa9f645"
+   ],
+   "max_output_tokens": 64,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "low"
+   },
+   "store": false,
+   "text": "b94c01f328cf6545"
+  },
+  "path": "/openai/v1/responses",
+  "step": "task_title",
+  "timeout": {
+   "connect": 20.0,
+   "pool": 20.0,
+   "read": 20.0,
+   "write": 20.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:ef6faaaed0094d16",
+    "user:d7d1a5c58ddaab12"
+   ],
+   "max_output_tokens": 12000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "c82fe8e99c667971"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_choose",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:6ee8e451f3b588ec",
+    "user:5943380cafe62f02"
+   ],
+   "max_output_tokens": 12000,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "b136dc1cd67f7283"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_discover",
+  "timeout": {
+   "connect": 45.0,
+   "pool": 45.0,
+   "read": 45.0,
+   "write": 45.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:e8a790358f5da03e",
+    "user:0d392231f8339c47"
+   ],
+   "max_output_tokens": 32000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "51ccb60efb3ac283"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_draft",
+  "timeout": {
+   "connect": 300.0,
+   "pool": 300.0,
+   "read": 300.0,
+   "write": 300.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:e8a790358f5da03e",
+    "user:0d392231f8339c47"
+   ],
+   "max_output_tokens": 32000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "stream": true,
+   "text": "51ccb60efb3ac283"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_draft",
+  "timeout": {
+   "connect": 300.0,
+   "pool": 300.0,
+   "read": 300.0,
+   "write": 300.0
+  },
+  "variant": "stream"
+ },
+ {
+  "body": {
+   "input": [
+    "system:d39a52e3e5d4b6bd",
+    "user:93a87e33a8bb7d82"
+   ],
+   "max_output_tokens": 4000,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "fc21945120a47fd8"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_figures",
+  "timeout": {
+   "connect": 20.0,
+   "pool": 20.0,
+   "read": 20.0,
+   "write": 20.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:6a6f52308b11e88c",
+    "user:094bcc06c0bdba08"
+   ],
+   "max_output_tokens": 16000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "62464611d988505a"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_import",
+  "timeout": {
+   "connect": 90.0,
+   "pool": 90.0,
+   "read": 90.0,
+   "write": 90.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:b53930c31652c5ab",
+    "user:871435d5f4289374"
+   ],
+   "max_output_tokens": 4000,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "69a8032472a00e03"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_judge",
+  "timeout": {
+   "connect": 20.0,
+   "pool": 20.0,
+   "read": 20.0,
+   "write": 20.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:49f0400247b6b87d",
+    "user:050c2f5c59c95fdc"
+   ],
+   "max_output_tokens": 16000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "80b52566cfe2af7b"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_merge",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:994ebf510c30a3d5",
+    "user:5c939b276dec6845"
+   ],
+   "max_output_tokens": 12000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "c7ddadac1327af62"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_merge",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": "consolidate"
+ },
+ {
+  "body": {
+   "input": [
+    "system:858b18bd07337bf5",
+    "user:55124caabbfb6bde"
+   ],
+   "max_output_tokens": 4000,
+   "model": "global.openai.gpt-6-luna",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "402a5fec4527c3c7"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_pick",
+  "timeout": {
+   "connect": 30.0,
+   "pool": 30.0,
+   "read": 30.0,
+   "write": 30.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:ab8702ef067d84f2",
+    "user:b934e1ae800ed2fe"
+   ],
+   "max_output_tokens": 12000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "6f683f23ba3860e9"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_report",
+  "timeout": {
+   "connect": 300.0,
+   "pool": 300.0,
+   "read": 300.0,
+   "write": 300.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:ab8702ef067d84f2",
+    "user:b934e1ae800ed2fe"
+   ],
+   "max_output_tokens": 12000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "stream": true,
+   "text": "6f683f23ba3860e9"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_report",
+  "timeout": {
+   "connect": 300.0,
+   "pool": 300.0,
+   "read": 300.0,
+   "write": 300.0
+  },
+  "variant": "stream"
+ },
+ {
+  "body": {
+   "input": [
+    "system:294d1d51d3958dfe",
+    "user:3f980c31994feba6"
+   ],
+   "max_output_tokens": 8000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "811708aef2bc9fe2"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_review",
+  "timeout": {
+   "connect": 60.0,
+   "pool": 60.0,
+   "read": 60.0,
+   "write": 60.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:b7ef2f69f9ade793",
+    "user:e4e3239bc476bb0f"
+   ],
+   "max_output_tokens": 4000,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "863319e6e69e44cc"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_sense_check",
+  "timeout": {
+   "connect": 30.0,
+   "pool": 30.0,
+   "read": 30.0,
+   "write": 30.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:5db90eb792d0ba65",
+    "user:6babb58b73fa9123"
+   ],
+   "max_output_tokens": 24000,
+   "model": "global.openai.gpt-6.1-terra",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "none"
+   },
+   "store": false,
+   "text": "0e08df3dabdffb24"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_summarise",
+  "timeout": {
+   "connect": 90.0,
+   "pool": 90.0,
+   "read": 90.0,
+   "write": 90.0
+  },
+  "variant": ""
+ },
+ {
+  "body": {
+   "input": [
+    "system:2358733fcb2fa14a",
+    "user:8ab292e60aacbc25"
+   ],
+   "max_output_tokens": 4000,
+   "model": "global.openai.gpt-6.1-sol",
+   "prompt_cache_options": {
+    "mode": "explicit"
+   },
+   "reasoning": {
+    "effort": "medium"
+   },
+   "store": false,
+   "text": "acb4a4f03f458f6d"
+  },
+  "path": "/openai/v1/responses",
+  "step": "toc_verdict",
+  "timeout": {
+   "connect": 45.0,
+   "pool": 45.0,
+   "read": 45.0,
+   "write": 45.0
+  },
+  "variant": ""
+ }
+]

@@ -62,7 +62,7 @@ import { AttachFileButton, UploadPreview } from "../toc/uploads";
 const TRANSCRIPT_PAGE_SIZE = 200;
 
 /** The kinds a walk itself writes, so an untagged one inside its window is
- *  its own. Any other event with no walk (round 15: `shortlist.note_updated`,
+ *  its own. Any other event with no walk (`shortlist.note_updated`,
  *  a shortlist or longlist action, a task's lifecycle) is housekeeping that
  *  stays in History, never placed in a walk's block by its time. */
 const WALK_KIND_PREFIXES = ["component.", "search.", "run.", "steering.", "checkin."] as const;
@@ -82,10 +82,10 @@ export function threadInputs(
   turns: TaskAgentThreadTurn[],
   runs: TaskAgentThreadRun[],
   decisions: TaskAgentThreadDecision[],
-  /** Theory of change (round 5): a child walk's lines go to its parent's block, for the trace. */
+  /** Theory of change: a child walk's lines go to its parent's block, for the trace. */
   foldChildren = false,
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
-  // Task 045 (S12): a child walk (a longlist walk's option search) gets no
+  // A child walk (a longlist walk's option search) gets no
   // block of its own; the decisions that name it go nowhere.
   const childIds = new Set(
     runs.filter((run) => run.parent_capability_run_id != null).map((run) => run.capability_run_id),
@@ -97,7 +97,7 @@ export function threadInputs(
       afterTurnIndex: before.length > 0 ? Math.max(...before.map((turn) => turn.turn_index)) : null,
     };
   });
-  // Task 045 (F11): a decision whose event carries a run names its walk
+  // A decision whose event carries a run names its walk
   // (`capability_run_id`, from the event's run) and goes to that walk — or
   // nowhere, when the walk is a child or not one of these runs. A lifecycle
   // event's `detail.capability_run_id` names its run the same way. Only a
@@ -139,7 +139,7 @@ export function threadInputs(
 
 /**
  * The baseline gate's thread input: its card and any decision the CARD
- * endpoint recorded (task 044 Phase 5.5, D12).
+ * endpoint recorded.
  *
  * The live stream is preferred for the pending card — it arrives with the
  * pause — and the check-ins read supplies it after a reload. The decision is
@@ -190,8 +190,8 @@ export function baselineGateInput(
  * Args:
  *   runStatus: The task's current run status, or undefined before any run.
  *   planReady: True once the approved plan is ready to review and start.
- *   isOwner: Steering is owner-only (task 033 phase 10c, contract § 11 /
- *     rubric 37) — a non-owner always sees the same honest line, regardless
+ *   isOwner: Steering is owner-only
+ *     — a non-owner always sees the same honest line, regardless
  *     of run state, the same idiom the run-state copy already uses rather
  *     than a "you cannot edit this" banner.
  *
@@ -209,7 +209,7 @@ export function taskAgentComposerPlaceholder(
   if (!isOwner) {
     return `Steering is limited to the ${TASK.lower} owner.`;
   }
-  // Task 044 Phase 5.5: the scoping walk's one gate keeps the thread open —
+  // The scoping walk's one gate keeps the thread open —
   // a question about the baseline is exactly what this pause is for, so the
   // composer invites one instead of fencing it off.
   if (atScopingGate) {
@@ -218,7 +218,7 @@ export function taskAgentComposerPlaceholder(
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
   }
-  // Task 045: with a longlist and nothing running, the thread takes the
+  // With a longlist and nothing running, the thread takes the
   // longlist verbs as well as questions.
   if (hasLonglist) {
     return "Ask about the longlist, or add, exclude or include an option.";
@@ -232,7 +232,7 @@ export function taskAgentComposerPlaceholder(
   if (planReady) {
     return "Suggest changes here, or edit directly in the plan.";
   }
-  // A theory of change asks about the change, not a question for evidence (task 054).
+  // A theory of change asks about the change, not a question for evidence.
   return isToc ? "Describe the change you want, or ask about your theory." : "Describe the policy question you need evidence for.";
 }
 
@@ -262,13 +262,13 @@ export function Composer({
   /** Send button's disabled state (027: also covers in-flight submission). */
   sendDisabled: boolean;
   /** DOM id and label, defaulting to the Task Agent's own composer. A chat
-   *  passes its own (038 V8): with the Agent overlay beside the Task Agent's
+   *  passes its own: with the Agent overlay beside the Task Agent's
    *  pane, one shared id would be two elements, and `getElementById` — the
    *  seed hand-off and the overlay's focus hand-off both use it — would take
    *  whichever came first in the document. */
   id?: string;
   label?: string;
-  /** A theory of change before its draft (task 054, increment 5): attach the user's own diagram. */
+  /** A theory of change before its draft: attach the user's own diagram. */
   onAttach?: (file: File) => void;
 }) {
   return (
@@ -374,7 +374,7 @@ function UploadThumb({ text }: { text: string }) {
  *  first paint; the stored row that replaces a streamed one shares its id
  *  (the client turn id), so it appears in place and nothing animates twice. */
 function UserBubble({ text, turnId }: { text: string; turnId: string }) {
-  // A code-authored Task Agent line (task 054, J3) has no user message.
+  // A code-authored Task Agent line has no user message.
   if (text === "") return null;
   return (
     <Arrival arrivalId={`user:${turnId}`} className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
@@ -386,14 +386,14 @@ function UserBubble({ text, turnId }: { text: string; turnId: string }) {
 
 type CitedSource = components["schemas"]["CitedSourceOut"];
 
-/** "[1]" or "[1,2]" in a reply that cites its sources (task 054: the sense check). */
+/** "[1]" or "[1,2]" in a reply that cites its sources (the sense check). */
 const SOURCE_MARKER = /\[(\d+(?:,\d+)*)\]/g;
 
 /** TaskAgent replies are plain text — no box (binding record: task_agent-stage
  *  `.task_agent`); only part cards and the plan card are bordered. The reply
- *  rises in as it arrives and its words come at a steady pace (round 9).
+ *  rises in as it arrives and its words come at a steady pace.
  *
- *  It grows smoothly (owner, round 12: "Drafting the plan" was jittery): its
+ *  It grows smoothly ("Drafting the plan" was jittery): its
  *  own box eases to each new line's height, so what is under it (the action
  *  line while it streams, the part card once it is stored) glides down
  *  rather than jumping a line and being clipped by the thread's ease. A
@@ -402,7 +402,7 @@ const SOURCE_MARKER = /\[(\d+(?:,\d+)*)\]/g;
  *  line opens the same way. A cut under reduced motion.
  *
  *  A theory of change's stored reply links its box and connection codes, and
- *  a reply that cites its sources lists them under it (task 054). */
+ *  a reply that cites its sources lists them under it. */
 function TaskAgentBubble({
   text,
   turnId,
@@ -545,7 +545,7 @@ export function DecisionLine({
 }
 
 /** The recorded line for an applied longlist verb: the verb, then the
- *  option's name (task 045). An unknown verb shows the name alone. */
+ *  option's name. An unknown verb shows the name alone. */
 export function actionLine(action: { verb: string; label: string }): string {
   switch (action.verb) {
     case "add":
@@ -562,12 +562,12 @@ export function actionLine(action: { verb: string; label: string }): string {
 /** A durable turn: user bubble, then the task_agent reply — or an honest
  *  incomplete row (pending spinner copy / failed with retry).
  *
- *  Task 044 Phase 5.5: a turn is one of three things (`kind`). A `reply`
+ *  A turn is one of three things (`kind`). A `reply`
  *  renders as it always has. An `answer` renders its grounded prose through
  *  the CHAT's own citation renderer (`ChatAnswer`) — one renderer, two
  *  surfaces. A `decision` renders the gate decision it recorded, and an
- *  `action` (task 045) the longlist verb it applied. `kind` is absent on
- *  every pre-044 turn, which reads as `reply`. */
+ *  `action` the longlist verb it applied. A stored turn written before
+ *  turns carried a `kind` has none, and reads as `reply`. */
 function DurableTurn({
   taskId,
   turn,
@@ -599,9 +599,9 @@ function DurableTurn({
   // A button-confirm turn's record is its settled part card — the canned
   // marker bubble would only duplicate it (binding record: task_agent-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
-  // A turn stored before task 044 carries no kind: it is a reply.
+  // A stored turn with no kind is a reply.
   const kind = turn.kind ?? "reply";
-  // A part's body renders inside its card, under its title (annex scene 11).
+  // A part's body renders inside its card, under its title.
   const taskAgentText = turn.reply ?? "";
   if (kind === "answer") {
     return (
@@ -618,8 +618,8 @@ function DurableTurn({
       </div>
     );
   }
-  // A gate decision is said once, in the settled part card's language
-  // (round 10, finding 8): no user bubble beside it, no "recorded" line.
+  // A gate decision is said once, in the settled part card's language:
+  // no user bubble beside it, no "recorded" line.
   if (kind === "decision" && turn.decision != null) {
     return (
       <Arrival arrivalId={`decision:${turn.client_turn_id}`}>
@@ -627,7 +627,7 @@ function DurableTurn({
       </Arrival>
     );
   }
-  // Task 045: a confirmed longlist verb (add · exclude · include again) is
+  // A confirmed longlist verb (add · exclude · include again) is
   // the user's recorded action — the same quiet line as a gate decision,
   // under the reply that confirmed it.
   if (kind === "action" && turn.action != null) {
@@ -707,7 +707,7 @@ function InFlightTurn({
       {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} turnId={turn.clientTurnId} />}
       {/* The reply and the action line under it are one block, so the
           reply's box can open the gap between them as its first line
-          lands (round 12). */}
+          lands. */}
       {((turn.reply !== undefined && turn.reply !== "") || actionShown(turn)) && (
         <div>
           <TaskAgentBubble
@@ -779,10 +779,10 @@ function AnsweredCheckIns({
 }
 
 /** A past run in the thread: the ended card (its finish, wall time and
- *  link, its steps folded when the read carries them; round 11) and the
+ *  link, its steps folded when the read carries them) and the
  *  check-ins it answered. The event-log echoes ("Executed a search
- *  query × 55", "Recorded a steering decision") that used to sit here are
- *  audit rows for the History tab, not conversation (owner, 2026-11-05). */
+ *  query × 55", "Recorded a steering decision") are
+ *  audit rows for the History tab, not conversation. */
 function RunBlock({
   taskId,
   run,
@@ -802,7 +802,7 @@ function RunBlock({
 }) {
   return (
     <div className="space-y-6">
-      {/* Its words follow its own run's kind (task 045, A8), never the live stream's. */}
+      {/* Its words follow its own run's kind, never the live stream's. */}
       <Arrival arrivalId={`run:${run.capability_run_id}`}>
         <PastRunLine run={run} taskId={taskId} capability={capability} hasFindings={hasFindings} />
       </Arrival>
@@ -833,7 +833,7 @@ export function TaskAgentPane({
   taskId: string;
   runStatus: RunStatus | undefined;
   stream: RunStreamState;
-  /** Steering is owner-only (task 033 phase 10c, contract § 11 / rubric 37):
+  /** Steering is owner-only:
    *  gates the composer, retry controls, suggestion chips, the plan-ready
    *  card's Start action and the check-in card. Required, not defaulted —
    *  a forgotten prop must fail closed to read-only, never silently grant
@@ -849,14 +849,14 @@ export function TaskAgentPane({
    *  plan-ready card's Discard edits and start action. */
   onDiscardOverlay?: () => void;
   /** Reports when the reader asks for the site footer (a deliberate scroll
-   *  past the transcript's end) and when they scroll back up (038 V8); the
+   *  past the transcript's end) and when they scroll back up; the
    *  Agent tab reveals the footer under both columns accordingly. */
   onAtBottomChange?: (atBottom: boolean) => void;
 }) {
   const transcript = useTaskAgentTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
   const taskQuery = useTask(taskId);
-  // `PlanOut.plan` is null on a scoping task (task 044) — `scoping` carries
+  // `PlanOut.plan` is null on a scoping task — `scoping` carries
   // its own `ready` flag instead. Only one of the two is ever non-null for a
   // given task, so reading both costs nothing on the branch that doesn't apply.
   const planReady =
@@ -864,7 +864,7 @@ export function TaskAgentPane({
     (planQuery.data.plan?.ready === true || planQuery.data.scoping?.ready === true);
   // A new task has no plan until its first turn: the task itself says what kind it is.
   const isToc = (planQuery.data?.capability ?? taskQuery.data?.capability) === "theory_of_change";
-  // A theory-of-change walk shows its steps as they happen (rounds 5, 6). Whether one runs
+  // A theory-of-change walk shows its steps as they happen. Whether one runs
   // comes from the theory itself, not the live stream, so the chat sidebar on any tab
   // (which has no stream) shows the same as the Agent tab.
   const tocGraph = useToc(isToc ? taskId : "");
@@ -918,7 +918,7 @@ export function TaskAgentPane({
     decisionsQuery.data?.data ?? [],
     isToc,
   );
-  // Task 044 Phase 5.5: the options-scoping baseline gate is the one check-in
+  // The options-scoping baseline gate is the one check-in
   // that sits INSIDE the thread, in chronological order with the turns it
   // paused for. Every Evidence search check-in keeps its placement at the
   // thread's end, below, exactly as before.
@@ -936,7 +936,7 @@ export function TaskAgentPane({
   );
   const latestTurnIndex =
     durableTurns.length > 0 ? Math.max(...durableTurns.map((turn) => turn.turn_index)) : null;
-  // A part card settles the moment the user answers it (owner, 2026-11-05):
+  // A part card settles the moment the user answers it:
   // the user's turns still on their way count as its answer until the
   // durable turns catch up. A failed one does not: its choice was not
   // recorded, so the card opens again beside the failure's Retry.
@@ -952,7 +952,7 @@ export function TaskAgentPane({
   const streaming = transcript.isSubmitting;
 
   const runActive = runStatus === "running" || runStatus === "paused";
-  // Task 044 Phase 5.5: a scoping walk parked on the baseline gate keeps the
+  // A scoping walk parked on the baseline gate keeps the
   // thread open — the turn route accepts a question or a decision at exactly
   // this pause. The fence stays for every Evidence search check-in and for a
   // scoping walk that is still running.
@@ -963,7 +963,7 @@ export function TaskAgentPane({
   const composerFenced = runActive && !atScopingGate;
   // `!isOwner` folds into the same `composerDisabled` flag that already
   // disables the composer, DurableTurn's retry button and PartCard's options
-  // during an active run (task 033 phase 10c, contract § 11 / rubric 37) —
+  // during an active run —
   // one mechanism, not a second parallel disabled path.
   const composerDisabled = composerFenced || transcript.isSubmitting || !isOwner;
 
@@ -973,15 +973,14 @@ export function TaskAgentPane({
   // never renders for (child-owned queries like the plan card, disclosure
   // toggles, font loads).
   const scrollRef = useRef<HTMLDivElement>(null);
-  // The thread makes room for what arrives (task 058, round 9; the animation
-  // sweep's entry 1): its box eases to the content's new height over 300 ms
+  // The thread makes room for what arrives: its box eases to the content's new height over 300 ms
   // on the strong ease-out, growth only (a settling card eases its own
   // shrink), and the pin follows the eased box, so the thread glides up as a
   // new block is revealed rather than jumping by its height. Not on the
   // first paint or a task switch; a cut under reduced motion.
   const firstPaintDone = useFirstPaintDone(transcript.data !== undefined, taskId);
   const [roomRef, contentRef] = useEasedHeight(firstPaintDone && !prefersReducedMotion(), true);
-  // The site footer lives in `WorkspaceView`, under both columns (038 V8),
+  // The site footer lives in `WorkspaceView`, under both columns,
   // and opens only on a deliberate nudge past the transcript's end.
   const footer = useFooterReveal(onAtBottomChange);
   // The transcript opens at its end and stays there while new turns land
@@ -992,18 +991,18 @@ export function TaskAgentPane({
   // task_agent turn (approval always comes from a turn; turns are 409-fenced
   // during runs), so a started run's block renders BELOW it, not above.
   const lastTurnAt = thread.findLastIndex((item) => item.type === "task_agent_turn");
-  // A theory of change pins its plan card where the plan was agreed: just before its first walk (round 7).
+  // A theory of change pins its plan card where the plan was agreed: just before its first walk.
   const firstRunAt = isToc ? thread.findIndex((item) => item.type === "run_block") : -1;
   const planCardAt = firstRunAt > 0 ? firstRunAt : lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
   // A theory of change has started once its theory exists or a walk runs: after a failed
-  // draft the plan card offers "Draft the theory" again (owner, 2026-11-04).
+  // draft the plan card offers "Draft the theory" again.
   const planStarted = isToc
     ? tocGraph.data === undefined
       ? thread.some((item) => item.type === "run_block")
       : (tocGraph.data?.check_status ?? "none") !== "none"
     : thread.slice(planCardAt).some((item) => item.type === "run_block");
   const liveRunId = stream.run?.id;
-  // Task 045 (A7): the live walk's own purpose, once the walk list has it —
+  // The live walk's own purpose, once the walk list has it —
   // an added option's search is not the baseline.
   const liveRunPurpose =
     (runsQuery.data?.data ?? []).find((run) => run.capability_run_id === liveRunId)?.purpose ?? null;
@@ -1012,8 +1011,8 @@ export function TaskAgentPane({
   );
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
-  // A theory of change's automatic chain is one card (task 054, decision 5,
-  // S10): a check the server started after a draft draws the draft's rows
+  // A theory of change's automatic chain is one card:
+  // a check the server started after a draft draws the draft's rows
   // first and runs one timer from the draft's start; the draft gets no card
   // of its own. Between the two walks the card stays "Running".
   const threadRuns = runsQuery.data?.data ?? [];
@@ -1029,7 +1028,7 @@ export function TaskAgentPane({
     isToc &&
     waitsForCheck(stream.run, stream.stages, liveRead?.toc_walk, liveRunId !== undefined && tocChain.joined.has(liveRunId), nowMs);
 
-  // The run trace (task 058, owner 2026-11-05): the one place the live run
+  // The run trace: the one place the live run
   // shows, in the Agent tab and the sidebar alike.
   const liveTrace =
     stream.run === null ? null : (
@@ -1066,7 +1065,7 @@ export function TaskAgentPane({
     void transcript.send({ message: trimmed, clientTurnId: input.clientTurnId }).catch(() => undefined);
   };
 
-  // The opening turn (task 058, N9): the New Task screen navigates here at
+  // The opening turn: the New Task screen navigates here at
   // once with the question, and this tab streams the planner's first reply.
   // The turn id was minted there, so the server's idempotency covers a
   // repeated mount; the navigation state is cleared once it is sent.
@@ -1086,7 +1085,7 @@ export function TaskAgentPane({
   }, [opening, transcriptLoaded, isOwner, sendTurn, navigate, location.pathname, location.search]);
 
   // An uploaded diagram: its bubble and "Reading…" show in the chat while it is read, then
-  // the message it sends becomes the plan's starting point (task 054, increment 5).
+  // the message it sends becomes the plan's starting point.
   // The upload sends its own message once read, so it completes even if this chat closes.
   const attach = (file: File, note = "") => upload.mutate({ file, note });
   // A file picked on the new-task page arrives in the route state instead of an
@@ -1101,7 +1100,7 @@ export function TaskAgentPane({
   });
 
   // The planner's clarifying question and its quick replies come from the
-  // stored turn (N10), so they survive a reload. They belong to the latest
+  // stored turn, so they survive a reload. They belong to the latest
   // turn only, and a turn that carries a part card answers through the card.
   const lastItem = thread.at(-1);
   const askingTurn =
@@ -1112,7 +1111,7 @@ export function TaskAgentPane({
   const question = askingTurn?.question ?? null;
 
   // The landing (no conversation yet) is a bare centred prompt — no pane
-  // heading, no helper copy (Claude design concept; owner, 2026-08-05).
+  // heading, no helper copy (Claude design concept).
   const landing =
     transcript.data !== undefined &&
     thread.length === 0 &&
@@ -1124,7 +1123,7 @@ export function TaskAgentPane({
   return (
     <UploadFiles.Provider value={uploadFiles}>
     <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
-      {/* A lapsed stream on the Agent tab (owner, round 11): the run status
+      {/* A lapsed stream on the Agent tab: the run status
           bar's reconnecting line, at the top of this column so it starts
           after the rail. In the sidebar the page's own bar carries it. */}
       {!compact && <ReconnectingBanner connectionStatus={stream.connectionStatus} />}
@@ -1178,7 +1177,7 @@ export function TaskAgentPane({
         )}
 
         {(() => {
-          // One list (round 14): a turn on its way and the stored turn that
+          // One list: a turn on its way and the stored turn that
           // replaces it share their key and their GrowBox, so the swap eases
           // in place; the plan card stays after both, never jumping between.
           const durable = thread.flatMap((item, index) => {
@@ -1215,7 +1214,7 @@ export function TaskAgentPane({
               item.run.capability_run_id === liveBlockId &&
               liveTrace !== null ? (
               // One key for the chain (the draft's id), so the draft's card
-              // carries on as the check's when the check arrives (S10).
+              // carries on as the check's when the check arrives.
               <GrowBox key={`run-${liveLead?.capability_run_id ?? liveRunId}`} arrivalId={`run:${liveLead?.capability_run_id ?? liveRunId}`}>
                 <Arrival arrivalId={`run:${liveLead?.capability_run_id ?? liveRunId}`}>{liveTrace}</Arrival>
               </GrowBox>
@@ -1296,9 +1295,9 @@ export function TaskAgentPane({
           </p>
         )}
 
-        {/* The planner's question, then its quick replies (N10). The chips
-            send a task_agent turn (task 033 phase 10c, contract § 11 / rubric
-            37) — owner-only, hidden for a colleague rather than left
+        {/* The planner's question, then its quick replies. The chips
+            send a task_agent turn
+            — owner-only, hidden for a colleague rather than left
             clickable to a 403. */}
         {isOwner && suggestions.length > 0 && !streaming && !composerFenced && (
           <Arrival arrivalId={`suggestions:${askingTurn?.client_turn_id ?? ""}`} className="mr-8 space-y-2">
@@ -1339,7 +1338,7 @@ export function TaskAgentPane({
             compact={compact}
           />
         )}
-        {/* A review of the theory runs in the background (C45): the shared
+        {/* A review of the theory runs in the background: the shared
             working line, its mark turning, until its message lands. */}
         {tocReviewing && <ActionLine label="Reviewing the theory" live arrivalId={`toc-review:${taskId}`} />}
         </div>
