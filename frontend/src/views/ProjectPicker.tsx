@@ -85,7 +85,7 @@ export function ProjectNameField({
           }}
           aria-invalid={failed || undefined}
           aria-describedby={failed ? errorId : undefined}
-          className="h-10 min-w-[12rem] flex-1 border border-line-2 bg-paper px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue"
+          className="h-10 min-w-[12rem] flex-1 border border-navy bg-paper px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue"
         />
         <span className="flex shrink-0 items-center gap-2">
           <Button

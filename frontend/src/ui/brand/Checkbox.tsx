@@ -41,7 +41,7 @@ export function Checkbox({
         aria-hidden="true"
         className={cn(
           "mt-1 flex size-4 shrink-0 items-center justify-center border-2",
-          checked ? "border-navy bg-navy text-paper" : disabled ? "border-line-2" : "border-navy/40",
+          checked ? "border-navy bg-navy text-paper" : disabled ? "border-line-2" : "border-navy",
         )}
       >
         {checked && (

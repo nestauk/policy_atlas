@@ -296,7 +296,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] disabled:bg-ground disabled:text-grey"
+          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-navy bg-paper px-3 py-2.5 text-lead [field-sizing:content] disabled:bg-ground disabled:text-grey"
         />
         {onAttach !== undefined && (
           <AttachFileButton

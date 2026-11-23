@@ -305,7 +305,7 @@ export function WaitlistForm() {
 function fieldClass(invalid: boolean): string {
   return cn(
     `mt-1.5 w-full border bg-paper px-3 py-2.5 ${SPLASH_PROSE} text-navy`,
-    invalid ? "border-red" : "border-line",
+    invalid ? "border-red" : "border-navy",
   );
 }
 

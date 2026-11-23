@@ -173,7 +173,7 @@ export function FindPopover({
             }
           }}
           placeholder={`Search your ${copy.noun} by name`}
-          className="h-10 w-full border border-line-2 bg-paper px-3 text-body text-navy placeholder:text-grey"
+          className="h-10 w-full border border-navy bg-paper px-3 text-body text-navy placeholder:text-grey"
         />
         {typed && matches.length === 0 ? (
           <p role="status" className="mt-3 text-body text-grey">

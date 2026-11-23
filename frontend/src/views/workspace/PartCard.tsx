@@ -375,7 +375,7 @@ function EditableChip({
                 type="date"
                 value={after}
                 onChange={(event) => setAfter(event.target.value)}
-                className="border border-line-2 px-1 text-caption"
+                className="border border-navy px-1 text-caption"
               />
             </label>
             <label className="text-caption text-grey">
@@ -384,7 +384,7 @@ function EditableChip({
                 type="date"
                 value={before}
                 onChange={(event) => setBefore(event.target.value)}
-                className="border border-line-2 px-1 text-caption"
+                className="border border-navy px-1 text-caption"
               />
             </label>
           </>
@@ -395,7 +395,7 @@ function EditableChip({
             onChange={(event) => setText(event.target.value)}
             placeholder="New value"
             aria-label={`New value for ${chip.label}`}
-            className="border border-line-2 px-1.5 py-0.5 text-caption"
+            className="border border-navy px-1.5 py-0.5 text-caption"
           />
         )}
         <Button
@@ -565,10 +565,7 @@ export function ChoiceRow({
     >
       <span
         aria-hidden="true"
-        className={cn(
-          "mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border-2",
-          selected ? "border-navy" : "border-navy/40",
-        )}
+        className="mt-1 flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-navy"
       >
         {selected ? <span className="size-2 rounded-full bg-navy" /> : null}
       </span>
@@ -619,7 +616,7 @@ export function WordsInput({
         placeholder="What should change?"
         aria-label={label}
         disabled={disabled}
-        className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body text-ink disabled:bg-ground"
+        className="min-w-0 flex-1 border border-navy bg-paper px-3 py-2 text-body text-ink disabled:bg-ground"
       />
       <Button
         type="submit"
@@ -909,7 +906,7 @@ export function PartCard({
                 onChange={(event) => setAddText(event.target.value)}
                 placeholder="New constraint"
                 aria-label="New constraint"
-                className="border border-line-2 px-1.5 py-0.5 text-caption"
+                className="border border-navy px-1.5 py-0.5 text-caption"
               />
               <Button
                 size="sm"

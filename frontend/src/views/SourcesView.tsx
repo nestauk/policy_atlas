@@ -1061,7 +1061,7 @@ function YearFilter({
   onChange: (from: number | undefined, to: number | undefined) => void;
 }) {
   const range = yearRangeLabel(from, to);
-  const field = "mt-1 h-10 w-full border border-line-2 bg-paper px-3 text-meta font-normal text-navy";
+  const field = "mt-1 h-10 w-full border border-navy bg-paper px-3 text-meta font-normal text-navy placeholder:text-grey";
   return (
     <Popover>
       <PopoverTrigger asChild>

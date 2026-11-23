@@ -527,7 +527,7 @@ function CheckInCardBody({
               value={freeText}
               onChange={(event) => setFreeText(event.target.value)}
               placeholder="e.g. prioritise UK school-based studies"
-              className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body"
+              className="min-w-0 flex-1 border border-navy bg-paper px-3 py-2 text-body"
             />
             <Button
               type="submit"

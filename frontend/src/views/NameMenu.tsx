@@ -125,7 +125,7 @@ export function NameRenameField({
         aria-invalid={failed || undefined}
         aria-describedby={failed ? errorId : undefined}
         className={cn(
-          "min-w-0 flex-1 basis-56 border border-line-2 bg-paper px-2 py-0.5 md:max-w-[36rem]",
+          "min-w-0 flex-1 basis-56 border border-navy bg-paper px-2 py-0.5 md:max-w-[36rem]",
           titleClassName,
         )}
       />

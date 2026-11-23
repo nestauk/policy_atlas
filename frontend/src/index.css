@@ -112,7 +112,7 @@
   /* Nesta core palette */
   --color-blue: #0000ff; /* hero — one hero colour per layout */
   --color-blue-pressed: #0000d6; /* the primary's hover and press */
-  --color-green-pressed: #147a6c; /* the start button's hover */
+  --color-green-pressed: #147a6c; /* the start button's fill (white on it is 5.21:1) */
   --color-navy: #0f294a; /* structural text */
   --color-navy-muted: #c8d6e6; /* body on navy (splash) */
   --color-grey: #646363; /* secondary text (5.99:1 on white: AA, not AAA) */
@@ -125,6 +125,7 @@
 
   --color-green: #18a48c;
   --color-red: #eb003b;
+  --color-red-deep: #b8002e; /* small red text on Red Tint or the Ground, where Red is under 4.5:1 */
   --color-orange: #ff6e47;
   --color-yellow: #fdb633;
   --color-purple: #9a1bbe;
@@ -531,10 +532,11 @@
 }
 
 /* Theory of change canvas (task 054, C36): the line style shows the link's
-   evidence verdict. Supported solid green; Leaning supports long green
-   dashes; Mixed solid amber (owner, 2026-11-04); Not enough
-   evidence grey dashed; Leaning against long red dashes; Not
-   confident dotted red. The critical link carries a warning triangle
+   evidence verdict. Each verdict has its own dash, so no two differ by
+   colour alone: Supported solid green; Leaning supports long green dashes;
+   Mixed amber dash-dot; Not enough evidence grey short dashes; Leaning
+   against red dash-dot-dot; Not confident dotted red. The critical link
+   carries a warning triangle
    (CriticalMark), not a thicker line. A connection being searched or
    checked is a thicker, darker grey line that breathes on the shared 1.6 s
    rhythm, arrowhead included (owner, 2026-11-10: blue read as a verdict
@@ -551,7 +553,8 @@
 .react-flow .toc-edge--not_sure_insufficient { stroke-dasharray: 6 5; }
 .react-flow .toc-edge--against { stroke-dasharray: 2 5; }
 .react-flow .toc-edge--leaning_supports { stroke-dasharray: 12 5; }
-.react-flow .toc-edge--leaning_against { stroke-dasharray: 12 5; }
+.react-flow .toc-edge--leaning_against { stroke-dasharray: 12 5 2 5 2 5; }
+.react-flow .toc-edge--not_sure_mixed { stroke-dasharray: 12 5 2 5; }
 .react-flow .toc-edge--pending {
   stroke: var(--color-grey);
   stroke-width: 3;

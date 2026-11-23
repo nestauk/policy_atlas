@@ -19,7 +19,7 @@ import { keptPathways, LAYER_LABEL, pathwayTitles } from "./tocModel";
 import type { BoxLayer, TocGraph } from "./types";
 
 /** A form field (DESIGN.md § Inputs): Paper, a Line 2 hairline, 12 by 10 px, Lead words, square. */
-export const FIELD_CLASS = "w-full min-w-0 border border-line-2 bg-paper px-3 py-2.5 text-lead text-ink placeholder:text-grey";
+export const FIELD_CLASS = "w-full min-w-0 border border-navy bg-paper px-3 py-2.5 text-lead text-ink placeholder:text-grey";
 
 /** A field's label over it: Meta Semibold Navy. */
 export const FIELD_LABEL_CLASS = "text-meta font-semibold text-navy";

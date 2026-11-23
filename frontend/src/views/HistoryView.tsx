@@ -130,7 +130,7 @@ export function HistoryView() {
       )}
 
       {editError !== null && (
-        <p role="alert" className="mb-2 text-body text-red">
+        <p role="alert" className="mb-2 text-body text-red-deep">
           {editError}
         </p>
       )}

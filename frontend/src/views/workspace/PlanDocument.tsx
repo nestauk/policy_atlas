@@ -75,7 +75,7 @@ const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
   "cursor-pointer border border-white/25 px-3 py-1.5 text-body font-semibold text-white hover:bg-white/10";
 const panelFieldClass =
-  "w-full border border-white/25 bg-navy-deep px-3 py-2.5 text-lead text-white";
+  "w-full border border-on-navy-muted bg-navy-deep px-3 py-2.5 text-lead text-white";
 const panelValueClass = "mt-0.5 text-lead text-white";
 const panelHintClass = "text-body text-on-navy-soft";
 

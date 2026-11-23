@@ -271,7 +271,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
 
       {/* The question step, then the two optional fields, then the primary
           alone on its own row at the right, nothing below it. */}
-      <div className="mt-6 border border-line-2 bg-paper px-[18px] py-3.5 focus-within:outline-2 focus-within:outline-blue">
+      <div className="mt-6 border border-navy bg-paper px-[18px] py-3.5 focus-within:outline-2 focus-within:outline-blue">
         <label className="sr-only" htmlFor="new-task-question">
           Your question
         </label>

@@ -21,7 +21,7 @@ const chipVariants = cva(
         soft: "border-line bg-ground text-grey",
         green: "border-green-tint-edge bg-green-tint text-green-deep",
         yellow: "border-yellow-tint-edge bg-yellow-tint text-yellow-deep",
-        red: "border-red-tint-edge bg-red-tint text-red",
+        red: "border-red-tint-edge bg-red-tint text-red-deep",
       },
     },
     defaultVariants: { tone: "default" },

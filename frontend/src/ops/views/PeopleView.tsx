@@ -523,7 +523,7 @@ export function PeopleView() {
                     <td className={cn(TD_CLASS, "py-2.5")}>
                       <span className="flex gap-1.5">
                         {person.deactivated_at != null && (
-                          <Chip className="border-red/50 bg-red/10 text-red">DEACTIVATED</Chip>
+                          <Chip className="border-red/50 bg-red/10 text-red-deep">DEACTIVATED</Chip>
                         )}
                         {person.is_admin && <Chip>ADMIN</Chip>}
                         {person.is_ops && <Chip>OPS</Chip>}

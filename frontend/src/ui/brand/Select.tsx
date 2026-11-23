@@ -17,7 +17,7 @@ const MOVE_KEYS = new Set(["ArrowDown", "ArrowUp", "Home", "End"]);
 /**
  * The app's one dropdown (custom styling, never the browser default): the
  * field's skin as the trigger
- * (Paper, a 1 px Line 2 border, square, the 12 px chevron at the right) and
+ * (Paper, a 1 px Navy border, square, the 12 px chevron at the right) and
  * the popover's tokens for the list, the Sources filter bar's listbox made
  * shared. No native `<select>` and no phone picker: the list opens as a
  * popover at every width.
@@ -138,7 +138,7 @@ export function Select<V extends string>({
             "relative inline-flex max-w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-ink",
             "transition-colors duration-150",
             size === 40 ? "h-10 text-body" : "h-8 text-meta",
-            open ? "border-navy" : "border-line-2",
+            "border-navy",
             "disabled:cursor-default disabled:bg-ground disabled:text-grey",
             className,
           )}

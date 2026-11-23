@@ -10,7 +10,7 @@ import type { SelectOption } from "./Select";
 /**
  * The app's searchable multi-select (first used by the New
  * page's "Evidence search to start from"). Built on the `Select`'s skin and
- * popover: the field's trigger (Paper, a Line 2 border, square, the 12 px
+ * popover: the field's trigger (Paper, a Navy border, square, the 12 px
  * chevron), reading the placeholder with nothing chosen, the one choice's
  * words with one, "2 selected" with more. The list opens with a filter field
  * at its top (focused as it opens; typing narrows the rows by their words)
@@ -98,7 +98,7 @@ export function MultiSelect<V extends string>({
             className={cn(
               "relative inline-flex h-10 w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-body text-ink",
               "transition-colors duration-150",
-              open ? "border-navy" : "border-line-2",
+              "border-navy",
               "disabled:cursor-default disabled:bg-ground disabled:text-grey",
             )}
           >
@@ -124,7 +124,7 @@ export function MultiSelect<V extends string>({
             placeholder={filterLabel}
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            className="mb-1 h-10 w-full border border-line-2 bg-paper px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue"
+            className="mb-1 h-10 w-full border border-navy bg-paper px-3 text-body text-ink placeholder:text-grey focus-visible:outline-2 focus-visible:outline-blue"
           />
           <ul id={listId} role="group" aria-label={label} className="flex max-h-80 flex-col overflow-y-auto px-2">
             {listed.length === 0 ? (
