@@ -938,7 +938,7 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   `.chat.completions`). Dynamic access, the SDK's generic `post`, and other SDK resources that keep
   state at the provider would pass it; nothing in the tree uses any of them. Condition: a second
   SDK surface is used, or a review finds a bypass.
-- The request capture holds no request with carried turns (the frozen baseline has none); their
+- The request capture holds no request with carried turns; their
   wire form is pinned by module tests on SDK-built objects and by the live probe only. Condition: a
   carried request is rejected, or the SDK is upgraded.
 - The raised steps other than the two section steps keep the timeouts they had with reasoning off

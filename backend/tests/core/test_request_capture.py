@@ -2,21 +2,13 @@
 
 ``capture_requests.py`` drives each call site with fixed inputs and records the
 HTTP request it sends (address path, JSON body, timeout) on the ``bedrock`` route.
-Two captures are committed:
-
-- ``request_capture_baseline.json``: the requests as they were sent to the older
-  chat-completions endpoint. It is a frozen record and never refreshed.
-- ``request_capture_responses.json``: the requests as they are sent now, to the
-  Responses endpoint. The script's output must equal it.
-
-A comparison test checks, for every step and variant, that the Responses request
-carries the same content as the baseline one: the model sees the same messages,
-tools, schema and settings, and nothing was added.
+The capture is committed as ``request_capture_responses.json`` and the script's
+output must equal it, so a changed prompt, tool, schema or setting shows as a diff.
 It runs in a child process: this suite's ``conftest.py`` removes the route
 variable, and many model ids and efforts are read from the route when their
 modules are first imported, so the route must be set before any import.
 
-Refresh the Responses capture deliberately with ``REQUEST_CAPTURE_UPDATE=1``; the
+Refresh the capture deliberately with ``REQUEST_CAPTURE_UPDATE=1``; the
 diff is then the review artefact.
 """
 
@@ -35,7 +27,6 @@ from policy_atlas.core import model_routes
 from policy_atlas.evidence_search.synthesis.cache_modes import CACHE_MODES
 
 SCRIPT = Path(__file__).parent / "capture_requests.py"
-BASELINE = Path(__file__).parent / "data" / "request_capture_baseline.json"
 RESPONSES = Path(__file__).parent / "data" / "request_capture_responses.json"
 UPDATE_ENV = "REQUEST_CAPTURE_UPDATE"
 #: The body the provider reads as "store nothing on your own" (cache modes off and breakpoint).
@@ -96,227 +87,14 @@ _ALLOWED_KEYS = {
     "stream",
     "prompt_cache_options",
 }
-_LOW = {"effort": "low"}
-_LOW_RAISED_LIMIT = {"effort": "low", "limit": 18_432}
-#: The deliberate differences from the baseline, by step: the reasoning effort, output
-#: limit and timeout (seconds) the request must carry now. A step named here that sends
-#: tools also asks for its reasoning back (``include``). Any other difference still fails.
-_CHANGED: dict[str, dict[str, Any]] = {
-    "synthesise_section_turn": {"effort": "low", "timeout": 60.0},
-    "synthesise_section_emit": {"effort": "low", "timeout": 60.0},
-    "synthesise_write_key_findings": {"effort": "medium"},
-    "task_agent_scoping_turn": _LOW_RAISED_LIMIT,
-    "longlist_constrain": _LOW_RAISED_LIMIT,
-    "longlist_distinct": _LOW_RAISED_LIMIT,
-    "longlist_authority": _LOW_RAISED_LIMIT,
-    "option_profile_potential_impact": _LOW_RAISED_LIMIT,
-    "option_profile_ambition": _LOW_RAISED_LIMIT,
-    # These two share the option profile limit; nothing else about them changed.
-    "option_profile_line": {"limit": 18_432},
-    "option_profile_setting": {"limit": 18_432},
-}
-_INCLUDE = ["reasoning.encrypted_content"]
-#: Every top-level key a baseline request carries; each has its counterpart checked below.
-_BASELINE_KEYS = {
-    "model",
-    "messages",
-    "tools",
-    "tool_choice",
-    "parallel_tool_calls",
-    "response_format",
-    "reasoning_effort",
-    "max_completion_tokens",
-    "stream",
-    "stream_options",
-    "prompt_cache_options",
-}
-
-
-def _old_parts(content: Any) -> Any:
-    if isinstance(content, str):
-        return content
-    parts: list[tuple[Any, ...]] = []
-    for part in content:
-        if part["type"] == "text":
-            parts.append(("text", part["text"], part.get("prompt_cache_breakpoint")))
-        elif part["type"] == "image_url":
-            image = part["image_url"]
-            parts.append(("image", image["url"], image.get("detail", "auto")))
-        else:
-            parts.append(("unknown", part))
-    return parts
-
-
-def _new_parts(content: Any, role: str, problems: list[str]) -> Any:
-    if isinstance(content, str):
-        return content
-    text_type = "output_text" if role == "assistant" else "input_text"
-    parts: list[tuple[Any, ...]] = []
-    for part in content:
-        if part["type"] == text_type and set(part) <= {"type", "text", "prompt_cache_breakpoint"}:
-            parts.append(("text", part["text"], part.get("prompt_cache_breakpoint")))
-        elif part["type"] == "input_image" and set(part) == {"type", "image_url", "detail"}:
-            parts.append(("image", part["image_url"], part["detail"]))
-        else:
-            problems.append(f"unexpected content part on a {role} message: {sorted(part)}")
-    return parts
-
-
-def _old_items(messages: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
-    """The baseline messages as (kind, ...) tuples in the order the model reads them."""
-    items: list[tuple[Any, ...]] = []
-    for message in messages:
-        if message["role"] == "tool":
-            items.append(("tool result", message["tool_call_id"], message["content"]))
-            continue
-        if message.get("content") is not None:
-            items.append(("message", message["role"], _old_parts(message["content"])))
-        for call in message.get("tool_calls") or ():
-            function = call["function"]
-            items.append(("tool call", call["id"], function["name"], function["arguments"]))
-    return items
-
-
-def _new_items(items: list[dict[str, Any]], problems: list[str]) -> list[tuple[Any, ...]]:
-    """The Responses input items as the same (kind, ...) tuples."""
-    out: list[tuple[Any, ...]] = []
-    for item in items:
-        kind = item.get("type")
-        if kind == "function_call_output" and set(item) == {"type", "call_id", "output"}:
-            out.append(("tool result", item["call_id"], item["output"]))
-        elif kind == "function_call" and set(item) == {"type", "call_id", "name", "arguments"}:
-            out.append(("tool call", item["call_id"], item["name"], item["arguments"]))
-        elif kind is None and set(item) == {"role", "content"}:
-            role = item["role"]
-            out.append(("message", role, _new_parts(item["content"], role, problems)))
-        else:
-            problems.append(f"unexpected input item: {sorted(item)}")
-    return out
-
-
-def _expected_tool(tool: dict[str, Any]) -> dict[str, Any]:
-    function = tool["function"]
-    expected = {
-        "type": "function",
-        "name": function["name"],
-        "parameters": function["parameters"],
-        "strict": function.get("strict", False),
-    }
-    if "description" in function:
-        expected["description"] = function["description"]
-    return expected
-
-
-def _expected_tool_choice(choice: Any) -> Any:
-    if isinstance(choice, str):
-        return choice
-    if choice["type"] == "function":
-        return {"type": "function", "name": choice["function"]["name"]}
-    allowed = choice["allowed_tools"]
-    return {
-        "type": "allowed_tools",
-        "mode": allowed["mode"],
-        "tools": [{"type": "function", "name": t["function"]["name"]} for t in allowed["tools"]],
-    }
-
-
-def content_differences(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
-    """Every way a Responses request differs in content from its baseline request.
-
-    In plain terms: the model must see the same thing through both endpoints. The
-    messages (roles, text, images, the cache marker's place), the tool history, the
-    tools (with ``strict`` stated, ``False`` where the baseline tool had none), the
-    tool choice, the answer schema, the model, effort, output limit, timeout and
-    cache options must all carry over; ``store`` must be ``False``; and no key
-    outside the allowed list may appear. The one exception is the table of
-    deliberate changes above (:data:`_CHANGED`).
-
-    Args:
-        old: The baseline (chat-completions) capture entry.
-        new: The Responses capture entry for the same step and variant.
-
-    Returns:
-        One line per difference, each naming the step and variant; empty when
-        the two requests match.
-    """
-    where = f"{old['step']}/{old['variant'] or '(default)'}"
-    then, now = old["body"], new["body"]
-    changed = _CHANGED.get(old["step"], {})
-    problems: list[str] = []
-
-    def check(ok: bool, what: str) -> None:
-        if not ok:
-            problems.append(what)
-
-    check(new["path"].endswith("/responses"), f"path is {new['path']}")
-    check(set(then) <= _BASELINE_KEYS, f"baseline key not compared: {set(then) - _BASELINE_KEYS}")
-    extra = set(now) - _ALLOWED_KEYS - {"include"}
-    check(not extra, f"key outside the allowed list: {extra}")
-    asks_reasoning_back = "effort" in changed and "tools" in then
-    check(
-        now.get("include") == (_INCLUDE if asks_reasoning_back else None),
-        f"include is {now.get('include')!r}",
-    )
-    check(now.get("store") is False, f"store is {now.get('store')!r}, not false")
-    # Messages and tool history, in order.
-    old_items = _old_items(then["messages"])
-    new_items = _new_items(now.get("input", []), problems)
-    check(len(old_items) == len(new_items), f"{len(old_items)} input items became {len(new_items)}")
-    for index, (a, b) in enumerate(zip(old_items, new_items, strict=False)):
-        check(a == b, f"input item {index}: {a!r} became {b!r}")
-    # Tools and tool choice.
-    old_tools = [_expected_tool(tool) for tool in then.get("tools", [])]
-    check(old_tools == now.get("tools", []), "tools differ (name, description, parameters, strict)")
-    check(
-        ("tool_choice" in then) == ("tool_choice" in now)
-        and _expected_tool_choice(then.get("tool_choice", "")) == now.get("tool_choice", ""),
-        f"tool choice {then.get('tool_choice')!r} became {now.get('tool_choice')!r}",
-    )
-    check(
-        then.get("parallel_tool_calls") == now.get("parallel_tool_calls"),
-        "parallel_tool_calls differs",
-    )
-    # Answer schema.
-    if "response_format" in then:
-        schema = then["response_format"]
-        expected_text = {"format": {"type": "json_schema", **schema["json_schema"]}}
-        check(schema["type"] == "json_schema", f"baseline response format {schema['type']!r}")
-        check(now.get("text") == expected_text, "text.format differs (name, schema, strict)")
-    else:
-        check("text" not in now, "text sent where the baseline had no response format")
-    # Scalars.
-    check(now.get("model") == then["model"], "model differs")
-    effort = changed.get("effort", then["reasoning_effort"])
-    check(now.get("reasoning") == {"effort": effort}, f"reasoning is {now.get('reasoning')!r}")
-    limit = then.get("max_completion_tokens")
-    if limit is not None:
-        limit = changed.get("limit", limit)
-    check(
-        now.get("max_output_tokens") == limit,
-        f"output limit {then.get('max_completion_tokens')} became {now.get('max_output_tokens')}",
-    )
-    check(bool(now.get("stream")) == bool(then.get("stream")), "streaming differs")
-    timeout = old["timeout"]
-    if "timeout" in changed:
-        timeout = dict.fromkeys(timeout, changed["timeout"])
-    check(new["timeout"] == timeout, f"timeout {old['timeout']} became {new['timeout']}")
-    check(
-        now.get("prompt_cache_options") == then.get("prompt_cache_options"),
-        "prompt cache options differ",
-    )
-    return [f"{where}: {problem}" for problem in problems]
-
-
-def test_every_responses_request_carries_the_baseline_content() -> None:
-    baseline = _load(BASELINE)
-    responses = _load(RESPONSES)
-    assert [_key(entry) for entry in responses] == [_key(entry) for entry in baseline]
-    problems = [
-        problem
-        for old, new in zip(baseline, responses, strict=True)
-        for problem in content_differences(old, new)
-    ]
-    assert not problems, "\n".join(problems)
+def test_every_request_goes_to_the_responses_endpoint_unstored_with_allowed_keys(
+    captured: list[dict[str, Any]],
+) -> None:
+    for entry in captured:
+        body = entry["body"]
+        assert entry["path"].endswith("/responses"), _key(entry)
+        assert body.get("store") is False, _key(entry)
+        assert not set(body) - _ALLOWED_KEYS - {"include"}, _key(entry)
 
 
 def test_every_route_step_has_a_cache_mode() -> None:

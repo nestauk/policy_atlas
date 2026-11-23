@@ -689,10 +689,18 @@ further items:
    wording was corrected from "the two broken scripts" to "the broken scripts".
 6. For the DPIA notes (D3), still for the owner: `store=false` stops the stored response;
    abuse-monitoring logs and the prompt cache are still held by the provider.
+7. **The baseline capture is not merged** (ruling of the same day, against M1's "committed
+   with the tests"). The before/after comparison
+   (`test_every_responses_request_carries_the_baseline_content`) passed in CI on commit
+   `0ebd1f8d` with the baseline in place; the baseline file, that test and its table of
+   deliberate changes were then removed, because after the move the comparison only makes
+   later prompt and setting changes harder. Its three checks that need no baseline (the
+   address path, `store=false`, no key outside the allowed list) stay as a test on every
+   captured request. The Responses capture stays in full.
 
 ## Public safety
 
-- Committed: code, tests, the two request captures, this file, the knowledge note and the
+- Committed: code, tests, the request capture, this file, the knowledge note and the
   deferred list. The captures hold prompt text from the repository and literal fixture
   inputs written for the capture; no recorded provider answer, no project data, no id
   from a live run. The only image is the 8-byte PNG signature already in the test suite.
