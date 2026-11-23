@@ -9,6 +9,8 @@ import { Button } from "../ui/brand/Button";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink } from "../ui/brand/Nav";
 import { SkipLink, useFocusPaneOnNavigate } from "../ui/brand/SkipLink";
+import { cn } from "../ui/brand/cn";
+import { TASK_LOCK_ROOT_CLASS, TASK_LOCK_SHELL_CLASS } from "./taskLock";
 import { COPY, TASK } from "../lib/vocabulary";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
@@ -47,8 +49,8 @@ export function PublicTaskShell() {
   // Task views lock to the viewport (AppShell does the same): the chrome
   // stays put and only the pane below scrolls.
   useLayoutEffect(() => {
-    document.documentElement.classList.add("overflow-hidden");
-    return () => document.documentElement.classList.remove("overflow-hidden");
+    document.documentElement.classList.add(TASK_LOCK_ROOT_CLASS);
+    return () => document.documentElement.classList.remove(TASK_LOCK_ROOT_CLASS);
   }, []);
 
   if (task.isPending) {
@@ -80,7 +82,7 @@ export function PublicTaskShell() {
       <TooltipProvider delayDuration={200}>
         <PublicViewProvider value={true}>
           <RunStreamProvider taskId={taskId} connect={false}>
-            <div className="flex h-svh w-full min-w-0 max-w-full flex-col overflow-hidden">
+            <div className={cn("flex w-full min-w-0 max-w-full flex-col", TASK_LOCK_SHELL_CLASS)}>
               <SkipLink pane={pane} />
               {/* Its own View Transition layer, held still above the page, so a
                   longlist regroup never draws over it. */}

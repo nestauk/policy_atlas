@@ -63,4 +63,17 @@ test.describe("accessibility (axe, WCAG 2.2 A and AA)", () => {
 
     expect(await violations(page)).toEqual([]);
   });
+
+  // 1280 by 1024 at 400% zoom is 320 by 256 CSS pixels (WCAG 1.4.10 Reflow).
+  // The navigation and the tab bar are taller than that, so a task page that
+  // locked itself to the viewport showed no content at all.
+  test("a task page scrolls to its content in a 320 by 256 viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 256 });
+    await page.goto(`/tasks/${MOCK_TASK_ID}`);
+    const composer = page.getByLabel("Message the Task Agent");
+    await expect(composer).toBeAttached();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)).toBe(true);
+    await composer.scrollIntoViewIfNeeded();
+    await expect(composer).toBeInViewport();
+  });
 });
