@@ -72,8 +72,11 @@ root) runs a separate browser test against the real local API.
 - `VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_REDIRECT_URI`: cloud sign-in through
   OpenID Connect (OIDC). With no authority set, the app uses the local dev token.
 - `VITE_DEV_TOKEN`: a local dev token. `make dev` sets it.
-- `VITE_OPTIONS_SCOPING=1` and `VITE_THEORY_OF_CHANGE=1`: show those Capabilities. `make dev`
-  sets both.
+- `VITE_OPTIONS_SCOPING=1` and `VITE_THEORY_OF_CHANGE=1`: show those Capabilities when PostHog
+  gives no answer for the feature flag of the same name. `make dev` sets both.
+- `VITE_POSTHOG_PROJECT_TOKEN` and `VITE_POSTHOG_HOST`: turn on PostHog (usage events and
+  feature flags) in the browser. Put them in `frontend/.env.local`. See
+  [docs/posthog.md](../docs/posthog.md).
 - `VITE_WAF_CAPTCHA_SCRIPT_URL` and `VITE_WAF_CAPTCHA_API_KEY`: the CAPTCHA (a puzzle that
   shows a person, not a program, is there) on the waitlist form. The firewall (AWS WAF, the
   Amazon Web Services web application firewall) checks the answer. `scripts/deploy.sh` sets

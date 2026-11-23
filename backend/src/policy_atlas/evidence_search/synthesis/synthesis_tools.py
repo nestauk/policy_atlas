@@ -23,6 +23,7 @@ import html
 import json
 import math
 import re
+import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
@@ -47,6 +48,7 @@ from policy_atlas.core.embeddings import (
     validate_vector,
 )
 from policy_atlas.core.liveness import ACTIVITY_QUERY_MAX as ACTIVITY_QUERY_MAX
+from policy_atlas.core.posthog_ai import capture_tool_span
 from policy_atlas.core.liveness import normalise_query as normalise_query
 from policy_atlas.core.schema import (
     CONTEXT_TYPES,
@@ -3554,11 +3556,18 @@ def run_tool_loop(
             try:
                 if on_tool_start is not None:
                     on_tool_start(tool_name, cast("dict[str, Any]", arguments))
+                started_at = time.monotonic()
                 tool_result = _execute_traced_tool(
                     langfuse_client,
                     name=tool_name,
                     tool=tools[tool_name],
                     arguments=cast("dict[str, Any]", arguments),
+                )
+                capture_tool_span(
+                    tool_name,
+                    cast("dict[str, Any]", arguments),
+                    tool_result,
+                    time.monotonic() - started_at,
                 )
             except ToolValidationError as exc:
                 transcript.append({

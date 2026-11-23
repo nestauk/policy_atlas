@@ -20,11 +20,12 @@ from dataclasses import dataclass
 from typing import Annotated, Any, Literal, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine, Row
 
+from policy_atlas.api.analytics import capture_event
 from policy_atlas.api.app import ApiConflict, ApiNotFound, ApiUnprocessable
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract.read_models import ChunkContextOut
@@ -1140,6 +1141,7 @@ def decide_toc_pending(
 def upload_toc_theory(
     task_id: uuid.UUID,
     body: TocUploadIn,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
@@ -1196,6 +1198,7 @@ def upload_toc_theory(
             )
     if reply is not None:
         post_agent_message(engine, task_id=task_id, text=reply, user_message=body.message or "")
+    capture_event(request, "toc_theory_uploaded", properties={"answered": reply is not None})
     return TocUploadOut(
         answered=reply is not None,
         upload_id=saved.upload_id,

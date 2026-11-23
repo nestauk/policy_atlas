@@ -70,6 +70,12 @@ dependencies = [
     # group because the image leaves the `ops` group out (review finding 2); Linux
     # only, the platform the image is built for (it has no macOS build to install).
     "awslambdaric>=3,<4; sys_platform == 'linux'",
+    # PostHog's ASGI middleware requires 7.69.0+; stay on the documented 7.x SDK line.
+    "posthog[otel]>=7.69,<8",
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-instrumentation-botocore",
+    "opentelemetry-sdk",
 ]
 
 [build-system]

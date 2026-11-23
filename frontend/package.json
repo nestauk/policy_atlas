@@ -33,6 +33,7 @@
     "html-to-image": "1.11.11",
     "oidc-client-ts": "^3.5.0",
     "openapi-fetch": "^0.17.0",
+    "posthog-js": "^1.453.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-oidc-context": "^3.3.1",

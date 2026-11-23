@@ -25,6 +25,7 @@ from langfuse import Langfuse, propagate_attributes
 
 from policy_atlas.core import embeddings, liveness
 from policy_atlas.core.embeddings import EmbeddingBackend
+from policy_atlas.core.posthog_ai import context as posthog_ai_context
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.corpus import theme_grouping
 from policy_atlas.evidence_search.corpus.theme_grouping import (
@@ -182,7 +183,8 @@ def traced_call[T](
         The value returned by ``call``.
     """
     if client is None:
-        return call()
+        with _session_scope(session_id):
+            return call()
 
     with _session_scope(session_id), _observation(client, name=name, as_type=as_type) as span:
         result = call()
@@ -313,7 +315,8 @@ def traced_attempts[T](
         try:
             try:
                 if client is None:
-                    return call()
+                    with _session_scope(session_id):
+                        return call()
                 with (
                     _session_scope(session_id),
                     _observation(client, name=name, as_type="generation") as span,
@@ -380,11 +383,12 @@ def trace_scope(session_id: uuid.UUID | None = None, user_id: str | None = None)
         attributes["session_id"] = str(session_id)
     if user_id is not None:
         attributes["user_id"] = user_id
-    if not attributes:
-        yield
-        return
-    with propagate_attributes(**attributes):
-        yield
+    with posthog_ai_context(session_id=session_id, user_id=user_id):
+        if not attributes:
+            yield
+            return
+        with propagate_attributes(**attributes):
+            yield
 
 
 def _session_scope(session_id: uuid.UUID | None) -> AbstractContextManager[None]:

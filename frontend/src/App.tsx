@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "react-router";
 
 import { AuthProvider, useAuth } from "./auth";
+import { identifyUser } from "./lib/analytics";
 import { authenticatedRouter, publicRouter } from "./routes";
 
 export const queryClient = new QueryClient();
@@ -22,6 +23,13 @@ function AppRouter() {
   const auth = useAuth();
   const status = auth.status;
   const [lastSettled, setLastSettled] = useState<string | null>(null);
+
+  // Tell PostHog who is signed in, so events and feature flags follow the
+  // person and not the browser.
+  const sub = auth.user?.sub ?? null;
+  useEffect(() => {
+    if (status !== "loading") identifyUser(sub);
+  }, [status, sub]);
 
   // Land on the stashed deep link after a sign-in round trip.
   // `OidcAuthProvider.onSigninCallback` restores it with

@@ -16,9 +16,11 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from openai import OpenAI
+from posthog.ai.openai import OpenAI as PostHogOpenAI
 from pydantic import BaseModel
 
 from policy_atlas.core.model_routes import live_api_key, route
+from policy_atlas.core.posthog_ai import call_kwargs, configured_client
 from policy_atlas.core.usage import (
     UsageResult,
     log_usage,
@@ -99,10 +101,16 @@ def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
     resolved_key = api_key or live_api_key()
     if not resolved_key:
         raise RuntimeError(f"{backend_name} requires {route().api_key_env} or an explicit api_key.")
-    return OpenAI(
+    posthog_client = configured_client()
+    if posthog_client is None:
+        return OpenAI(api_key=resolved_key, base_url=route().openai_base_url, max_retries=0)
+    # The PostHog wrapper is the same client plus usage events: analytics that
+    # is not configured must leave the plain client and its requests unchanged.
+    return PostHogOpenAI(
         api_key=resolved_key,
         base_url=route().openai_base_url,
         max_retries=0,
+        posthog_client=posthog_client,
     )
 
 
@@ -137,6 +145,12 @@ def openai_kwargs(
     }
     if prompt_cache in ("off", "breakpoint"):
         kwargs["extra_body"] = {"prompt_cache_options": {"mode": "explicit"}}
+    ai_kwargs = call_kwargs()
+    if route().name == "bedrock-claude":
+        properties = ai_kwargs.get("posthog_properties")
+        if isinstance(properties, dict):
+            properties["$ai_provider"] = "aws-bedrock"
+    kwargs.update(ai_kwargs)
     return kwargs
 
 

@@ -12,11 +12,12 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, false, func, or_, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
+from policy_atlas.api.analytics import capture_event
 from policy_atlas.api.answer_core import apply_appraisal_labels
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
@@ -404,6 +405,7 @@ def list_conversations(
 def create_conversation(
     task_id: uuid.UUID,
     payload: ConversationCreate,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
@@ -453,6 +455,11 @@ def create_conversation(
     row = conn.execute(
         select(conversation).where(conversation.c.id == conversation_id)
     ).mappings().one()
+    capture_event(
+        request,
+        "conversation_created",
+        properties={"has_entry_context": payload.entry_artefact_id is not None},
+    )
     return _conversation_out(row)
 
 
@@ -671,6 +678,7 @@ def _line(event: Any) -> bytes:
 async def create_chat_turn_stream(
     conversation_id: uuid.UUID,
     body: ChatTurnCreate,
+    request: Request,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     chat_backend: Annotated[ChatBackend, Depends(get_chat_backend)],
@@ -753,6 +761,7 @@ async def create_chat_turn_stream(
             .scalar_one_or_none()
             == 0
         )
+    capture_event(request, "chat_turn_submitted", properties={"is_first_turn": first_turn})
     events: queue.Queue[Any] = queue.Queue()
     # Whether the stream still reads ``events``: a title that lands after the
     # terminal line is not sent (the list's next read shows it).
@@ -769,7 +778,7 @@ async def create_chat_turn_stream(
         def title_chat() -> None:
             # Opened in the thread (context variables do not cross a thread
             # start); the call carries the chat's session, the conversation.
-            with tracing.trace_scope(user_id=subject):
+            with tracing.trace_scope(session_id=conversation_id, user_id=subject):
                 title = name_chat_from_message(
                     engine,
                     titles,
@@ -793,7 +802,7 @@ async def create_chat_turn_stream(
             # Opened inside the worker thread: contextvars do not cross a
             # thread start. The session scope inside run_chat_turn nests under
             # this user scope.
-            with tracing.trace_scope(user_id=user.user_id):
+            with tracing.trace_scope(session_id=conversation_id, user_id=user.user_id):
                 result = run_chat_turn(
                     engine,
                     task_id=task_id,

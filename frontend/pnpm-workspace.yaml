@@ -30,5 +30,10 @@ minimumReleaseAgeExclude: []
 # in the installed pnpm 11.15.1 build).
 blockExoticSubdeps: true
 
+# core-js (a dependency of posthog-js) has a postinstall script that only prints
+# a funding message. Do not run it; `false` records that decision so installs pass.
+allowBuilds:
+  core-js: false
+
 # Strict node_modules is pnpm's default (no phantom-dependency hoisting) — do NOT
 # set shamefully-hoist: true.

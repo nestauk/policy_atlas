@@ -38,6 +38,8 @@ def test_create_app_configures_json_logging_and_httpx_guard(
 
         assert logging.getLogger("httpx").level == logging.WARNING
 
+        # Discard what start-up logged (PostHog warns when it is not configured).
+        capsys.readouterr()
         log = structlog.get_logger()
         log.info("probe", key="value")
 

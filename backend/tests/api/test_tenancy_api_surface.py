@@ -616,6 +616,44 @@ def test_owner_can_set_a_loose_tasks_visibility(engine: Engine, tmp_path: Path) 
         assert stored == "private"
 
 
+def test_share_changes_send_product_analytics_events(engine: Engine, tmp_path: Path) -> None:
+    """Each real change on the Share page sends one event; a repeat sends none."""
+    captured: list[tuple[str, dict[str, Any] | None]] = []
+
+    class _Recorder:
+        def capture(self, event: str, *, properties: dict[str, Any] | None = None) -> None:
+            captured.append((event, properties))
+
+        def identify_context(self, distinct_id: str) -> None:
+            pass
+
+    with tenancy_client(tmp_path, count=1) as (client, (owner,)):
+        client.app.state.posthog = _Recorder()  # type: ignore[attr-defined]
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            row = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
+            )
+
+        for body in (
+            {"visibility": "org"},
+            {"visibility": "org"},
+            {"is_public": True},
+            {"is_public": False},
+            {"visibility": "private"},
+        ):
+            response = client.patch(f"/api/v1/tasks/{row}", headers=owner.headers, json=body)
+            assert response.status_code == 200, response.text
+
+    assert captured == [
+        ("task_shared", {"audience": "organisation"}),
+        ("task_shared", {"audience": "public"}),
+        ("task_unshared", {"audience": "public"}),
+        ("task_unshared", {"audience": "organisation"}),
+    ]
+
+
 def test_setting_visibility_on_a_task_in_a_project_is_409(
     engine: Engine, tmp_path: Path
 ) -> None:
