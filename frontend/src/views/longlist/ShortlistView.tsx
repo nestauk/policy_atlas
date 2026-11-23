@@ -6,6 +6,7 @@ import { usePatchPlan, useSuggestMore } from "../../api/mutations";
 import { usePlan, useRuns, useTask } from "../../api/queries";
 import { actionFailedNotice, suggestConflictSentences } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
+import { useDocumentTitle } from "../../lib/title";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { LINK_CLASS } from "../../ui/brand/inlineActions";
@@ -98,6 +99,7 @@ function numberOf(value: unknown): number | null {
  */
 export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: LonglistOut }) {
   const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, "Shortlist");
   // The public link reads the shortlist; it changes nothing. The
   // plan and the runs are owner-only reads, so the public link never asks.
   const publicView = usePublicView();

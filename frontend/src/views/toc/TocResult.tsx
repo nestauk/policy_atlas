@@ -7,6 +7,7 @@ import { useFunnel, useTask, useToc, useTocEvidence, useTocProposals } from "../
 import { formatDate } from "../../lib/dates";
 import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
+import { useDocumentTitle } from "../../lib/title";
 import type { LiveSection, LiveSketch } from "../../store";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
@@ -144,6 +145,7 @@ export function TocResult({ taskId }: { taskId: string }) {
 function TocPage({ taskId }: { taskId: string }) {
   const toc = useToc(taskId);
   const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, "Theory of change");
   const evidence = useTocEvidence(taskId);
   const funnel = useFunnel(taskId);
   const isPublicView = usePublicView();

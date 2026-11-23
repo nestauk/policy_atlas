@@ -1,4 +1,4 @@
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
 
 import { useTask } from "../api/queries";
@@ -8,6 +8,7 @@ import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink } from "../ui/brand/Nav";
+import { SkipLink, useFocusPaneOnNavigate } from "../ui/brand/SkipLink";
 import { COPY, TASK } from "../lib/vocabulary";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
@@ -40,6 +41,8 @@ export function PublicTaskShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const oidcConfigured = Boolean(import.meta.env.VITE_OIDC_AUTHORITY);
+  const pane = useRef<HTMLDivElement>(null);
+  useFocusPaneOnNavigate(pane);
 
   // Task views lock to the viewport (AppShell does the same): the chrome
   // stays put and only the pane below scrolls.
@@ -78,6 +81,7 @@ export function PublicTaskShell() {
         <PublicViewProvider value={true}>
           <RunStreamProvider taskId={taskId} connect={false}>
             <div className="flex h-svh w-full min-w-0 max-w-full flex-col overflow-hidden">
+              <SkipLink pane={pane} />
               {/* Its own View Transition layer, held still above the page, so a
                   longlist regroup never draws over it. */}
               <NavBar aria-label="App" className="shrink-0 [view-transition-name:app-nav] [view-transition-class:shell-chrome]">
@@ -99,7 +103,11 @@ export function PublicTaskShell() {
                   <LifecycleBar hint={COPY.lockedHint} items={publicLifecycleTabs(base)} />
                 </div>
               </NavBar>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable] [&>*]:shrink-0">
+              <div
+                ref={pane}
+                tabIndex={-1}
+                className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto outline-hidden [scrollbar-gutter:stable] [&>*]:shrink-0"
+              >
                 <ErrorBoundary key={location.pathname}>
                   <Outlet />
                 </ErrorBoundary>
