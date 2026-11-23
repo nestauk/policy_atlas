@@ -857,8 +857,11 @@ resolve_frontend_publish_config() {
     fi
 }
 
-publish_frontend() {
-    local font_file invalidation_id
+# Copy the licensed font files from their private bucket into the frontend's
+# public folder, where a build picks them up. Both builds need them: the public
+# app and the ops pages. A second call copies nothing new.
+fetch_fonts() {
+    local font_file
 
     aws s3 sync "s3://${FONTS_BUCKET}/" "$REPO_ROOT/frontend/public/fonts/"
     if ! font_file="$(find "$REPO_ROOT/frontend/public/fonts" -type f -print -quit)"; then
@@ -867,6 +870,12 @@ publish_frontend() {
     if [[ -z "$font_file" ]]; then
         fail "fonts sync completed but frontend/public/fonts is empty"
     fi
+}
+
+publish_frontend() {
+    local invalidation_id
+
+    fetch_fonts
 
     (
         cd "$REPO_ROOT/frontend"
@@ -891,6 +900,9 @@ publish_frontend() {
 }
 
 build_ops_pages() {
+    # Without the fonts the bundle has no /fonts/ folder, and the ops service
+    # answers each font request with the page itself.
+    fetch_fonts
     (
         cd "$REPO_ROOT/frontend"
         pnpm install --frozen-lockfile

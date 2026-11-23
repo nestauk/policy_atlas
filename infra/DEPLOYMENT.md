@@ -1411,6 +1411,13 @@ the CloudFront distribution). `scripts/deploy.sh` fetches them into
 like any other static asset. Binaries never enter the repo or the CDK asset tree
 in committable form — CI's font-guard stays green.
 
+The ops pages are a second build from the same `frontend/public/` folder, and
+the deploy builds them first. So the deploy fetches the fonts before that build
+too, and they ship inside the backend image under `ops-ui/fonts/`. If the ops
+pages show a fallback font and the console says "Failed to decode downloaded
+font", the bundle has no fonts: the ops service answered the font request with
+the page itself.
+
 ## 8. Rollback
 
 - **Task 033 (organisations): roll forward, not back.** The 033 migration's
