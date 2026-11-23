@@ -12,7 +12,7 @@ import { ChatSidePanel } from "./ChatSidePanel";
 const state = vi.hoisted(() => ({ setActiveConversation: vi.fn() }));
 
 vi.mock("../../planPanel", () => ({ usePlanPanel: () => ({ open: false, openPlan: vi.fn(), closePlan: vi.fn() }) }));
-vi.mock("react-router", () => ({ useNavigate: () => vi.fn(), Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
+vi.mock("react-router", () => ({ useNavigate: () => vi.fn(), Link: ({ children }: { children: React.ReactNode }) => <a href="/">{children}</a> }));
 vi.mock("../../../api/queries", () => ({
   useToc: () => ({ data: undefined }),
   useConversations: () => ({

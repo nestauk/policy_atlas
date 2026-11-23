@@ -182,6 +182,7 @@ export function FindPopover({
         ) : matches.length === 0 ? null : (
           <ul id={listId} role="listbox" aria-label={copy.label} className="-mx-4 -mb-4 mt-3 max-h-80 overflow-y-auto border-t border-line">
             {matches.map((item, index) => (
+              // eslint-disable-next-line jsx-a11y/click-events-have-key-events -- a combobox: focus stays in the field, which handles the arrow keys and Enter for the highlighted option
               <li
                 key={item.id}
                 id={optionId(index)}

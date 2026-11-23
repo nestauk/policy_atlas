@@ -281,6 +281,7 @@ function ExcludedMark({ line }: { line: string }) {
     <WithTooltip note={line || undefined}>
       <span
         role="img"
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focusable so its tooltip, the exclusion line, opens from the keyboard
         tabIndex={0}
         aria-label={line || "Excluded"}
         data-testid="tile-excluded"

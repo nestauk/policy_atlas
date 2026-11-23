@@ -1136,6 +1136,7 @@ function ClaimSpan({
           button. A real <button> around the words would be an atomic inline
           block that could never wrap mid-line. */}
       <Tooltip content={tip}>
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a pointer shortcut; the marker button after the words is the keyboard and screen reader control */}
         <span
           onClick={() => onOpen(claim)}
           className={

@@ -242,6 +242,7 @@ function LinkDetail({
         )}
         {link.critical ? (
           <Tooltip content={CRITICAL_DEFINITION} className="max-w-sm text-body text-ink">
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focusable so its tooltip, the definition, opens from the keyboard */}
             <span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-2">
               Critical connection
             </span>

@@ -96,6 +96,7 @@ export function NameRenameField({
   };
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the group handles Escape for the field and buttons inside it
     <span
       role="group"
       aria-label={`${label}: rename`}
@@ -299,6 +300,7 @@ export function NameActionsMenu({
           <div
             ref={menu}
             role="menu"
+            tabIndex={-1}
             aria-label={label}
             aria-orientation="vertical"
             className="py-1"

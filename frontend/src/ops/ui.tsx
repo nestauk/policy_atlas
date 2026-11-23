@@ -665,6 +665,7 @@ export function RowMenu({ id, label, items }: { id?: string; label: string; item
         <div
           ref={menuRef}
           role="menu"
+          tabIndex={-1}
           aria-label={label}
           className="py-1"
           onKeyDown={(event) => moveMenuFocus(event, menuRef.current)}

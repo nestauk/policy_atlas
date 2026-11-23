@@ -172,6 +172,7 @@ function PublicLinkSection({
       }
     >
       {confirming && !isPublic && (
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the group handles Escape for the buttons inside it
         <div
           role="group"
           aria-labelledby={confirmId}

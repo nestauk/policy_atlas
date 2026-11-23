@@ -103,6 +103,7 @@ function AccountMenu({ me }: { me: Person | undefined }) {
         <div
           ref={menuRef}
           role="menu"
+          tabIndex={-1}
           aria-label="Account"
           className={cn("py-1", me !== undefined && "border-t border-line")}
           onKeyDown={(event) => moveMenuFocus(event, menuRef.current)}

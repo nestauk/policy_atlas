@@ -212,6 +212,7 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
         <div
           ref={menuRef}
           role="menu"
+          tabIndex={-1}
           aria-label="Account"
           aria-orientation="vertical"
           className="border-t border-line py-1"

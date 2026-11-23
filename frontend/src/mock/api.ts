@@ -1411,17 +1411,23 @@ function mockChatTitle(message: string): string {
   return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : "New chat";
 }
 
+/** The session storage key that starts the mock signed out, so the landing
+ *  page can be opened in mock mode: a test sets it to "1" before the app
+ *  loads (the accessibility spec). */
+export const MOCK_SIGNED_OUT_KEY = "policy-atlas-mock-signed-out";
+
 /** Install the client-level fetch interceptor only after VITE_MOCK is selected. */
 export function installMockApi() {
   const realFetch = globalThis.fetch.bind(globalThis);
   startMockTocDraftFromPage();
+  const signedOut = globalThis.sessionStorage?.getItem(MOCK_SIGNED_OUT_KEY) === "1";
   const mockAuth: AuthApi = {
-    getAccessToken: async () => "mock-access-token",
+    getAccessToken: async () => (signedOut ? null : "mock-access-token"),
     signIn: () => undefined,
     signOut: () => undefined,
     onUnauthenticated: () => undefined,
-    user: { sub: "mock-policy-lead" },
-    status: "authenticated",
+    user: signedOut ? null : { sub: "mock-policy-lead" },
+    status: signedOut ? "unauthenticated" : "authenticated",
   };
   (globalThis as typeof globalThis & { __policyAtlasMockAuth?: AuthApi }).__policyAtlasMockAuth = mockAuth;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {

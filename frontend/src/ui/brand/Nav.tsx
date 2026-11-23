@@ -50,6 +50,7 @@ export function NavHomeLink() {
       <Tooltip
         content={<p className="text-body text-navy">{BETA_CHIP_HINT}</p>}
       >
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focusable so its tooltip opens from the keyboard */}
         <span tabIndex={0} className="inline-flex">
           <Chip tone="blue">BETA</Chip>
         </span>
