@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 import boto3
@@ -33,19 +34,21 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     build_queries_messages,
 )
 from policy_atlas.runtime import agent
-from tests.helpers import FakeOpenAIParseClient, fake_parse_client
+from tests.helpers import FakeResponsesClient, spy_calls, structured_response
 
 
 def _backend(
-    fake_client: FakeOpenAIParseClient,
-) -> tuple[OpenAISearchGenerationBackend, FakeOpenAIParseClient]:
+    fake_client: FakeResponsesClient,
+) -> tuple[OpenAISearchGenerationBackend, FakeResponsesClient]:
     backend: OpenAISearchGenerationBackend = object.__new__(OpenAISearchGenerationBackend)
     cast("Any", backend)._client = fake_client
     cast("Any", backend)._langfuse_client = None
     return backend, fake_client
 
 
-def test_generate_queries_passes_model_and_returns_parsed_wire() -> None:
+def test_generate_queries_passes_model_and_returns_parsed_wire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Derived from the prompt file's name (search_queries_system_v3.txt), so
     # swapping the prompt file relabels the traces automatically.
     assert SEARCH_QUERIES_PROMPT_VERSION == "search_queries_v3"
@@ -53,20 +56,21 @@ def test_generate_queries_passes_model_and_returns_parsed_wire() -> None:
         queries=["policy evaluation", "randomized trial"],
         overton_paraphrases=["Evidence about policy evaluation"],
     )
-    backend, fake_client = _backend(fake_parse_client(parsed=wire))
+    calls = spy_calls(monkeypatch, search_generation, "parse_structured")
+    backend, _fake_client = _backend(FakeResponsesClient(structured_response(wire)))
 
     result, usage = backend.generate_queries(QueriesPayload(intent="policy evaluation"))
 
-    assert result is wire
-    assert usage is None
-    [kwargs] = fake_client.chat.completions.calls
+    assert result == wire
+    assert usage == TokenUsage(prompt=10, completion=5, total=15, cached=0, reasoning=0)
+    [kwargs] = calls
     assert kwargs["model"] == SEARCH_QUERIES_MODEL
     assert kwargs["model"] == "gpt-6-luna"
     assert kwargs["response_format"] is SearchQueriesWire
 
 
 def test_generate_queries_raises_on_no_choices() -> None:
-    backend, _fake_client = _backend(fake_parse_client(choices=[]))
+    backend, _fake_client = _backend(FakeResponsesClient(SimpleNamespace(output=[], usage=None)))
 
     with pytest.raises(RuntimeError, match="had no choices"):
         backend.generate_queries(QueriesPayload(intent="policy evaluation"))

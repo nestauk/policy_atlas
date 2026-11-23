@@ -15,6 +15,8 @@ import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Any, Literal
 
@@ -247,6 +249,77 @@ def _retry_wait_s(exc: BaseException) -> float:
     return DEFAULT_RETRY_WAIT_S
 
 
+@dataclass
+class RequestIdHolder:
+    """Where one attempt's provider request id is written.
+
+    Attributes:
+        started_at: When the attempt started (ISO 8601, in UTC).
+        request_id: The provider's id for the request, once a response (or an
+            HTTP error) has come back; ``None`` until then.
+    """
+
+    started_at: str
+    request_id: str | None = None
+
+    def metadata(self) -> dict[str, str]:
+        """The trace metadata for the attempt: its request id, or its start time when it has none.
+
+        An attempt cut before any response has no id; its start time lets it be
+        found in AWS's audit log (CloudTrail) by time.
+
+        Returns:
+            ``{"request_id": ...}``, or ``{"started_at": ...}`` when there is no id.
+        """
+        if self.request_id is not None:
+            return {"request_id": self.request_id}
+        return {"started_at": self.started_at}
+
+
+_REQUEST_ID: contextvars.ContextVar[RequestIdHolder | None] = contextvars.ContextVar(
+    "model_request_id", default=None
+)
+
+
+@contextmanager
+def request_id_scope(span: Any | None = None) -> Iterator[RequestIdHolder]:
+    """Collect the provider's request id of the model request sent inside the scope.
+
+    In plain terms: every model request made inside the ``with`` block writes the
+    id the provider gave it into a fresh holder (``core.openai_client`` does the
+    writing). The holder is an object, so a thread that runs under a copy of this
+    context (the Theory of change stream pump) writes into the same one. Scopes
+    nest; the innermost one receives the id.
+
+    Args:
+        span: Optional open observation. When given, the holder's
+            :meth:`RequestIdHolder.metadata` is added to its metadata as the scope
+            closes, whether the block returned or raised.
+
+    Yields:
+        The holder.
+    """
+    holder = RequestIdHolder(started_at=datetime.now(UTC).isoformat())
+    token = _REQUEST_ID.set(holder)
+    try:
+        yield holder
+    finally:
+        _REQUEST_ID.reset(token)
+        if span is not None:
+            span.update(metadata=holder.metadata())
+
+
+def note_request_id(request_id: str | None) -> None:
+    """Write a provider request id into the current :func:`request_id_scope`, if any.
+
+    Args:
+        request_id: The id, or ``None`` (ignored) when the response carried none.
+    """
+    holder = _REQUEST_ID.get()
+    if holder is not None and request_id:
+        holder.request_id = request_id
+
+
 def _verb(step: str) -> str | None:
     # The word list is a leaf module; imported here so the core package does
     # not load the API package at import time.
@@ -277,7 +350,9 @@ def traced_attempts[T](
     (1 to :data:`MODEL_CALL_ATTEMPTS`) and a call id the attempts share. A
     request that never comes back is therefore still visible and countable. A
     failed attempt's generation is marked ``ERROR`` with the error class and
-    message.
+    message. Each attempt runs in its own :func:`request_id_scope`, so its
+    metadata gains the provider's ``request_id``, or, for an attempt that got no
+    response, its ``started_at`` time (never an earlier attempt's id).
 
     Args:
         client: Langfuse client, or ``None`` to run the same attempts untraced.
@@ -317,6 +392,7 @@ def traced_attempts[T](
                 with (
                     _session_scope(session_id),
                     _observation(client, name=name, as_type="generation") as span,
+                    request_id_scope() as request_id,
                 ):
                     span.update(
                         metadata={
@@ -331,9 +407,12 @@ def traced_attempts[T](
                         result = call()
                     except Exception as exc:
                         span.update(
-                            level="ERROR", status_message=f"{type(exc).__name__}: {exc}"
+                            level="ERROR",
+                            status_message=f"{type(exc).__name__}: {exc}",
+                            metadata=request_id.metadata(),
                         )
                         raise
+                    span.update(metadata=request_id.metadata())
                     if update is not None:
                         update(span, result)
                     if after is not None:

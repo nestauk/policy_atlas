@@ -17,7 +17,8 @@
   Codex for review by a second model family. Prompt-bearing work (product prompts, judge
   rubrics, eval criteria) stays with the lead. Start a `general-purpose` agent with
   `model: "opus"` (not Fable, not Sonnet), also when the caller is itself an Opus agent.
-  The exception is `/code-review`: its reviewers run on the lead's model.
+  The exceptions are `/code-review` and the contract and plan reviews of the design phase:
+  their reviewers run on the lead's model.
   Details: `docs/agentic-ops/harness.md`.
 - Tests: one focused test for each stated behaviour, at a public boundary (route, public
   function, rendered component, stored row). Mock only what the repository does not own.

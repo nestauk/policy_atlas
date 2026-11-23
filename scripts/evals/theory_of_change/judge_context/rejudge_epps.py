@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, "scripts/evals/theory_of_change"); sys.path.insert(0, sys.argv[1])
 import _route  # noqa
 import harness as H
+from policy_atlas.core.openai_client import parse_structured
 import judge_v7 as V7
 from policy_atlas.theory_of_change.check import judge_prompt as V6
 from policy_atlas.theory_of_change.check import shared
@@ -21,8 +22,8 @@ for lid in {r[0] for r in rows}:
 def judge(mod, r):
     l = links[r[0]]; text = (r[2] or "") + "\n" + r[3]
     msgs = mod.build_judge_messages(item_text=l.item_text, population=l.population, place=l.place, document_id="d", title=r[2] or "", year=int(r[4]) if (r[4] or "").isdigit() else None, text=text, neighbours=l.neighbours)
-    resp = h.client.chat.completions.parse(model="gpt-6.1-terra", messages=msgs, response_format=mod.JudgeResponse, max_completion_tokens=4000, reasoning_effort="none")
-    p = resp.choices[0].message.parsed; sup = p.support
+    p, u = parse_structured(h.client, messages=msgs, response_format=mod.JudgeResponse, usage_event="judge_experiment", label="judge", model="gpt-6.1-terra", reasoning_effort="none", prompt_cache="auto", timeout_s=120.0, max_completion_tokens=4000)
+    sup = p.support
     if sup != "not_about" and not shared.quote_found(text, p.quote): sup = "not_about"
     return sup, (p.relevance if sup != "not_about" else 0), p.relevance_reason
 jobs = [r for r in rows if r[0] in links]

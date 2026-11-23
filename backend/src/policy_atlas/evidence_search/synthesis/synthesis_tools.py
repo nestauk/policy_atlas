@@ -48,6 +48,7 @@ from policy_atlas.core.embeddings import (
 )
 from policy_atlas.core.liveness import ACTIVITY_QUERY_MAX as ACTIVITY_QUERY_MAX
 from policy_atlas.core.liveness import normalise_query as normalise_query
+from policy_atlas.core.openai_client import CarriedTurn
 from policy_atlas.core.schema import (
     CONTEXT_TYPES,
     EFFECT_DIRECTIONS,
@@ -302,6 +303,71 @@ class ToolExchange(TypedDict):
     result: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class CarriedCall:
+    """Which model turn one tool exchange came from, so that turn can be sent back.
+
+    In plain terms: a tool loop keeps one of these beside each transcript
+    exchange, in memory only, for the life of that one loop. The next request
+    then sends the model's own earlier turn (its reasoning included) instead of
+    a rebuilt copy. It is never stored or traced; the product's record of the
+    exchange stays the transcript.
+
+    Attributes:
+        turn: The model's output items for the turn.
+        call_id: The id of the model's call this exchange answers.
+    """
+
+    turn: CarriedTurn
+    call_id: str
+
+
+class CarriedHistory:
+    """The model turn behind each transcript exchange, for one tool loop.
+
+    In plain terms: a loop's ``turn_fn`` makes one of these and keeps it for
+    the life of that loop (one section, or one chat answer), in memory only.
+    After each turn it notes the entries the backend returned, one per tool
+    call; on the next turn, once the loop has run those calls (one transcript
+    exchange each, in order), they line up with the new exchanges. If the
+    counts ever differ, those exchanges get no entry and are sent rebuilt.
+    """
+
+    def __init__(self) -> None:
+        self._links: list[CarriedCall | None] = []
+        self._pending: list[CarriedCall | None] = []
+
+    def catch_up(self, transcript: Sequence[ToolExchange]) -> None:
+        """Line the last turn's entries up with the exchanges the loop added.
+
+        Args:
+            transcript: The loop's exchanges so far, the last turn's included.
+        """
+        added = len(transcript) - len(self._links)
+        self._links.extend(self._pending if len(self._pending) == added else [None] * added)
+        self._pending = []
+
+    def expect(self, links: Sequence[CarriedCall | None] | None, *, calls: int) -> None:
+        """Note a turn's entries, to line up with its exchanges on the next turn.
+
+        Args:
+            links: One entry per tool call, or ``None`` when the turn has none.
+            calls: The number of tool calls the turn made.
+        """
+        self._pending = list(links) if links is not None else [None] * calls
+
+    def kwargs(self) -> dict[str, Any]:
+        """``{"carried": [...]}`` for the next backend call, or ``{}`` with nothing to carry.
+
+        Nothing is passed when there is nothing to carry, so a backend that
+        returns no entries is called exactly as it always was.
+
+        Returns:
+            The keyword arguments to add to the backend call.
+        """
+        return {"carried": list(self._links)} if any(self._links) else {}
+
+
 # --- Directive types (the fail-closed context["synthesis"] grammar) ---
 
 
@@ -478,7 +544,13 @@ class MalformedEmissionError(Exception):
     turn-consuming error exchange — the model reads the bounded validation
     error as data and re-emits — so recovery stays inside the turn budget; on
     the forced final turn it is a structural failure (never an extension).
+
+    Attributes:
+        carried: The turn the faulty call came from, when the backend has it
+            (the loop carries it on, with the error as that call's result).
     """
+
+    carried: CarriedCall | None = None
 
 
 class SectionLoopResult(TypedDict):
@@ -3623,6 +3695,13 @@ def run_section_loop(
     claims on an open turn by itself (the offline scripted backend) is still
     accepted.
 
+    The loop keeps, in memory and for this one section only, the model turn
+    behind each transcript exchange (:class:`CarriedHistory`), and passes it to
+    the backend as ``carried`` on each later turn and on the write turn, so the
+    model's own earlier turns (its reasoning included) are sent back instead of
+    rebuilt copies. A ``ready`` turn is never sent back; a malformed emission is
+    sent back with its error as the result of the faulty call.
+
     Args:
         backend: Synthesis backend implementing ``section_turn``, and
             optionally ``section_emit_stream`` for a streamed write turn.
@@ -3663,6 +3742,8 @@ def run_section_loop(
 
     stream_emit = getattr(backend, "section_emit_stream", None)
 
+    carried = CarriedHistory()
+
     def write(transcript: list[ToolExchange]) -> UsageResult[Mapping[str, Any]]:
         # The write turn: "Writing" for the user, then the section streamed
         # when the backend can, else the forced emit_section call.
@@ -3670,28 +3751,41 @@ def run_section_loop(
             activity=activity("synthesise.writing"), section=section_line
         )
         if stream_emit is not None:
-            streamed: UsageResult[Mapping[str, Any]] = stream_emit(seed, transcript)
+            streamed: UsageResult[Mapping[str, Any]] = stream_emit(
+                seed, transcript, **carried.kwargs()
+            )
             return streamed
         forced: UsageResult[Mapping[str, Any]] = backend.section_turn(
-            seed, transcript, force_emit=True
+            seed, transcript, force_emit=True, **carried.kwargs()
         )
         return forced
 
     def turn_fn(
         transcript: list[ToolExchange], *, force_emit: bool
     ) -> UsageResult[LoopTurn]:
-        if force_emit:
-            result, usage = write(transcript)
-        else:
-            result, usage = backend.section_turn(seed, transcript, force_emit=False)
-            if result.get("ready"):
-                # The writer said it has enough (write_section):
-                # write in this same loop turn and count both calls' tokens.
-                result, write_usage = write(transcript)
-                usage = add_token_usage(usage, write_usage)
+        carried.catch_up(transcript)
+        try:
+            if force_emit:
+                result, usage = write(transcript)
+            else:
+                result, usage = backend.section_turn(
+                    seed, transcript, force_emit=False, **carried.kwargs()
+                )
+                if result.get("ready"):
+                    # The writer said it has enough (write_section):
+                    # write in this same loop turn and count both calls' tokens.
+                    # The ready turn itself never enters the history.
+                    result, write_usage = write(transcript)
+                    usage = add_token_usage(usage, write_usage)
+        except MalformedEmissionError as exc:
+            # The loop records one error exchange, the faulty call's result.
+            carried.expect([exc.carried], calls=1)
+            raise
+        tool_calls = result.get("tool_calls", [])
+        carried.expect(result.get("carried"), calls=len(tool_calls))
         return {
             "emission": result.get("claims"),
-            "tool_calls": result.get("tool_calls", []),
+            "tool_calls": tool_calls,
             "malformed": int(result.get("malformed_claims", 0)),
             "extra_ignored": int(result.get("extra_tool_calls_ignored", 0)),
         }, usage

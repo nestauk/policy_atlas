@@ -34,7 +34,7 @@ plus the typed claims that anchor into it (ADR 0015).
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
@@ -42,7 +42,7 @@ from typing import Any, Literal, NotRequired, Protocol, TypedDict
 import structlog
 from langfuse import Langfuse
 from openai.lib._pydantic import to_strict_json_schema
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from policy_atlas.core import tracing
 from policy_atlas.core.liveness import (
@@ -54,18 +54,25 @@ from policy_atlas.core.liveness import (
 )
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    AnswerCutOff,
     JsonArrayObjectDecoder,
     JsonStringFieldDecoder,
+    ModelRefusal,
+    ModelTurn,
+    ToolCall,
     openai_kwargs,
-    require_parsed,
+    parse_structured,
     require_single_tool_call,
     resolve_openai_client,
+    send_turn,
+    stream_turn,
     with_system_breakpoint,
 )
 from policy_atlas.core.usage import (
+    TokenUsage,
     UsageResult,
+    add_token_usage,
     log_usage,
-    token_usage_from_provider,
     usage_details,
     usage_metadata,
 )
@@ -120,6 +127,7 @@ from policy_atlas.evidence_search.synthesis.summary_prompts import (
     SUMMARY_JUDGE_PROMPT_VERSION,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
+    CarriedCall,
     MalformedEmissionError,
     ToolCallRequest,
     ToolExchange,
@@ -147,15 +155,14 @@ FULL_REPORT_INTRO_MODEL = route().model_for("synthesise_write_intro")
 def _step_kwargs(step: str) -> dict[str, Any]:
     """Return the model, reasoning effort and request timeout for one synthesis call site.
 
-    All three come from the route file: Terra needs
-    ``"none"`` or tool-bearing and structured-parse calls return 400,
-    and the route file says so on the writer steps.
+    All three come from the route file.
 
     Args:
         step: A step name from the route file's ``[steps]`` table.
 
     Returns:
-        Kwargs suitable for ``chat.completions.create`` / ``parse``.
+        Chat-style keyword arguments, which the model-call module translates for
+        the provider's endpoint.
     """
     return openai_kwargs(
         route().model_for(step),
@@ -182,6 +189,44 @@ def _cache_messages(step: str, messages: list[Any]) -> list[Any]:
     if cache_mode_for(step) == "breakpoint":
         return with_system_breakpoint(messages)
     return messages
+
+
+def _parse_step[T: BaseModel](
+    client: Any,
+    step: str,
+    messages: list[Any],
+    response_format: type[T],
+    *,
+    usage_event: str,
+    label: str,
+) -> UsageResult[T]:
+    """Run one structured-output call for a synthesis step.
+
+    The model, effort, prompt-cache mode and timeout all come from the step;
+    :func:`parse_structured` applies the cache breakpoint itself.
+
+    Args:
+        client: The OpenAI client.
+        step: A step name from the route file's ``[steps]`` table.
+        messages: The chat messages built for the call.
+        response_format: The pydantic wire type to parse into.
+        usage_event: structlog event name for usage logging.
+        label: Call label used in error messages.
+
+    Returns:
+        The parsed output plus token usage.
+    """
+    return parse_structured(
+        client,
+        messages=messages,
+        response_format=response_format,
+        usage_event=usage_event,
+        label=label,
+        model=route().model_for(step),
+        reasoning_effort=route().effort_for(step),
+        prompt_cache=cache_mode_for(step),
+        timeout_s=route().timeout_for(step),
+    )
 
 # Read-path ceiling for section titles (artefacts minted before the 60-character
 # proposal bound); the
@@ -228,6 +273,10 @@ class SectionTurn(TypedDict):
     it called ``write_section``, or replied with no tool
     call at all. Such a turn carries no reads and no claims; the loop then
     runs the write turn, which streams the section to the user.
+
+    ``carried`` (live backend only) is parallel to ``tool_calls``: for each
+    call, the model turn it came from, which the section loop keeps in memory
+    to send back on the next turn. No trace or stored record reads it.
     """
 
     tool_calls: list[ToolCallRequest]
@@ -235,6 +284,7 @@ class SectionTurn(TypedDict):
     malformed_claims: NotRequired[int]
     extra_tool_calls_ignored: NotRequired[int]
     ready: NotRequired[bool]
+    carried: NotRequired[list[CarriedCall]]
 
 
 # --- The backend seam ---
@@ -309,6 +359,7 @@ class SynthesisBackend(Protocol):
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Produce one loop turn: one or more read-tool calls, the claims
         emission, or the ready signal.
@@ -317,6 +368,9 @@ class SynthesisBackend(Protocol):
             seed: Id-keyed section seed.
             transcript: Executed tool exchanges so far.
             force_emit: True on the final turn — the backend must emit claims.
+            carried: One entry per exchange: the model turn it came from, to
+                send back instead of the rebuilt messages (a backend with no
+                model may ignore it).
 
         Returns:
             The turn plus token usage: exactly one of ``tool_calls`` (one or
@@ -887,9 +941,41 @@ def _first_theme_reference(
     return None
 
 
+def _emission_turn(client: Any, *, usage_event: str, **request: Any) -> ModelTurn:
+    """Send one tool turn; a cut-off or refused answer is a malformed emission.
+
+    Its tool-call arguments would be unfinished JSON, so the turn takes the
+    malformed-emission path (not tried again); the tokens it used are still logged.
+
+    Raises:
+        MalformedEmissionError: If the answer was cut off or refused.
+    """
+    try:
+        return send_turn(client, **request)
+    except (AnswerCutOff, ModelRefusal) as exc:
+        log_usage(usage_event, exc.usage)
+        raise MalformedEmissionError(str(exc)) from exc
+
+
+def _record_failed_stream(
+    usage_event: str, usage: TokenUsage | None, span: Any | None, metadata: dict[str, Any]
+) -> None:
+    """Log a stream's tokens, and put them on its generation, when it ended cut off or refused."""
+    log_usage(usage_event, usage)
+    if span is not None:
+        span.update(
+            usage_details=usage_details(usage), metadata={**metadata, **usage_metadata(usage)}
+        )
+
+
+def _failed_stream_usage(exc: BaseException) -> TokenUsage | None:
+    """The tokens billed for a stream that ended cut off or refused (``None`` for other errors)."""
+    return exc.usage if isinstance(exc, AnswerCutOff | ModelRefusal) else None
+
+
 def _first_named_tool_call(
-    response: Any, *, name: str, label: str
-) -> tuple[Any, list[str]]:
+    turn: ModelTurn, *, name: str, label: str
+) -> tuple[ToolCall, list[str]]:
     """Return a forced response's first ``name`` call and the ignored calls' names.
 
     The forced final section turn and the repair keep ``parallel_tool_calls``
@@ -901,7 +987,7 @@ def _first_named_tool_call(
     protocol check still fires.
 
     Args:
-        response: A chat-completions ``create`` response.
+        turn: The model's answer.
         name: The forced function's name.
         label: Human-readable call label for error messages and the log.
 
@@ -909,18 +995,16 @@ def _first_named_tool_call(
         The taken tool call and the names of the ignored ones, in order.
 
     Raises:
-        RuntimeError: If the response has no choices or no tool call.
+        RuntimeError: If the response has no tool call.
     """
-    if not response.choices:
-        raise RuntimeError(f"OpenAI {label} response had no choices.")
-    tool_calls = response.choices[0].message.tool_calls or []
+    tool_calls = turn.tool_calls
     if not tool_calls:
         raise RuntimeError(f"OpenAI {label} response had no tool call.")
     taken_index = next(
-        (index for index, call in enumerate(tool_calls) if call.function.name == name), 0
+        (index for index, call in enumerate(tool_calls) if call.name == name), 0
     )
     ignored = [
-        str(call.function.name)
+        call.name
         for index, call in enumerate(tool_calls)
         if index != taken_index
     ]
@@ -980,15 +1064,6 @@ class OpenAISynthesisBackend:
         """Tracing client shared with the section read loop (``tool:*`` spans)."""
         return self._langfuse_client
 
-    def _section_messages(
-        self,
-        seed: dict[str, Any],
-        transcript: list[ToolExchange],
-        *,
-        force_emit: bool,
-    ) -> list[dict[str, Any]]:
-        return build_section_messages(seed, transcript, force_emit=force_emit)
-
     @property
     def _section_prompt_version(self) -> str:
         return SECTION_PROMPT_VERSION
@@ -1002,17 +1077,14 @@ class OpenAISynthesisBackend:
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[SectionProposalWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.parse(
-            **_step_kwargs("synthesise_propose_sections"),
-            messages=_cache_messages("synthesise_propose_sections", messages),
-            response_format=SectionProposalWire,
+        return _parse_step(
+            self._client,
+            "synthesise_propose_sections",
+            messages,
+            SectionProposalWire,
+            usage_event="synthesis.proposal.usage",
+            label="synthesis section proposal",
         )
-        log_usage("synthesis.proposal.usage", response.usage)
-        parsed_model: SectionProposalWire = require_parsed(
-            response, label="synthesis section proposal"
-        )
-        return parsed_model, token_usage_from_provider(response.usage)
 
     def propose_sections(
         self,
@@ -1070,15 +1142,14 @@ class OpenAISynthesisBackend:
     def _write_summary_once(
         self, messages: list[dict[str, Any]], *, step: str
     ) -> UsageResult[SummaryWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.parse(
-            **_step_kwargs(step),
-            messages=_cache_messages(step, messages),
-            response_format=SummaryWire,
+        return _parse_step(
+            self._client,
+            step,
+            messages,
+            SummaryWire,
+            usage_event="synthesis.summary.usage",
+            label="synthesis summary",
         )
-        log_usage("synthesis.summary.usage", response.usage)
-        parsed = require_parsed(response, label="synthesis summary")
-        return parsed, token_usage_from_provider(response.usage)
 
     def write_block_summary(self, seed: dict[str, Any]) -> UsageResult[SummaryWire]:
         """Write a block navigation summary through structured OpenAI output.
@@ -1138,15 +1209,14 @@ class OpenAISynthesisBackend:
         messages = build_summary_judge_messages(summary=summary, detail=detail)
 
         def _call() -> UsageResult[SummaryJudgeWire]:
-            completions: Any = self._client.chat.completions
-            response = completions.parse(
-                **_step_kwargs("synthesise_judge_summary"),
-                messages=_cache_messages("synthesise_judge_summary", messages),
-                response_format=SummaryJudgeWire,
+            return _parse_step(
+                self._client,
+                "synthesise_judge_summary",
+                messages,
+                SummaryJudgeWire,
+                usage_event="synthesis.summary_judge.usage",
+                label="synthesis summary judge",
             )
-            log_usage("synthesis.summary_judge.usage", response.usage)
-            parsed = require_parsed(response, label="synthesis summary judge")
-            return parsed, token_usage_from_provider(response.usage)
 
         def _update(span: Any, result: UsageResult[SummaryJudgeWire]) -> None:
             verdict, usage = result
@@ -1168,7 +1238,7 @@ class OpenAISynthesisBackend:
 
     def _create_section_turn_once(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Any],
         *,
         force_emit: bool,
         tools: list[dict[str, Any]] | None = None,
@@ -1178,8 +1248,10 @@ class OpenAISynthesisBackend:
         # differs (allowed_tools over the four section tools, or emit_section
         # by name on the forced final turn). ``tools`` defaults to the full
         # lookup vocabulary when a caller has no seed to derive it from.
-        completions: Any = self._client.chat.completions
-        response = completions.create(
+        response = _emission_turn(
+            self._client,
+            usage_event="synthesis.section_turn.usage",
+            label="synthesis section turn",
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
             tools=tools if tools is not None else section_request_tools({}),
@@ -1189,32 +1261,40 @@ class OpenAISynthesisBackend:
             ),
         )
         log_usage("synthesis.section_turn.usage", response.usage)
+        carried_turn = response.carried
 
-        def _emit_turn(arguments: str) -> UsageResult[SectionTurn]:
-            section, malformed = _salvage_section(arguments)
+        def _emit_turn(call: ToolCall) -> UsageResult[SectionTurn]:
+            try:
+                section, malformed = _salvage_section(call.arguments)
+            except MalformedEmissionError as exc:
+                if carried_turn is not None:
+                    exc.carried = CarriedCall(carried_turn, call.call_id)
+                raise
             turn: SectionTurn = {"tool_calls": [], "claims": section}
             if malformed:
                 turn["malformed_claims"] = malformed
-            return turn, token_usage_from_provider(response.usage)
+            return turn, response.usage
 
-        def _read_turn(name: str, arguments: str) -> UsageResult[SectionTurn]:
-            return {
-                "tool_calls": [{"tool": name, "arguments": _json_object_or_empty(arguments)}],
+        def _read_turn(calls: list[ToolCall]) -> UsageResult[SectionTurn]:
+            turn: SectionTurn = {
+                "tool_calls": [
+                    {"tool": call.name, "arguments": _json_object_or_empty(call.arguments)}
+                    for call in calls
+                ],
                 "claims": None,
-            }, token_usage_from_provider(response.usage)
+            }
+            if carried_turn is not None:
+                turn["carried"] = [CarriedCall(carried_turn, call.call_id) for call in calls]
+            return turn, response.usage
 
         if force_emit:
             taken, ignored = _first_named_tool_call(
                 response, name="emit_section", label="synthesis section turn"
             )
-            name = taken.function.name
-            arguments = taken.function.arguments
-            if not isinstance(name, str) or not name:
+            if not taken.name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if not isinstance(arguments, str):
-                arguments = "{}"
-            forced_turn = _emit_turn(arguments) if name == "emit_section" else _read_turn(
-                name, arguments
+            forced_turn = (
+                _emit_turn(taken) if taken.name == "emit_section" else _read_turn([taken])
             )
             if ignored:
                 forced_turn[0]["extra_tool_calls_ignored"] = len(ignored)
@@ -1225,11 +1305,9 @@ class OpenAISynthesisBackend:
                 "tool_calls": [],
                 "claims": None,
                 "ready": True,
-            }, token_usage_from_provider(response.usage)
+            }, response.usage
 
-        if not response.choices:
-            raise RuntimeError("OpenAI synthesis section turn response had no choices.")
-        message_tool_calls = response.choices[0].message.tool_calls or []
+        message_tool_calls = response.tool_calls
         if not message_tool_calls:
             # A bare reply with no tool call means the writer is ready to write
             # The loop runs the write turn next.
@@ -1237,40 +1315,32 @@ class OpenAISynthesisBackend:
 
         if len(message_tool_calls) == 1:
             only_call = message_tool_calls[0]
-            name = only_call.function.name
-            arguments = only_call.function.arguments
-            if not isinstance(name, str) or not name:
+            if not only_call.name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if not isinstance(arguments, str):
-                arguments = "{}"
-            if name == "write_section":
+            if only_call.name == "write_section":
                 return _ready_turn()
-            if name == "emit_section":
-                return _emit_turn(arguments)
-            return _read_turn(name, arguments)
+            if only_call.name == "emit_section":
+                return _emit_turn(only_call)
+            return _read_turn([only_call])
 
-        read_calls: list[ToolCallRequest] = []
-        emit_arguments: str | None = None
+        read_calls: list[ToolCall] = []
+        emit_call: ToolCall | None = None
         write_requested = False
         for tool_call in message_tool_calls:
-            name = tool_call.function.name
-            arguments = tool_call.function.arguments
-            if not isinstance(name, str) or not name:
+            if not tool_call.name:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
-            if not isinstance(arguments, str):
-                arguments = "{}"
-            if name == "write_section":
+            if tool_call.name == "write_section":
                 write_requested = True
                 continue
-            if name == "emit_section":
-                emit_arguments = arguments
+            if tool_call.name == "emit_section":
+                emit_call = tool_call
                 continue
-            read_calls.append({"tool": name, "arguments": _json_object_or_empty(arguments)})
-        if emit_arguments is not None and not read_calls:
+            read_calls.append(tool_call)
+        if emit_call is not None and not read_calls:
             # Every parallel call was emit_section (perhaps beside
             # write_section) — honour the emission rather than returning an
             # empty turn the loop would treat as a protocol violation.
-            return _emit_turn(emit_arguments)
+            return _emit_turn(emit_call)
         if write_requested and not read_calls:
             # Every parallel call was write_section: the writer is ready.
             return _ready_turn()
@@ -1280,11 +1350,11 @@ class OpenAISynthesisBackend:
             log.warning(
                 "synthesis.write_with_reads_deferred", read_tool_count=len(read_calls)
             )
-        if emit_arguments is not None:
+        if emit_call is not None:
             log.warning(
                 "synthesis.emit_with_reads_deferred", read_tool_count=len(read_calls)
             )
-        return {"tool_calls": read_calls, "claims": None}, token_usage_from_provider(response.usage)
+        return _read_turn(read_calls)
 
     def section_turn(
         self,
@@ -1292,6 +1362,7 @@ class OpenAISynthesisBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Produce one OpenAI tool-forced section-loop turn.
 
@@ -1299,6 +1370,9 @@ class OpenAISynthesisBackend:
             seed: Section seed record.
             transcript: Executed tool exchanges so far.
             force_emit: Whether this is the final forced-emission turn.
+            carried: One entry per exchange: the model turn it came from, sent
+                back in place of the rebuilt messages. The trace shows the
+                rebuilt messages: carried items never reach it.
 
         Returns:
             Read-tool call requests, a claims emission, or (on an open turn) the
@@ -1307,7 +1381,13 @@ class OpenAISynthesisBackend:
         Raises:
             RuntimeError: If the provider response violates the one-tool-call protocol.
         """
-        messages = self._section_messages(seed, transcript, force_emit=force_emit)
+        # The trace's copy is rebuilt, so carried items never reach a trace.
+        traced_messages = build_section_messages(seed, transcript, force_emit=force_emit)
+        messages = (
+            build_section_messages(seed, transcript, force_emit=force_emit, carried=carried)
+            if carried is not None
+            else traced_messages
+        )
         tools = section_request_tools(seed)
         turn_index = self._next_turn_index() if self._langfuse_client is not None else 0
 
@@ -1315,7 +1395,7 @@ class OpenAISynthesisBackend:
             turn, usage = result
             span.update(
                 usage_details=usage_details(usage),
-                input={"messages": messages},
+                input={"messages": traced_messages},
                 output=_turn_output(turn),
                 model=route().model_for("synthesise_section_turn"),
                 metadata={
@@ -1343,6 +1423,8 @@ class OpenAISynthesisBackend:
         self,
         seed: dict[str, Any],
         transcript: list[ToolExchange],
+        *,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Write the section as one streamed reply.
 
@@ -1377,6 +1459,9 @@ class OpenAISynthesisBackend:
         Args:
             seed: Section seed record.
             transcript: Executed tool exchanges so far.
+            carried: One entry per exchange: the model turn it came from, sent
+                back in place of the rebuilt messages (on the fallback too).
+                The trace shows the rebuilt messages.
 
         Returns:
             A parsed claims emission plus token usage.
@@ -1384,8 +1469,16 @@ class OpenAISynthesisBackend:
         step = "synthesise_section_emit"
         # ``streamed=True`` appends the write-turn message whatever
         # ``force_emit`` says, so the ready and the forced write send the same.
-        messages = build_section_messages(
+        # The trace's copy is rebuilt, so carried items never reach a trace.
+        traced_messages = build_section_messages(
             seed, transcript, force_emit=False, streamed=True
+        )
+        messages = (
+            build_section_messages(
+                seed, transcript, force_emit=False, streamed=True, carried=carried
+            )
+            if carried is not None
+            else traced_messages
         )
         tools = section_request_tools(seed)
         # Deltas are addressed to the page's section index (key findings first
@@ -1402,40 +1495,37 @@ class OpenAISynthesisBackend:
 
         def _stream(span: Any | None = None) -> UsageResult[SectionTurn]:
             if span is not None:
-                span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+                span.update(input={"messages": traced_messages}, metadata=metadata)
+            stream = stream_turn(
+                self._client,
+                label="synthesis section emit",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 tools=tools,
                 tool_choice="none",
-                stream=True,
                 stream_options={"include_usage": True},
             )
             decoder = JsonStringFieldDecoder("prose")
             markers = StreamedClaimMarker(index, seed, transcript)
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        decoded = decoder.feed(fragment)
-                        if decoded:
-                            publish_section_delta(index, decoded)
-                        markers.feed(fragment, decoded)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.section_emit_stream.usage", provider_usage)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    decoded = decoder.feed(fragment)
+                    if decoded:
+                        publish_section_delta(index, decoded)
+                    markers.feed(fragment, decoded)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream(
+                    "synthesis.section_emit_stream.usage", exc.usage, span, metadata
+                )
+                raise
+            log_usage("synthesis.section_emit_stream.usage", stream.usage)
             section, malformed = _salvage_section(_strip_code_fence(text))
             turn: SectionTurn = {"tool_calls": [], "claims": section}
             if malformed:
                 turn["malformed_claims"] = malformed
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -1449,11 +1539,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:section_emit",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:section_emit",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(
@@ -1464,13 +1557,14 @@ class OpenAISynthesisBackend:
                 publish_section_delta(index, "", mode="replace")
                 with self._lock:
                     self.stream_fallbacks += 1
-                result = self.section_turn(seed, transcript, force_emit=True)
+                carried_kwargs = {"carried": carried} if carried is not None else {}
+                result = self.section_turn(seed, transcript, force_emit=True, **carried_kwargs)
                 # The fallback's prose reaches the page at once, not at
                 # ``section_completed`` after the claim checks and the repair.
                 section = result[0]["claims"]
                 if section is not None and section.prose:
                     publish_section_delta(index, section.prose, mode="replace")
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
     def _repair_once(
         self,
@@ -1482,8 +1576,10 @@ class OpenAISynthesisBackend:
         # The same five tools and parallel tool calls as the
         # section turns, so the repair reads the section's cached prefix;
         # emit_repairs is forced by name.
-        completions: Any = self._client.chat.completions
-        response = completions.create(
+        response = _emission_turn(
+            self._client,
+            usage_event="synthesis.repair.usage",
+            label="synthesis repair",
             **_step_kwargs("synthesise_section_turn"),
             messages=messages,
             tools=tools if tools is not None else section_request_tools({}),
@@ -1494,18 +1590,15 @@ class OpenAISynthesisBackend:
         taken, ignored = _first_named_tool_call(
             response, name="emit_repairs", label="synthesis repair"
         )
-        function = taken.function
-        if function.name != "emit_repairs":
+        if taken.name != "emit_repairs":
             raise RuntimeError("OpenAI synthesis repair response did not emit repairs.")
-        arguments = function.arguments
-        if not isinstance(arguments, str):
-            arguments = "{}"
+        arguments = taken.arguments
         # An unparseable envelope means the loop-free, unrepeatable repair
         # produced nothing — the raised MalformedEmissionError lands the
         # failing claims per the exhaustion rules (soft-flag / the counted
         # exclusions), never a whole-component failure.
         repairs = _salvage_repairs(arguments)
-        return repairs, token_usage_from_provider(response.usage), len(ignored)
+        return repairs, response.usage, len(ignored)
 
     def repair_section(
         self,
@@ -1560,24 +1653,26 @@ class OpenAISynthesisBackend:
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[SectionProseWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.create(
-            **_step_kwargs("synthesise_write_key_findings"),
-            messages=_cache_messages("synthesise_write_key_findings", messages),
-            tools=[EMIT_SECTION_TOOL_SCHEMA],
-            tool_choice={"type": "function", "function": {"name": "emit_section"}},
-        )
+        try:
+            response = send_turn(
+                self._client,
+                label="synthesis key findings",
+                **_step_kwargs("synthesise_write_key_findings"),
+                messages=_cache_messages("synthesise_write_key_findings", messages),
+                tools=[EMIT_SECTION_TOOL_SCHEMA],
+                tool_choice={"type": "function", "function": {"name": "emit_section"}},
+            )
+        except (AnswerCutOff, ModelRefusal) as exc:
+            # A malformed emission, so the absence path below (empty emission).
+            log_usage("synthesis.key_findings.usage", exc.usage)
+            return SectionProseWire(prose="", claims=[]), exc.usage
         log_usage("synthesis.key_findings.usage", response.usage)
-        function = require_single_tool_call(
-            response, label="synthesis key findings"
-        ).function
+        function = require_single_tool_call(response, label="synthesis key findings")
         if function.name != "emit_section":
             raise RuntimeError(
                 "OpenAI synthesis key-findings response did not emit a section."
             )
         arguments = function.arguments
-        if not isinstance(arguments, str):
-            arguments = "{}"
         try:
             # Reuse the section salvage path (per-claim salvage). A malformed
             # emission with no recoverable prose is treated as the absence path
@@ -1586,7 +1681,7 @@ class OpenAISynthesisBackend:
             section, _malformed = _salvage_section(arguments)
         except MalformedEmissionError:
             section = SectionProseWire(prose="", claims=[])
-        return section, token_usage_from_provider(response.usage)
+        return section, response.usage
 
     def write_key_findings(
         self, seed: dict[str, Any]
@@ -1674,8 +1769,9 @@ class OpenAISynthesisBackend:
         def _stream(span: Any | None = None) -> UsageResult[SectionProseWire]:
             if span is not None:
                 span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                self._client,
+                label="synthesis key findings",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 response_format={
@@ -1686,7 +1782,6 @@ class OpenAISynthesisBackend:
                         "strict": True,
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
             )
             decoder = JsonStringFieldDecoder("prose")
@@ -1694,24 +1789,19 @@ class OpenAISynthesisBackend:
                 index, seed, [], sources=sources if sources is not None else ({}, {})
             )
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        decoded = decoder.feed(fragment)
-                        if decoded:
-                            publish_section_delta(index, decoded)
-                        markers.feed(fragment, decoded)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.key_findings.usage", provider_usage)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    decoded = decoder.feed(fragment)
+                    if decoded:
+                        publish_section_delta(index, decoded)
+                    markers.feed(fragment, decoded)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream("synthesis.key_findings.usage", exc.usage, span, metadata)
+                raise
+            log_usage("synthesis.key_findings.usage", stream.usage)
             section, _malformed = _salvage_section(_strip_code_fence(text))
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -1725,11 +1815,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:write_key_findings",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:write_key_findings",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(
@@ -1743,21 +1836,20 @@ class OpenAISynthesisBackend:
                 result = self.write_key_findings(seed)
                 if result[0].prose:
                     publish_section_delta(index, result[0].prose, mode="replace")
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
     def _write_case_studies_once(
         self,
         messages: list[dict[str, Any]],
     ) -> UsageResult[CaseStudyWire]:
-        completions: Any = self._client.chat.completions
-        response = completions.parse(
-            **_step_kwargs("synthesise_write_case_studies"),
-            messages=_cache_messages("synthesise_write_case_studies", messages),
-            response_format=CaseStudyWire,
+        return _parse_step(
+            self._client,
+            "synthesise_write_case_studies",
+            messages,
+            CaseStudyWire,
+            usage_event="synthesis.case_studies.usage",
+            label="synthesis case studies",
         )
-        log_usage("synthesis.case_studies.usage", response.usage)
-        parsed = require_parsed(response, label="synthesis case studies")
-        return parsed, token_usage_from_provider(response.usage)
 
     def write_case_studies(
         self, seed: dict[str, Any]
@@ -1829,8 +1921,9 @@ class OpenAISynthesisBackend:
         def _stream(span: Any | None = None) -> UsageResult[CaseStudyWire]:
             if span is not None:
                 span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                self._client,
+                label="synthesis case studies",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 # The schema ``parse`` sends for the same wire.
@@ -1842,26 +1935,20 @@ class OpenAISynthesisBackend:
                         "strict": True,
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
             )
             cards = StreamedCardPublisher(index)
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        cards.feed(fragment)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.case_studies.usage", provider_usage)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    cards.feed(fragment)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream("synthesis.case_studies.usage", exc.usage, span, metadata)
+                raise
+            log_usage("synthesis.case_studies.usage", stream.usage)
             wire = CaseStudyWire.model_validate_json(_strip_code_fence(text))
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -1875,11 +1962,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:write_case_studies",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:write_case_studies",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(
@@ -1894,7 +1984,7 @@ class OpenAISynthesisBackend:
                 for card in result[0].cards:
                     if card.title.strip() and card.prose.strip():
                         publish_section_card(index, card.title, card.prose)
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
     def write_source_note(
         self, seed: dict[str, Any]
@@ -1919,15 +2009,14 @@ class OpenAISynthesisBackend:
         ]
 
         def _call() -> UsageResult[NoteWire]:
-            completions: Any = client.chat.completions
-            response = completions.parse(
-                **_step_kwargs("synthesise_write_source_note"),
-                messages=_cache_messages("synthesise_write_source_note", messages),
-                response_format=NoteWire,
+            return _parse_step(
+                client,
+                "synthesise_write_source_note",
+                messages,
+                NoteWire,
+                usage_event="synthesis.mrs_note.usage",
+                label="MRS note",
             )
-            log_usage("synthesis.mrs_note.usage", response.usage)
-            parsed = require_parsed(response, label="MRS note")
-            return parsed, token_usage_from_provider(response.usage)
 
         def _update(span: Any, result: UsageResult[NoteWire]) -> None:
             wire, usage = result
@@ -1974,15 +2063,14 @@ class OpenAISynthesisBackend:
         ]
 
         def _call() -> UsageResult[IntroWire]:
-            completions: Any = client.chat.completions
-            response = completions.parse(
-                **_step_kwargs("synthesise_write_intro"),
-                messages=_cache_messages("synthesise_write_intro", messages),
-                response_format=IntroWire,
+            return _parse_step(
+                client,
+                "synthesise_write_intro",
+                messages,
+                IntroWire,
+                usage_event="synthesis.full_report_intro.usage",
+                label="full report intro",
             )
-            log_usage("synthesis.full_report_intro.usage", response.usage)
-            parsed = require_parsed(response, label="full report intro")
-            return parsed, token_usage_from_provider(response.usage)
 
         def _update(span: Any, result: UsageResult[IntroWire]) -> None:
             wire, usage = result
@@ -2052,8 +2140,9 @@ class OpenAISynthesisBackend:
         def _stream(span: Any | None = None) -> UsageResult[IntroWire]:
             if span is not None:
                 span.update(input={"messages": messages}, metadata=metadata)
-            completions: Any = client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                client,
+                label="full report intro",
                 **_step_kwargs(step),
                 messages=_cache_messages(step, messages),
                 # The schema ``parse`` sends for the same wire.
@@ -2065,28 +2154,24 @@ class OpenAISynthesisBackend:
                         "strict": True,
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
             )
             decoder = JsonStringFieldDecoder("intro")
             text = ""
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    delta = getattr(choices[0], "delta", None)
-                    fragment = getattr(delta, "content", None)
-                    if isinstance(fragment, str):
-                        text += fragment
-                        decoded = decoder.feed(fragment)
-                        if decoded:
-                            publish_section_delta(index, decoded)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage("synthesis.full_report_intro.usage", provider_usage)
+            try:
+                for fragment in stream:
+                    text += fragment
+                    decoded = decoder.feed(fragment)
+                    if decoded:
+                        publish_section_delta(index, decoded)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                _record_failed_stream(
+                    "synthesis.full_report_intro.usage", exc.usage, span, metadata
+                )
+                raise
+            log_usage("synthesis.full_report_intro.usage", stream.usage)
             wire = IntroWire.model_validate_json(_strip_code_fence(text))
-            usage = token_usage_from_provider(provider_usage)
+            usage = stream.usage
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -2100,11 +2185,14 @@ class OpenAISynthesisBackend:
             try:
                 if self._langfuse_client is None:
                     return _stream()
-                with tracing._observation(
-                    self._langfuse_client,
-                    name="synthesise:write_intro",
-                    as_type="generation",
-                ) as span:
+                with (
+                    tracing._observation(
+                        self._langfuse_client,
+                        name="synthesise:write_intro",
+                        as_type="generation",
+                    ) as span,
+                    tracing.request_id_scope(span),
+                ):
                     return _stream(span)
             except Exception as exc:
                 log.warning(
@@ -2118,7 +2206,7 @@ class OpenAISynthesisBackend:
                 result = self.write_full_report_intro(seed)
                 if result[0].intro:
                     publish_section_delta(index, result[0].intro, mode="replace")
-                return result
+                return result[0], add_token_usage(_failed_stream_usage(exc), result[1])
 
 
 class StubSynthesisBackend:
@@ -2290,6 +2378,7 @@ class StubSynthesisBackend:
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Sequence[CarriedCall | None] | None = None,
     ) -> UsageResult[SectionTurn]:
         """Return the next scripted turn, default tool call, or deterministic claims.
 
@@ -2297,6 +2386,7 @@ class StubSynthesisBackend:
             seed: Section seed record.
             transcript: Executed tool exchanges so far.
             force_emit: Whether this is the final forced-emission turn.
+            carried: Ignored: the stub has no model turn to send back.
 
         Returns:
             One tool call request or a deterministic claims emission, plus no
@@ -2305,6 +2395,7 @@ class StubSynthesisBackend:
         Raises:
             RuntimeError: If the failure sentinel is enabled.
         """
+        del carried
         self._raise_if_failed()
         scripted = self._scripted_turn(seed, transcript, force_emit=force_emit)
         if scripted is not None:

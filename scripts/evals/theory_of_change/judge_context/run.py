@@ -5,6 +5,7 @@ from typing import Literal
 sys.path.insert(0, "scripts/evals/theory_of_change"); sys.path.insert(0, sys.argv[1])
 import _route  # noqa
 import harness as H
+from policy_atlas.core.openai_client import parse_structured
 from labels import LABELS
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text as sql
@@ -123,11 +124,9 @@ def messages(v, l, policy, chain, doc):
 def call(v, l, policy, chain, doc):
     schema = V3Response if v == "V3" else JP.JudgeResponse
     t = time.time()
-    r = h.client.chat.completions.parse(model=MODEL, messages=messages(v, l, policy, chain, doc), response_format=schema,
-        max_completion_tokens=4000, reasoning_effort="none")
-    p = r.choices[0].message.parsed; u = r.usage
-    cached = (u.prompt_tokens_details.cached_tokens or 0) if u.prompt_tokens_details else 0
-    usd = ((u.prompt_tokens - cached) * PRICE[0] + cached * PRICE[1] + u.completion_tokens * PRICE[2]) / 1e6
+    p, u = parse_structured(h.client, messages=messages(v, l, policy, chain, doc), response_format=schema, usage_event="judge_experiment", label="judge", model=MODEL, reasoning_effort="none", prompt_cache="auto", timeout_s=120.0, max_completion_tokens=4000)
+    cached = (u.cached or 0) if u else 0
+    usd = ((u.prompt - cached) * PRICE[0] + cached * PRICE[1] + u.completion * PRICE[2]) / 1e6 if u else 0.0
     out = {"usd": usd, "s": time.time() - t, "reading": p.reading.model_dump() if v == "V3" else None}
     for name, w in (("e", p.worked_elsewhere), ("h", p.holds_here)):
         st = w.stance

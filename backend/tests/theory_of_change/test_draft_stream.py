@@ -17,7 +17,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from openai.lib._parsing._completions import type_to_response_format_param
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers.sse import _encode_ephemeral
@@ -25,10 +24,20 @@ from policy_atlas.core import liveness
 from policy_atlas.core.liveness import TickHub, TocSketch
 from policy_atlas.runtime.runner import NullIO, RunnerBackends, run_plan
 from policy_atlas.runtime.toc_plan import TocPlan
+from policy_atlas.theory_of_change import backend as toc_backend
 from policy_atlas.theory_of_change import draft_stream, store
 from policy_atlas.theory_of_change.backend import OpenAITocBackend, StubTocBackend, stub_draft
 from policy_atlas.theory_of_change.draft_prompt import DraftResponse
 from policy_atlas.theory_of_change.draft_stream import SketchFrames, draft_streamed
+from tests.helpers import (
+    FakeResponsesClient,
+    FakeStream,
+    response_usage,
+    spy_calls,
+    structured_response,
+    text_response,
+    text_stream_events,
+)
 from tests.theory_of_change.test_walks import seed_toc, toc_plan
 
 TASK = uuid.UUID(int=12)
@@ -261,34 +270,26 @@ def test_a_users_own_diagram_is_not_drawn_live(
 # --- the streamed request equals today's ---------------------------------------------
 
 
-class _FakeCompletions:
-    def __init__(self, text: str) -> None:
-        self.text = text
-        self.parse_kwargs: dict[str, Any] = {}
-        self.create_kwargs: dict[str, Any] = {}
+def _toc_client(text: str, *, answer: Any = None) -> FakeResponsesClient:
+    """A client that streams ``text`` (100 prompt, 40 completion tokens) when asked to
+    stream, and otherwise answers ``answer`` (by default ``text`` as one reply)."""
 
-    def parse(self, **kwargs: Any) -> Any:
-        self.parse_kwargs = kwargs
-        parsed = DraftResponse.model_validate_json(self.text)
-        message = SimpleNamespace(parsed=parsed)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    def _answer(request: dict[str, Any]) -> Any:
+        if request.get("stream"):
+            usage = response_usage(input_tokens=100, output_tokens=40)
+            return FakeStream(text_stream_events(_pieces(text, 11), usage=usage))
+        return answer if answer is not None else text_response(text)
 
-    def create(self, **kwargs: Any) -> Any:
-        self.create_kwargs = kwargs
-        chunks = [
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content=piece))], usage=None
-            )
-            for piece in _pieces(self.text, 11)
-        ]
-        usage = SimpleNamespace(prompt_tokens=100, completion_tokens=40, total_tokens=140)
-        return iter([*chunks, SimpleNamespace(choices=[], usage=usage)])
+    return FakeResponsesClient(_answer)
 
 
-def test_the_streamed_draft_request_is_todays_request_streamed() -> None:
+def test_the_streamed_draft_request_is_todays_request_streamed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream_calls = spy_calls(monkeypatch, toc_backend, "stream_turn")
     backend = OpenAITocBackend(api_key="test-key")
-    completions = _FakeCompletions(DRAFT.model_dump_json())
-    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    client = _toc_client(DRAFT.model_dump_json())
+    backend._client = client  # type: ignore[assignment]
     inputs = {"plan": {"question": "q"}, "existing_theory": "t", "problems": ["p"]}
     parsed, _ = backend.draft(**inputs)  # type: ignore[arg-type]
     pieces: list[str] = []
@@ -300,31 +301,26 @@ def test_the_streamed_draft_request_is_todays_request_streamed() -> None:
     assert streamed == parsed == DRAFT
     assert "".join(pieces) == DRAFT.model_dump_json()
     assert usage is not None and usage.completion == 40
-    sent = dict(completions.create_kwargs)
+    # The site asks for usage on the stream; the module drops the option, as the
+    # Responses endpoint always sends usage on its last event.
+    [streamed_request] = stream_calls
+    assert streamed_request["stream_options"] == {"include_usage": True}
+    today, sent = (dict(request) for request in client.calls)
     assert sent.pop("stream") is True
-    assert sent.pop("stream_options") == {"include_usage": True}
-    today = dict(completions.parse_kwargs)
-    today["response_format"] = type_to_response_format_param(today["response_format"])
     assert sent == today
 
 
 # --- a failed stream's tokens count in the step's cost ---------------------------------
 
 
-class _BrokenStreamCompletions(_FakeCompletions):
-    """The whole answer streams but does not parse; the ordinary call answers."""
-
-    def parse(self, **kwargs: Any) -> Any:
-        message = SimpleNamespace(parsed=DRAFT)
-        usage = SimpleNamespace(prompt_tokens=100, completion_tokens=5, total_tokens=105)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
-
-
 def test_a_stream_that_fails_at_the_parse_still_counts_its_tokens(hub: TickHub) -> None:
     backend = OpenAITocBackend(api_key="test-key")
     # Cut short: every piece arrives, then the text is not a whole DraftResponse.
-    completions = _BrokenStreamCompletions(DRAFT.model_dump_json()[:-20])
-    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    # The ordinary call answers with the whole draft.
+    backend._client = _toc_client(  # type: ignore[assignment]
+        DRAFT.model_dump_json()[:-20],
+        answer=structured_response(DRAFT, usage=response_usage(input_tokens=100, output_tokens=5)),
+    )
     result, usage = draft_streamed(backend, **INPUTS, frames=SketchFrames())
     assert result == DRAFT
     # The stream's 40 completion tokens (paid for) plus the ordinary call's 5.
@@ -358,8 +354,7 @@ def test_the_streamed_draft_is_traced_under_the_tasks_session(
         langfuse_client=object(),  # type: ignore[arg-type]
         session_id=session_id,
     )
-    completions = _FakeCompletions(DRAFT.model_dump_json())
-    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    backend._client = _toc_client(DRAFT.model_dump_json())  # type: ignore[assignment]
     streamed, _ = backend.draft_stream(**INPUTS, on_text=lambda _piece: None, first_content_s=None)
     assert streamed == DRAFT
     # The session is set before the generation opens, so the generation carries it.

@@ -12,19 +12,18 @@ import asyncio
 import time
 import uuid
 from collections.abc import Iterator
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from openai.lib._parsing._completions import type_to_response_format_param
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import liveness
 from policy_atlas.core.liveness import SectionCard, SectionDelta, SectionSources, TickHub
 from policy_atlas.core.schema import event_log
-from policy_atlas.core.usage import UsageAccumulator
+from policy_atlas.core.usage import TokenUsage, UsageAccumulator
 from policy_atlas.options_scoping.context import ScopeContext
+from policy_atlas.theory_of_change import backend as toc_backend
 from policy_atlas.theory_of_change import report_stream
 from policy_atlas.theory_of_change.backend import OpenAITocBackend, StubTocBackend
 from policy_atlas.theory_of_change.report import streams_to_page, toc_report_scope
@@ -40,6 +39,14 @@ from policy_atlas.theory_of_change.report_stream import (
     part_texts,
     report_layout,
     write_streamed,
+)
+from tests.helpers import (
+    FakeResponsesClient,
+    FakeStream,
+    response_usage,
+    spy_calls,
+    text_response,
+    text_stream_events,
 )
 from tests.theory_of_change.test_check_steps import _run, _summary
 from tests.theory_of_change.test_walks import _walks, seed_toc
@@ -338,56 +345,44 @@ def test_the_stream_usage_is_recorded(hub: TickHub) -> None:
 
 
 def report_stream_usage() -> Any:
-    from policy_atlas.core.usage import token_usage_from_provider
-
-    return token_usage_from_provider(
-        SimpleNamespace(prompt_tokens=11, completion_tokens=7, total_tokens=18)
-    )
+    return TokenUsage(prompt=11, completion=7, total=18)
 
 
 # --- A12: the streamed request and payload equal today's ------------------------------
 
 
-class _FakeCompletions:
-    def __init__(self, text: str) -> None:
-        self.text = text
-        self.parse_kwargs: dict[str, Any] = {}
-        self.create_kwargs: dict[str, Any] = {}
+def _toc_client(text: str) -> FakeResponsesClient:
+    """A client that streams ``text`` (100 prompt, 40 completion tokens) when asked to
+    stream, and otherwise answers ``text`` as one reply."""
 
-    def parse(self, **kwargs: Any) -> Any:
-        self.parse_kwargs = kwargs
-        parsed = ReportResponse.model_validate_json(self.text)
-        message = SimpleNamespace(parsed=parsed)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+    def _answer(request: dict[str, Any]) -> Any:
+        if request.get("stream"):
+            usage = response_usage(input_tokens=100, output_tokens=40)
+            return FakeStream(text_stream_events(_pieces(text, 11), usage=usage))
+        return text_response(text)
 
-    def create(self, **kwargs: Any) -> Any:
-        self.create_kwargs = kwargs
-        chunks = [
-            SimpleNamespace(
-                choices=[SimpleNamespace(delta=SimpleNamespace(content=piece))], usage=None
-            )
-            for piece in _pieces(self.text, 11)
-        ]
-        usage = SimpleNamespace(prompt_tokens=100, completion_tokens=40, total_tokens=140)
-        return iter([*chunks, SimpleNamespace(choices=[], usage=usage)])
+    return FakeResponsesClient(_answer)
 
 
-def test_the_streamed_request_is_todays_request_streamed() -> None:
+def test_the_streamed_request_is_todays_request_streamed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream_calls = spy_calls(monkeypatch, toc_backend, "stream_turn")
     backend = OpenAITocBackend(api_key="test-key")
-    completions = _FakeCompletions(RESPONSE.model_dump_json())
-    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    client = _toc_client(RESPONSE.model_dump_json())
+    backend._client = client  # type: ignore[assignment]
     parsed, _ = backend.report(**INPUTS)
     pieces: list[str] = []
     streamed, usage = backend.report_stream(**INPUTS, on_text=pieces.append, first_content_s=None)
     assert streamed == parsed == RESPONSE
     assert "".join(pieces) == RESPONSE.model_dump_json()
     assert usage is not None and usage.completion == 40
-    sent = dict(completions.create_kwargs)
+    # The site asks for usage on the stream; the module drops the option, as the
+    # Responses endpoint always sends usage on its last event.
+    [streamed_request] = stream_calls
+    assert streamed_request["stream_options"] == {"include_usage": True}
+    today, sent = (dict(request) for request in client.calls)
     assert sent.pop("stream") is True
-    assert sent.pop("stream_options") == {"include_usage": True}
-    today = dict(completions.parse_kwargs)
-    # ``parse`` turns the wire into this strict JSON schema before it sends it.
-    today["response_format"] = type_to_response_format_param(today["response_format"])
     assert sent == today
 
 
@@ -474,8 +469,7 @@ def test_only_a_first_report_streams(engine: Engine, cleanup: list[uuid.UUID]) -
 def test_a_stream_that_fails_at_the_parse_still_counts_its_tokens(hub: TickHub) -> None:
     backend = OpenAITocBackend(api_key="test-key")
     # Every piece arrives, then the text is not a whole ReportResponse.
-    completions = _FakeCompletions(RESPONSE.model_dump_json()[:-20])
-    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    backend._client = _toc_client(RESPONSE.model_dump_json()[:-20])  # type: ignore[assignment]
     usage = UsageAccumulator()
     result = write_streamed(backend, INPUTS, _frames(), usage, lambda: RESPONSE)
     assert result == RESPONSE

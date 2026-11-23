@@ -25,5 +25,5 @@ found that the wire models for the five section tools, with their docstrings, we
 what the writer saw; they moved with it. The review stack then found two retry sentences
 (`SUMMARY_FORMAT_RETRY_REASON`) sent to the summariser as `previous_attempt.judge_reason` sitting
 in the unpinned `synthesise.py`; they moved to `summary_prompts.py`. The test that proved it:
-the extraction fingerprint (`test_call_site_kwargs.py`) embeds the schema, so a docstring edit
+the extraction fingerprint (`test_the_iof_and_icf_fingerprints_are_pinned`) embeds the schema, so a docstring edit
 changes it.

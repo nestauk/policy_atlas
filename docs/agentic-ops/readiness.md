@@ -17,7 +17,9 @@ hard gates of the [task-cycle](../../.claude/skills/task-cycle/SKILL.md) skill.
   registered in `docs/deferred.md`.
 - **Backend stack.** Postgres with pgvector (Amazon Aurora in the cloud), LangGraph, and two model
   routes, `openai-direct` and `bedrock`
-  ([ADR 0041](../adr/0041-bedrock-inference-route-and-model-route-file.md)). Document ingest in
+  ([ADR 0041](../adr/0041-bedrock-inference-route-and-model-route-file.md)). Every OpenAI-SDK
+  model call goes to the Responses endpoint with `store=false`, through one module
+  ([ADR 0050](../adr/0050-responses-api-one-send-module-carried-reasoning.md)). Document ingest in
   the cloud runs off the request path, through a queue and an AWS Lambda function
   ([ADR 0043](../adr/0043-queued-ingest-document-store-sql-retrieval-step-timeouts.md)).
 - **Frontend.** Vite, React, TypeScript and pnpm, under `frontend/`

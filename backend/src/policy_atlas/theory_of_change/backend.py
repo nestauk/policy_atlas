@@ -24,13 +24,14 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
     openai_kwargs,
     resolve_openai_client,
+    stream_turn,
     traced_parse,
     with_system_breakpoint,
 )
 from policy_atlas.core.usage import (
+    TokenUsage,
     UsageResult,
     log_usage,
-    token_usage_from_provider,
     usage_details,
     usage_metadata,
 )
@@ -725,18 +726,16 @@ class OpenAITocBackend:
         held: dict[str, Any] = {}
 
         def pieces() -> Iterator[str]:
-            completions: Any = self._client.chat.completions
-            stream = completions.create(**request)
+            # Sent here, not earlier, so the first-content watchdog covers the request.
+            stream = stream_turn(
+                self._client, label=step, **{k: v for k, v in request.items() if k != "stream"}
+            )
             held["stream"] = stream
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    fragment = getattr(getattr(choices[0], "delta", None), "content", None)
-                    if isinstance(fragment, str) and fragment:
-                        yield fragment
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    held["usage"] = chunk_usage
+            yield from stream
+
+        def streamed_usage() -> TokenUsage | None:
+            stream = held.get("stream")
+            return stream.usage if stream is not None else None
 
         def cancel() -> None:
             stream = held.get("stream")
@@ -750,12 +749,12 @@ class OpenAITocBackend:
                 text = consume(
                     pieces(), first_content_s=first_content_s, on_fragment=on_text, cancel=cancel
                 )
-                log_usage(f"{step}.usage", held.get("usage"))
+                log_usage(f"{step}.usage", streamed_usage())
                 wire = response_format.model_validate_json(text)
             except Exception as exc:
                 # The tokens used so far go with the failure, so the step's cost counts them.
-                raise StreamFailed(token_usage_from_provider(held.get("usage"))) from exc
-            usage = token_usage_from_provider(held.get("usage"))
+                raise StreamFailed(streamed_usage()) from exc
+            usage = streamed_usage()
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -774,6 +773,7 @@ class OpenAITocBackend:
                 name=f"toc:{step.removeprefix('toc_')}",
                 as_type="generation",
             ) as span,
+            tracing.request_id_scope(span),
         ):
             return run(span)
 

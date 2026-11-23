@@ -31,13 +31,14 @@ from policy_atlas.evidence_search.extract.quote_verify import (
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     SECTION_TURN_CAP,
+    CarriedHistory,
     ToolExchange,
     build_section_tools,
     gathered_ids,
     run_tool_loop,
 )
 from policy_atlas.options_scoping.labels import DocumentLabels, labels_for_snapshots
-from policy_atlas.runtime.chat_backend import ChatBackend
+from policy_atlas.runtime.chat_backend import ChatBackend, traceable_turn
 from policy_atlas.runtime.chat_context import assemble_chat_frame, window_turns
 from policy_atlas.runtime.chat_floor import apply_citation_floor
 from policy_atlas.runtime.chat_prompt import (
@@ -479,11 +480,16 @@ def answer_over_scope(
     )
 
     call_count = 0
+    # This answer's model turns, in memory only: sent back on its later
+    # requests. The next answer starts again from the stored chat history.
+    carried = CarriedHistory()
 
     def turn_fn(transcript: list[ToolExchange], *, force_emit: bool) -> Any:
         nonlocal call_count
         _stop()
         call_count += 1
+        carried.catch_up(transcript)
+        carried_kwargs = carried.kwargs()
 
         def _call() -> Any:
             # The delta sink rides every turn: the backend only streams
@@ -495,6 +501,7 @@ def answer_over_scope(
                 force_emit=force_emit,
                 max_output_tokens=CHAT_MAX_OUTPUT_TOKENS,
                 on_delta=_emit_delta,
+                **carried_kwargs,
             )
 
         def _record(span: Any, result: tuple[dict[str, Any], Any]) -> None:
@@ -505,7 +512,7 @@ def answer_over_scope(
                     "tool_exchanges": len(transcript),
                     "force_emit": force_emit,
                 },
-                output=response,
+                output=traceable_turn(response),
                 metadata={
                     "prompt_version": CHAT_PROMPT_VERSION,
                     "call_index": call_count,
@@ -524,9 +531,11 @@ def answer_over_scope(
             call=_call,
             update=_record,
         )
+        tool_calls = response.get("tool_calls", [])
+        carried.expect(response.get("carried"), calls=len(tool_calls))
         return {
             "emission": response.get("answer"),
-            "tool_calls": response.get("tool_calls", []),
+            "tool_calls": tool_calls,
             "malformed": 0,
         }, usage
 
