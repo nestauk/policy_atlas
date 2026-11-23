@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -370,6 +370,34 @@ describe("PlanDocument", () => {
     await user.click(screen.getByRole("button", { name: "Close the search plan" }));
     expect(screen.queryByRole("dialog", { name: "Search plan" })).toBeNull();
     expect(screen.getByRole("button", { name: "See plan" })).toHaveFocus();
+  });
+
+  it("takes focus as it opens, and closes when keyboard focus leaves it", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const user = userEvent.setup();
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <TooltipProvider delayDuration={0}>
+          <button type="button" data-plan-opener="" onClick={() => setOpen(true)}>
+            See plan
+          </button>
+          {open && (
+            <PlanDocument taskId={TASK_ID} placement="side" onClose={() => setOpen(false)} overlay={{}} onOverlayChange={vi.fn()} />
+          )}
+          <button type="button">A control on the page</button>
+        </TooltipProvider>
+      );
+    }
+    render(<Host />);
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    const plan = screen.getByRole("dialog", { name: "Search plan" });
+    expect(plan).toHaveFocus();
+    await user.tab();
+    expect(plan).toContainElement(document.activeElement as HTMLElement);
+    act(() => screen.getByRole("button", { name: "A control on the page" }).focus());
+    expect(screen.queryByRole("dialog", { name: "Search plan" })).toBeNull();
+    expect(screen.getByRole("button", { name: "A control on the page" })).toHaveFocus();
   });
 
   // Owner, round 14: every open starts at the plan's top, its title in view.

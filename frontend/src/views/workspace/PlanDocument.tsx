@@ -1278,11 +1278,14 @@ export function PlanDocument({
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [onClose]);
 
-  // Focus goes back to the control that opened the plan when it closes,
-  // unless the reader has put it somewhere else (pressed another control).
+  // Focus moves into the plan as it opens, so a keyboard or screen reader
+  // user is in the dialog and not on the control behind it. It goes back to
+  // the control that opened the plan when it closes, unless the reader has
+  // put it somewhere else (pressed another control).
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const plan = planRef.current;
+    plan?.focus({ preventScroll: true });
     return () => {
       const focused = document.activeElement;
       const lost = focused === null || focused === document.body || (plan !== null && plan.contains(focused));
@@ -1374,10 +1377,17 @@ export function PlanDocument({
       ref={planRef}
       role="dialog"
       aria-modal={placement === "center"}
+      tabIndex={-1}
+      // The plan is not modal: the page behind it stays in the tab order.
+      // Keyboard focus that leaves the plan closes it, as a press outside
+      // does, so focus is never on a control the plan covers.
+      onBlur={(event) => {
+        if (pressedOutside(event.relatedTarget, planRef.current)) onClose();
+      }}
       aria-label={scopingPlan ? "Scoping plan" : "Search plan"}
       data-state={closing ? "closed" : "open"}
       className={cn(
-        "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
+        "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white outline-hidden",
         // The house ring is Electric Blue, 1.7:1 on Navy: controls here ring in white.
         "[&_:focus-visible]:outline-white",
         // It arrives: docked, from the edge it docks to; centred,
