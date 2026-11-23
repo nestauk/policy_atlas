@@ -5,8 +5,8 @@ Evidence for the build of [contract.md](contract.md) (revision 5.2) by [plan.md]
 read from saved result files in the task's gitignored `research/live/` folder.
 
 > **Status:** build complete; the review stack ran on 2026-11-22 and its fixes are in
-> (§ Review findings). Three rubric rows wait for the owner's ruling (§ Review findings,
-> For the owner).
+> (§ Review findings). The owner ruled on the three rubric rows that fail as written on 2026-11-23
+> (§ Review findings, Owner rulings).
 
 **Read this first (owner):**
 
@@ -604,7 +604,7 @@ and the fixes.
   `_step_kwargs` docstring and a chat comment described Chat Completions' tool limit
   (code review, contract verifier). Docstring sections on five public functions.
 - This file described `chat` as raised (contract verifier): corrected (16 changed capture
-  entries, 4 re-pins, 9 route rows). ADR 0050 cites contract revision 5.2.
+  entries, 4 re-pins, 9 route rows). ADR 0050 cites contract revision 5.3.
 
 **Declined, with the reason:**
 
@@ -668,21 +668,27 @@ tool-loop tidy-up of step 5c; chat's forced tool turns and its unshared cache.
 **Fake-done checks:** no test deleted, skipped or weakened in the fix rounds (one
 assertion added to an existing test); no swallowed error; no stub return.
 
-**For the owner** (three rubric rows fail as written; each needs a ruling):
+**Owner rulings (2026-11-23)** on the three rubric rows that fail as written, and three
+further items:
 
-1. **Row 15:** the 27 streamed calls are matched by the same-request comparison, not by
-   the audit log, which holds no counts for them.
-2. **Row 17:** four steps are below nine tenths of their cached share after Part 1
-   (`option_profile_place_sentences`, `longlist_type`, `agent_suggest`, `chat`); each is
-   explained in § The run after Part 1 as not an effect of the endpoint.
-3. **Row 21:** `chat` is at `none` under plan item P1's fallback; the contract's § Efforts
-   still says `low`.
-4. Whether `core/openai_client.py` may name `httpx` exception classes (the dropped-stream
-   retry).
-5. Rubric row 7 says "two broken scripts"; the contract says three and the entry names
-   four files.
-6. For the DPIA notes (D3): `store=false` stops the stored response; abuse-monitoring
-   logs and the prompt cache are still held by the provider.
+1. **Row 15: substitute accepted.** The 27 streamed calls are matched by the same-request
+   comparison, not by the audit log, which holds no counts for them.
+2. **Row 17: accepted.** Four steps are below nine tenths of their cached share after
+   Part 1 (`option_profile_place_sentences`, `longlist_type`, `agent_suggest`, `chat`);
+   each is explained in § The run after Part 1 as not an effect of the endpoint. To be
+   re-checked on staging, since each explanation rests on one run.
+3. **Row 21: `chat` at `none` accepted.** The contract's § Efforts now says so (revision
+   5.3).
+4. **The dropped-stream retry stays out of this change.** It needs `core/openai_client.py`
+   to name `httpx` exception classes, which the zero-egress guard test forbids. Checked
+   against `origin/dev`: the retry rule (`tracing._retryable`) is unchanged, the old chat
+   reply stream had no retry at all, and the four synthesis streams fall back to a
+   non-streamed call on any error, so this is a gap from before the move, not a
+   regression. It is on `docs/deferred.md` for a follow-up change.
+5. **Row 7: treated as met.** The deferred entry names four script files; the row's
+   wording was corrected from "the two broken scripts" to "the broken scripts".
+6. For the DPIA notes (D3), still for the owner: `store=false` stops the stored response;
+   abuse-monitoring logs and the prompt cache are still held by the provider.
 
 ## Public safety
 

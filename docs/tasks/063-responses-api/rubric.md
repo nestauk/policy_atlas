@@ -13,7 +13,7 @@ The task is **done only if every box holds**. Ids (M, E, S, D, O) and terms are 
 6. [ ] Verification evidence recorded in [verification.md](verification.md).
 7. [ ] Known gaps and deferred seams listed in [docs/deferred.md](../../deferred.md),
        including the four entries the contract adds (D2, O13, the `extract_interventions`
-       timeout, the two broken scripts).
+       timeout, the broken scripts).
 8. [ ] The Tier 3 review stack ran (contract verifier, code review, security lane,
        adversarial review), or a skip is justified in writing.
 

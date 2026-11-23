@@ -3,13 +3,13 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** revision 5.2, 2026-11-20. Revision 4 was approved by the owner on 2026-11-20.
+> **Status:** revision 5.3, 2026-11-23. Revision 4 was approved by the owner on 2026-11-20.
 > The contract-stage adversarial review the same day (23 findings; a fresh reader on the
 > lead's model stood in for Codex, which was out of quota) and a second live probe are
 > folded in as revision 5 (§ Contract-stage review). The changes are material, so
 > **Revision 5 approved (before planning): 2026-11-20 · owner**, with O14 and O15 ruled
 > yes. Revision 5.1 applies the seven corrections of [plan.md](plan.md) § Contract
-> corrections, accepted by the owner with the plan; revision 5.2 adds M16 at the owner's request · **Plan approved (before
+> corrections, accepted by the owner with the plan; revision 5.2 adds M16 at the owner's request; revision 5.3 keeps `chat` at `none` (plan item P1's fallback, owner ruling 2026-11-23 after the review stack) · **Plan approved (before
 > implementation): 2026-11-20 · owner** (draft 2, after its adversarial review) ·
 > ADR: [0050](../../adr/0050-responses-api-one-send-module-carried-reasoning.md) · Branch: `task/063-responses-api`.
 >
@@ -132,7 +132,7 @@ raised; no replays and no owner reads during the build.
 |---|---|---|---|
 | `synthesise_section_turn` | The section writer's gather turns (6 tools) and its repair turn. | **`low`** | Owner ruling. |
 | `synthesise_section_emit` | The streamed section prose. It shares the gather turns' cached prompt start. | **`low`** | E3: at a different effort it would lose that cache on every section. Its first words arrive a little later (O14). |
-| `chat` (tool turn, streamed reply, final parse) | One step, three call sites that share a prompt start. | **`low`** | Owner ruling for the tool turn; E3 for the other two. The step is not split, so there is no new route step. The reply's first words arrive a little later (O14). |
+| `chat` (tool turn, streamed reply, final parse) | One step, three call sites that share a prompt start. | **`none`** (unchanged) | Planned at `low` (owner ruling for the tool turn; E3 for the other two; O14). At `low` a live answer failed and the next took 118 s to its first words, so plan item P1's fallback was applied and the step stays at `none` (owner ruling 2026-11-23). Raising it is on `docs/deferred.md`. The step is not split, so there is no new route step. |
 | `synthesise_write_key_findings` | One call over the run's whole ledger of checked claims. | **`medium`** | Owner ruling. |
 | `task_agent_scoping_turn` | The planning conversation for options scoping. | **`low`** | Owner ruling. |
 | `longlist_constrain`, `longlist_distinct`, `longlist_authority` | Judgements over the options. | **`low`** | Owner ruling. |
