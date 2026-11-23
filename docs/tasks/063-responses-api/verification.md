@@ -696,7 +696,10 @@ further items:
    deliberate changes were then removed, because after the move the comparison only makes
    later prompt and setting changes harder. Its three checks that need no baseline (the
    address path, `store=false`, no key outside the allowed list) stay as a test on every
-   captured request. The Responses capture stays in full.
+   captured request. The Responses capture is committed in a short form (2,470 lines, from
+   20,080): settings as sent, and each input item, tool and answer schema as a
+   fingerprint. A failing test names the step and the part that changed, not the changed
+   words; those are in the diff of the prompt, tool or schema code.
 
 ## Public safety
 
