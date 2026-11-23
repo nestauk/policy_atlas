@@ -368,9 +368,13 @@ synth-time context query and must not run before the VPC exists.
      no password from anyone, and the mode needs no IAM beyond
      `AdminCreateUser`. If that password expires or is lost before first
      sign-in, `make user-reissue ENV=<env> EMAIL=<user-email>` mints and prints
-     a replacement on the same terms (needs `AdminSetUserPassword`). The same
+     a replacement on the same terms (needs `AdminSetUserPassword`, and
+     `AdminGetUser` to check that the account is not deactivated). The same
      command resets the password of an account that has already signed in: the
      account gets a temporary password that must be changed at the next sign-in.
+     Until that sign-in, expect "Forgot password" not to work for the account
+     (Cognito is known to refuse a reset in that state; not yet checked on our
+     pool), so a lost temporary password needs another reissue. A deactivated account is refused: reactivate it first.
      Use it for an address with no mailbox (a shared test account, for example).
      A person with a working mailbox should use "Forgot password" on the sign-in
      page instead. SES-backed pool email is now in
@@ -992,7 +996,8 @@ person's bearer token never reaches the log. The log group is private to the
 account.
 
 **Capacity, and the dry run.** A web ACL may use 1,500 capacity units; these
-rules use 987 (`aws wafv2 check-capacity`, 2026-11-18). The same command is the
+rules use 1,003 with the three hosts of staging (`aws wafv2 check-capacity`,
+2026-11-23; 987 when they matched the API host only). The same command is the
 dry run for any rule change: it validates every statement against the WAF
 service without creating anything (the synth tests cannot, see
 `docs/knowledge/cdk-any-typed-property-takes-cloudformation-dict.md`). Take the
@@ -1069,7 +1074,8 @@ above that.
 | `"report-only"` | The policy goes in `Content-Security-Policy-Report-Only`. The browser blocks nothing and prints a "[Report Only]" line in the console for each violation. |
 | `"enforce"` | The policy goes in `Content-Security-Policy`. The browser blocks every violation. |
 
-Never both headers at once. A missing key or any other value fails `cdk
+The website never gets both headers at once (the ops pages do in report-only
+mode, see "The ops pages" below). A missing key or any other value fails `cdk
 synth`, which the deploy runs before it changes anything in AWS.
 `deploy.sh` does not read the key.
 

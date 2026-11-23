@@ -167,6 +167,10 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        # As infra/app.py passes it where the analytics stack is deployed.
+        metabase_host=(
+            f"{METABASE_CONFIG['metabase_subdomain']}.{METABASE_CONFIG['domain_name']}"
+        ),
         cross_region_references=True,
     )
     # The same app stack pinned to each model route, to show the Bedrock key is
@@ -1496,11 +1500,19 @@ def test_cert_stack_uses_its_namespaced_cloudformation_id():
     assert "PaV3CertStack" in artifacts
 
 
-def test_firewall_covers_the_api_and_ops_hosts():
-    _, acl = _resources(TEMPLATES["app"], "AWS::WAFv2::WebACL")[0]
+def _firewall_hosts(template: dict) -> list[str]:
+    _, acl = _resources(template, "AWS::WAFv2::WebACL")[0]
     general = next(rule for rule in acl["Properties"]["Rules"] if rule["Name"] == "general-rate")
     scope = general["Statement"]["RateBasedStatement"]["ScopeDownStatement"]
-    hosts = [item["ByteMatchStatement"]["SearchString"] for item in scope["OrStatement"]["Statements"]]
-    # Metabase's host joins them through `metabase_host`, which infra/app.py
-    # passes where the analytics stack is deployed.
-    assert hosts == ["api.v3.policyatlas.uk", "ops.v3.policyatlas.uk"]
+    return [item["ByteMatchStatement"]["SearchString"] for item in scope["OrStatement"]["Statements"]]
+
+
+def test_firewall_covers_the_api_and_ops_hosts_and_metabase_where_it_is_deployed():
+    # The Metabase name is the one its own listener rule routes on.
+    assert _firewall_hosts(TEMPLATES["app"]) == [
+        "api.v3.policyatlas.uk", "ops.v3.policyatlas.uk", "metabase.v3.policyatlas.uk",
+    ]
+    # No `metabase_host`: an environment without the analytics stack.
+    assert _firewall_hosts(ENFORCE_APP_TEMPLATE) == [
+        "api.v3.policyatlas.uk", "ops.v3.policyatlas.uk",
+    ]

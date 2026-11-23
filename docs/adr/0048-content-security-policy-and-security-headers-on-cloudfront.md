@@ -78,8 +78,8 @@ The pages these decisions rest on (gathered 2026-11-18, more in the task's gitig
   person adding it to rerun the manual pass.
 - HSTS `includeSubDomains` stays in browsers for up to a year after any rollback, so no
   plain-HTTP subdomain can be added under `policyatlas.uk` later.
-- The 065 ops pages and the API's own responses are not served by CloudFront and carry no
-  CSP (recorded in `docs/deferred.md`).
+- The API's own responses are not served by CloudFront and carry no CSP (recorded in
+  `docs/deferred.md`). The ops pages send their own (see the amendment below).
 - Rollback: `csp_mode: "report-only"` and a deploy; a full revert restores the managed
   policy.
 

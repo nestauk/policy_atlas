@@ -136,3 +136,79 @@ No config value changes: both environments stay at `waf.mode: "count"` and
 `backend/src/policy_atlas/api/settings.py`, `backend/tests/api/test_service_role.py`,
 `backend/README.md`, `infra/DEPLOYMENT.md` (firewall and security header sections),
 `docs/deferred.md`, ADR 0047 and ADR 0048 (amendments).
+
+## Review (2026-11-23)
+
+A fresh conversation ran the review stack on the one commit of this branch, against
+`origin/dev`. The change touches sign-in recovery and infrastructure, so it ran with the
+higher-risk set of lanes, not as a low-risk hotfix. `make verify` was green before the lanes
+ran (4,992 backend tests).
+
+### Lanes
+
+| Lane | Reviewer | Result |
+| --- | --- | --- |
+| Contract verifier | `contract-verifier` subagent | Every claim above is built as written; nine notes, mostly documents the change made out of date |
+| Security | a general-purpose Opus agent with the security review brief (the pinned `security-auditor` subagent was not available) | No finding at high confidence; eight candidates checked and rejected |
+| Adversarial | Codex, read-only brief | One confirmed defect (deactivated account) |
+| Code review | `/code-review` at medium | Nine findings |
+| Over-engineering | `ponytail-review` | Nothing to cut |
+
+### Findings and rulings
+
+| # | Finding | Found by | Ruling |
+| --- | --- | --- | --- |
+| 1 | `user reissue` replaced the password of a deactivated account that had signed in before (Cognito keeps it `CONFIRMED`); the earlier never-signed-in rule had refused it | Codex, `/code-review`, contract verifier | **Fixed.** The command reads `Enabled` and refuses; one test |
+| 2 | Nothing tested that Metabase's host reaches the firewall rules | `/code-review`, contract verifier | **Fixed.** The synth test passes the host and checks three hosts, and two hosts without it. The one expression in `infra/app.py` that builds the name still has no test |
+| 3 | The deploy guide's capacity figure (987) was measured before the rules matched three hosts, and `aws wafv2 check-capacity` was not run for the new statement shape | contract verifier | **Fixed in the guide; the check is pending** (see below) |
+| 4 | The deploy guide said "Never both headers at once"; the ops pages send both in report-only mode | contract verifier | **Fixed** |
+| 5 | After a reissue on a signed-in account, "Forgot password" does not work until the person signs in (Cognito behaviour, from the reviewer's memory, not tested) | `/code-review` | **Fixed in the guide** |
+| 6 | The rate limit comment gave the API measurement as the reason for a limit that now counts three hosts | contract verifier | **Fixed** (comment) |
+| 7 | ADR 0048 Consequences and `readiness.md` still said only CloudFront sends a policy; the `reissue` help text promised more than the command accepts | contract verifier | **Fixed** |
+| 8 | The known gaps were only in this file | contract verifier | **Fixed.** Four entries in `docs/deferred.md` |
+| 9 | One rate count and one `waf.mode` for three hosts: Metabase traffic from one office address can use up the product's allowance | `/code-review`, Codex (as a deploy risk) | **Deferred** (`docs/deferred.md`); the count week is the control |
+| 10 | A reissue does not sign out open sessions and writes no ops action log row | `/code-review` | **Deferred** (`docs/deferred.md`); already a known gap above. The owner ruled on 2026-11-23: not in this hotfix |
+| 11 | The symbols `@ % + = -` can still be rewritten: `--` becomes a long dash in Apple apps; a first character of `-`, `+`, `=` or `@` reads as a flag or a spreadsheet formula | `/code-review` | **Declined.** The owner ruled on 2026-11-23: the set stays |
+| 12 | `frame-src 'self'` with `frame-ancestors 'none'` would refuse a hidden sign-in frame | `/code-review` | **Declined.** Session renewal uses the refresh token, not a frame; the pending console pass on the ops host covers it |
+| 13 | The backend treats any `OPS_CSP_MODE` other than `enforce` as report-only | `/code-review` | **Declined.** Only the stack sets it, and an unknown `csp_mode` fails `cdk synth` |
+| 14 | The symbol test calls a private helper | `/code-review` | **Declined.** The same proof at the command boundary needs 200 stubbed Cognito calls |
+| 15 | The one-host branch and the empty-list check in `waf.py` have no caller that needs them | `ponytail-review` | **Declined.** Each stops a deploy-time failure or a silent no-match |
+
+### Second round: Codex re-review of the fixes
+
+| # | Finding | Ruling |
+| --- | --- | --- |
+| 16 | The fix for finding 1 read Cognito only. A `user reactivate` that fails half way leaves a person marked deactivated in the database while Cognito has them enabled; `user reset-app` refuses in either case | **Fixed.** `user reissue` reads the database mark too; one test. An account with no row stays reissuable |
+| 17 | A Cognito error from the new enabled check reaches the operator as a traceback, not a `refused:` line | **Deferred** (`docs/deferred.md`). `user create` and `user reset-app` call the same helper the same way, and nothing is changed when it fails; the repair belongs in the command line's entry point, for all three. The deploy guide now names the `AdminGetUser` permission |
+| 18 | The deploy guide stated the "Forgot password" behaviour of finding 5 as a tested fact | **Fixed.** The sentence now says it is expected and not yet checked on our pool |
+
+### Third round: Codex re-review of the second-round fix
+
+| # | Finding | Ruling |
+| --- | --- | --- |
+| 19 | The module header of `ops/commands.py` still said `user reissue` takes no connection and listed its old Cognito calls | **Fixed** (docstring) |
+| 20 | If Cognito returned an account with no `sub` attribute, the database check would find no row and the reissue would continue | **Declined.** Cognito gives every account a `sub`, and the Cognito enabled check still runs. The owner ruled on 2026-11-23 that this hotfix takes no further changes; a guard that refuses an empty `sub` would close it |
+
+This was the last of the three rounds the review process allows.
+
+### Evidence after the fixes
+
+- `make verify` on the tree with the first- and second-round fixes: green. Backend 4,994
+  passed; `infra` 173 passed.
+- After it, only the docstring of finding 19 and this file changed; `make verify-fast` passed.
+- One earlier run had one failure, `tests/ops/test_db_role.py` (`role "pa_ops" is not
+  permitted to log in`). The test is not part of this change, passed alone, and passed in the
+  next full run. The `pa_ops` login is shared by every test database on the local Postgres.
+
+### Firewall capacity check
+
+`aws wafv2 check-capacity --scope REGIONAL` on the six rules of the synthesised staging template
+(three hosts), run by the owner on 2026-11-23: **1,003** of 1,500 units. The firewall service
+accepts the new rule shape. The deploy guide carries the figure.
+
+No knowledge record was written: no finding is a verified fact that outlasts this change. The
+"Forgot password" behaviour in finding 5 would be one after a live check.
+
+### Pending (owner)
+
+- The items already listed as pending above.

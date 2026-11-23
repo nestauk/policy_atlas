@@ -669,15 +669,18 @@ def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_p
 
 @pytest.mark.parametrize("status", ["FORCE_CHANGE_PASSWORD", "CONFIRMED"])
 def test_user_reissue_mints_a_non_permanent_password_whether_or_not_they_signed_in(
-    status: str,
+    conn: Connection, status: str
 ) -> None:
     email = unique_email("reissue")
     sub = fresh_sub()
     with cognito() as (client, stubber):
         expect_status_lookup(stubber, email=email, sub=sub, status=status)
+        expect_enabled(stubber, sub=sub)
         expect_reissue(stubber, sub=sub)
         with capture_logs() as logged:
-            reissue = commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            reissue = commands.reissue_temporary_password(
+                conn, client, pool_id=POOL_ID, email=email
+            )
         stubber.assert_no_pending_responses()
 
     minted = reissue.temporary_password
@@ -689,36 +692,66 @@ def test_user_reissue_mints_a_non_permanent_password_whether_or_not_they_signed_
 
 
 @pytest.mark.parametrize("status", ["RESET_REQUIRED", "UNCONFIRMED"])
-def test_user_reissue_refuses_an_account_in_any_other_status(status: str) -> None:
+def test_user_reissue_refuses_an_account_in_any_other_status(
+    conn: Connection, status: str
+) -> None:
     """No ``AdminSetUserPassword`` is queued, so the Stubber fails the test if
     the refusal comes after the password was already replaced."""
     email = unique_email("other-status")
     with cognito() as (client, stubber):
         expect_status_lookup(stubber, email=email, sub=fresh_sub(), status=status)
         with pytest.raises(OpsError, match="Nothing was changed"):
-            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
 
-def test_user_reissue_refuses_an_unknown_address() -> None:
+def test_user_reissue_refuses_an_account_disabled_in_cognito(conn: Connection) -> None:
+    """A locked-out person who signed in before is still ``CONFIRMED`` in Cognito."""
+    email = unique_email("disabled")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_status_lookup(stubber, email=email, sub=sub, status="CONFIRMED")
+        expect_enabled(stubber, sub=sub, enabled=False)
+        with pytest.raises(OpsError, match="deactivated.*Nothing was changed"):
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+
+def test_user_reissue_refuses_a_person_marked_deactivated_whom_cognito_still_enables(
+    conn: Connection,
+) -> None:
+    """The state a half-finished ``user reactivate`` leaves behind."""
+    email = unique_email("marked")
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=_org(conn).org_id, email=email)
+    _set_flags(conn, sub, deactivated_at=now())
+    with cognito() as (client, stubber):
+        expect_status_lookup(stubber, email=email, sub=sub, status="CONFIRMED")
+        with pytest.raises(OpsError, match="deactivated.*Nothing was changed"):
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+
+def test_user_reissue_refuses_an_unknown_address(conn: Connection) -> None:
     email = unique_email("nobody")
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=None)
         with pytest.raises(OpsError, match="no account in the pool"):
-            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
 
-def test_user_reissue_turns_a_cognito_refusal_into_an_ops_error() -> None:
+def test_user_reissue_turns_a_cognito_refusal_into_an_ops_error(conn: Connection) -> None:
     email = unique_email("refused")
     sub = fresh_sub()
     with cognito() as (client, stubber):
         expect_status_lookup(stubber, email=email, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        expect_enabled(stubber, sub=sub)
         stubber.add_client_error(
             "admin_set_user_password", service_error_code="InvalidPasswordException"
         )
         with pytest.raises(OpsError, match="InvalidPasswordException"):
-            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
 

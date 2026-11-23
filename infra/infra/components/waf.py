@@ -15,6 +15,8 @@ from constructs import Construct
 # Pinned by the measurement (2026-11-17): the busiest 5-minute window in 14 days
 # of the staging API log held 520 non-health requests from all clients together, so no
 # single address sent more; ten times that, rounded up to a thousand. Never below 3,000.
+# The measurement covered the API only. The rule now also counts the ops pages and
+# Metabase for the same address; the count week before block mode must confirm the limit.
 GENERAL_RATE_LIMIT = 6000
 WAITLIST_RATE_LIMIT = 50
 RATE_WINDOW_SECONDS = 300

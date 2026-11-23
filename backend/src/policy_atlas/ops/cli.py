@@ -282,8 +282,9 @@ def build_parser() -> argparse.ArgumentParser:
     user_reissue = user.add_parser(
         "reissue",
         help=(
-            "mint and print a new single-use temporary password for an account, "
-            "whether or not it has signed in before — it never accepts one"
+            "mint and print a new single-use temporary password for an active "
+            "account, whether or not it has signed in before (refused for a "
+            "deactivated or unconfirmed one) — it never accepts one"
         ),
     )
     user_reissue.add_argument("--email", required=True, type=_email)
@@ -531,7 +532,7 @@ def _dispatch(
             )
         if args.command == "reissue":
             return commands.reissue_temporary_password(
-                cognito, pool_id=target.user_pool_id, email=args.email
+                conn, cognito, pool_id=target.user_pool_id, email=args.email
             )
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
