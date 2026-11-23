@@ -1,5 +1,6 @@
 import { safeHref } from "../../lib/safeHref";
 import { displayUrl } from "./reference";
+import { ExternalLink } from "./ExternalLink";
 
 /** The address's look: Grey over a Line 2 underline, both turning Navy on hover. */
 const REFERENCE_URL_CLASS =
@@ -21,7 +22,7 @@ export function ReferenceUrl({ url, printFull = false }: { url: string; printFul
   const href = safeHref(url.trim());
   if (href === undefined) return null;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={REFERENCE_URL_CLASS}>
+    <ExternalLink href={href} className={REFERENCE_URL_CLASS}>
       {printFull ? (
         <>
           <span className="print:hidden">{displayUrl(href)}</span>
@@ -30,6 +31,6 @@ export function ReferenceUrl({ url, printFull = false }: { url: string; printFul
       ) : (
         displayUrl(href)
       )}
-    </a>
+    </ExternalLink>
   );
 }

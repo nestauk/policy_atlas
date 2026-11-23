@@ -68,6 +68,7 @@ import "./sources.css";
 import { formatCount } from "../lib/format";
 import { LIST_CONTROL_CLASS, ListEmpty, ListError } from "../ui/brand/list/ListStates";
 import { ListFootRow, Pagination } from "../ui/brand/list/ListFoot";
+import { ExternalLink } from "../ui/brand/ExternalLink";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -1539,9 +1540,9 @@ export function SourceDossierBody({
       )}
       {href && (
         <footer className="border-t border-line pt-4">
-          <a href={href} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <ExternalLink href={href} className={buttonVariants({ variant: "outline", size: "sm" })}>
             Open original
-          </a>
+          </ExternalLink>
         </footer>
       )}
     </div>

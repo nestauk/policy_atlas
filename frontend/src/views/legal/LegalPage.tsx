@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { useDocumentTitle } from "../../lib/title";
 import { PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 /**
  * Shared chrome for the public legal pages: a single prose column under
@@ -44,8 +45,8 @@ export function LegalList({ children }: { children: ReactNode }) {
 /** Off-site privacy notices (AWS Cognito, Aurora, Bedrock). */
 export function ExternalNoticeLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className={PROSE_LINK_CLASS}>
+    <ExternalLink href={href} className={PROSE_LINK_CLASS}>
       {children}
-    </a>
+    </ExternalLink>
   );
 }

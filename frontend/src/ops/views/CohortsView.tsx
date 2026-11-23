@@ -29,6 +29,7 @@ import {
   useRecordedToast,
   useSort,
 } from "../ui";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 /** A cohort's date, "1 Dec 2026", always with its year; read as a local day, not a UTC instant. */
 // Non-breaking spaces keep each date whole; the range wraps at the dash
@@ -153,9 +154,9 @@ export function CohortsView() {
                         <ul className="flex flex-col gap-0.5">
                           {cohort.links.map((link) => (
                             <li key={link} className="truncate">
-                              <a href={link} target="_blank" rel="noreferrer noopener" className="text-blue underline underline-offset-[3px]" title={link}>
+                              <ExternalLink href={link} className="text-blue underline underline-offset-[3px]" title={link}>
                                 {linkWords(link)}
-                              </a>
+                              </ExternalLink>
                             </li>
                           ))}
                         </ul>

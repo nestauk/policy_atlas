@@ -94,10 +94,12 @@
 
   /* The splash page's two responsive headline sizes (task 058 consistency
      pass, lead ruling P5): named so no view writes a size by hand. The splash
-     persuades rather than operates, so these two scale with the viewport. */
-  --text-hero: clamp(40px, 5.4vw, 68px); /* the splash h1 */
+     persuades rather than operates, so these two scale with the viewport.
+     The floor, the ceiling and part of the slope are in rem: a size in vw
+     alone shrinks as the reader zooms in, which cancels the zoom. */
+  --text-hero: clamp(2.5rem, 2rem + 3vw, 4.25rem); /* the splash h1 */
   --text-hero--line-height: 1.02;
-  --text-hero-2: clamp(28px, 3vw, 40px); /* the splash feature-step headings */
+  --text-hero-2: clamp(1.75rem, 1.5rem + 1vw, 2.5rem); /* the splash feature-step headings */
   --text-hero-2--line-height: 1.1;
 
   /* Prose line-length cap. Retuned from 72ch to the prototype's 44em (032

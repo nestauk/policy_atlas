@@ -11,6 +11,7 @@ import { Tooltip } from "../../ui/radix/Tooltip";
 import { CITATION_MARKER_CLASS, CitationProvenanceBlock, ProvenanceSheet, SourceDossier } from "../ArtefactView";
 import { evidenceBalance, figureGroups, figureHeadline, SUPPORT_LABEL, VERDICT_LABEL } from "./tocModel";
 import type { SourceType, Support, TocDocument, TocFigure, Verdict } from "./types";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 /**
  * The sidebar's two text sizes: body for prose, meta for every listed item.
@@ -258,9 +259,9 @@ export function DocumentItem({
             {scrub(doc.title)}
           </button>
         ) : url !== null ? (
-          <a href={url} target="_blank" rel="noreferrer" className={SOURCE_TITLE_LINK_CLASS}>
+          <ExternalLink href={url} className={SOURCE_TITLE_LINK_CLASS}>
             {scrub(doc.title)}
-          </a>
+          </ExternalLink>
         ) : (
           scrub(doc.title)
         )}

@@ -57,6 +57,7 @@ import { useNow } from "../../lib/freshness";
 import { TocCodeText } from "../toc/codeLinks";
 import { CitationMarker } from "../toc/Documents";
 import { AttachFileButton, UploadPreview } from "../toc/uploads";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 /** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
@@ -361,10 +362,10 @@ function UploadThumb({ text }: { text: string }) {
       className="mb-2 block w-fit"
       imageClassName="max-h-40 max-w-[16rem] border border-line bg-paper object-contain"
       pdf={(url) => (
-        <a href={url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
+        <ExternalLink href={url} className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
           <PaperclipIcon aria-hidden="true" />
           {name}
-        </a>
+        </ExternalLink>
       )}
     />
   );
@@ -442,9 +443,9 @@ function TaskAgentBubble({
                 <li key={source.n}>
                   <span className="mr-1 text-grey">[{source.n}]</span>
                   {source.url ? (
-                    <a href={source.url} target="_blank" rel="noreferrer" className="text-blue underline underline-offset-[3px]">
+                    <ExternalLink href={source.url} className="text-blue underline underline-offset-[3px]">
                       {scrub(source.title)}
-                    </a>
+                    </ExternalLink>
                   ) : (
                     scrub(source.title)
                   )}

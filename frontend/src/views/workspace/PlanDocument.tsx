@@ -60,6 +60,7 @@ import {
 } from "./planVocabulary";
 import { RiskAppetiteSelect } from "../longlist/ShortlistView";
 import { UploadPreview } from "../toc/uploads";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
 type PlanDraft = components["schemas"]["PlanDraft"];
@@ -1045,9 +1046,9 @@ function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }
             blob={file.data}
             imageClassName="max-h-80 w-full border border-line object-contain"
             pdf={(url) => (
-              <a href={url} target="_blank" rel="noreferrer" className={cn(panelValueClass, "font-semibold underline decoration-on-navy-muted underline-offset-[3px] transition-colors duration-150 hover:decoration-white")}>
+              <ExternalLink href={url} className={cn(panelValueClass, "font-semibold underline decoration-on-navy-muted underline-offset-[3px] transition-colors duration-150 hover:decoration-white")}>
                 Open your original (PDF)
-              </a>
+              </ExternalLink>
             )}
           />
         )}

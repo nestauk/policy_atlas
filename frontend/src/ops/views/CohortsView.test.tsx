@@ -14,7 +14,7 @@ describe("Cohorts", () => {
     const table = await screen.findByRole("table", { name: "Cohorts" });
     const row = (name: string) => within(table).getByText(name).closest("tr") as HTMLElement;
     expect(row("Priority panel")).toHaveTextContent("Policy leads from HMT");
-    expect(within(row("Priority panel")).getByRole("link", { name: "example.org/panel-notes" })).toHaveAttribute(
+    expect(within(row("Priority panel")).getByRole("link", { name: /^example\.org\/panel-notes\s*\(opens in new tab\)$/ })).toHaveAttribute(
       "href",
       "https://example.org/panel-notes",
     );

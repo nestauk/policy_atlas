@@ -698,7 +698,7 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     };
     mockPane({ turns: [cited] });
     renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
-    expect(screen.getByRole("link", { name: "A Secondary School Universal Free School Meals Pilot" })).toHaveAttribute("href", "https://doi.org/10.1/x");
+    expect(screen.getByRole("link", { name: /^A Secondary School Universal Free School Meals Pilot\s*\(opens in new tab\)$/ })).toHaveAttribute("href", "https://doi.org/10.1/x");
     await userEvent.click(screen.getByRole("button", { name: "Citations 1" }));
     expect(await screen.findAllByText(/No effects were seen on food insecurity/)).not.toHaveLength(0);
   });
