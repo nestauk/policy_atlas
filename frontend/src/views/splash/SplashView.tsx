@@ -6,6 +6,7 @@ import { acceptDevToken } from "../../auth/DevTokenAuthProvider";
 import { DevTokenLoginPanel } from "../../auth/DevTokenLoginPanel";
 import { AUTH_RETURN_TO_KEY } from "../../auth/OidcAuthProvider";
 import { FoldMarkAnimated } from "../../ui/brand/FoldMarkAnimated";
+import { DECORATIVE_MOTION_MS } from "../../ui/motion/motion";
 import { SplashFeatureSteps } from "./SplashFeatureSteps";
 import { SplashField } from "./SplashField";
 import { SPLASH_PROSE } from "./splashTypography";
@@ -42,7 +43,7 @@ export function SplashView() {
       <header className="flex justify-center border-b border-white/15 px-6">
         <div className="flex h-16 w-full max-w-[1180px] items-center gap-6">
           <div className="flex min-w-0 items-center gap-1.25">
-            <FoldMarkAnimated />
+            <FoldMarkAnimated stopAfterMs={DECORATIVE_MOTION_MS} />
             <span className="whitespace-nowrap font-display text-heading font-extrabold tracking-[-0.02em]">
               Policy <b className="font-extrabold text-aqua">Atlas</b>
             </span>

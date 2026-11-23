@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SplashView } from "./SplashView";
 
@@ -48,5 +48,37 @@ describe("SplashView", () => {
     expect(within(main).getByRole("heading", { name: /^request access$/i })).toBeInTheDocument();
     const footer = screen.getByRole("contentinfo");
     expect(within(footer).getByRole("link", { name: /^About Nesta\s*\(opens in new tab\)$/ })).toHaveAttribute("target", "_blank");
+  });
+
+  describe("the fold animation", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("stops by itself after five seconds", () => {
+      let pending: FrameRequestCallback[] = [];
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+        pending.push(callback);
+        return pending.length;
+      });
+      const runFramesAt = (now: number) => {
+        const due = pending;
+        pending = [];
+        act(() => due.forEach((callback) => callback(now)));
+      };
+      const start = performance.now();
+      render(
+        <MemoryRouter>
+          <SplashView />
+        </MemoryRouter>,
+      );
+
+      // The header mark and the field behind the hero each run a loop.
+      expect(pending).toHaveLength(2);
+      runFramesAt(start + 1000);
+      expect(pending).toHaveLength(2);
+      runFramesAt(start + 6000);
+      expect(pending).toHaveLength(0);
+    });
   });
 });
