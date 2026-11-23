@@ -42,6 +42,7 @@ OPS_ENVIRONMENT_NAMES = {
     "OIDC_ISSUER", "OIDC_JWKS_URL", "OIDC_CLIENT_ID", "APP_ORIGIN",
     "POLICY_ATLAS_SERVICE_ROLE", "POLICY_ATLAS_SELF_SIGNUP",
     "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", "OPS_UI_DIR",
+    "OPS_CONTENT_SECURITY_POLICY", "OPS_CSP_MODE",
     "RUNS_PER_USER", "TASK_QUOTA_PER_YEAR", "DB_POOL_SIZE", "DB_MAX_OVERFLOW",
     "FORWARDED_ALLOW_IPS", "LOG_LEVEL", "LOG_FORMAT", "PA_BACKEND_MODE",
 }
@@ -189,6 +190,19 @@ def test_ops_container_has_the_complete_least_privilege_environment_and_secret_m
         "POLICY_ATLAS_SELF_SIGNUP": "0",
         "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "100",
         "OPS_UI_DIR": "/app/ops-ui",
+        # No API origin and no CAPTCHA hosts: the ops pages call only their
+        # own host and the sign-in service.
+        "OPS_CONTENT_SECURITY_POLICY": (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; font-src 'self'; "
+            "connect-src 'self' https://cognito-idp.eu-west-2.amazonaws.com "
+            "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com "
+            "https://auth.v3.policyatlas.uk; "
+            "frame-src 'self' https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com "
+            "https://auth.v3.policyatlas.uk; "
+            "frame-ancestors 'none'; form-action 'self'; object-src 'none'; base-uri 'self'"
+        ),
+        "OPS_CSP_MODE": "report-only",
         "RUNS_PER_USER": "3",
         "TASK_QUOTA_PER_YEAR": "50",
         "DB_POOL_SIZE": "5",

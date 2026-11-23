@@ -37,7 +37,7 @@ from aws_cdk import Fn
 from infra.cognito_auth import CognitoAuth, sign_in_block
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
-from infra.components.security_headers import SecurityHeaders
+from infra.components.security_headers import SecurityHeaders, content_security_policy
 from infra.components.waf import ApiFirewall
 
 # How the API reads documents' full text: "in_process" parses them
@@ -51,6 +51,7 @@ class PolicyAtlasStack(Stack):
                  certificate: acm.ICertificate, env_name: str,
                  ops_allowlist_size: int = 1,
                  auth_certificate: acm.ICertificate | None = None,
+                 metabase_host: str | None = None,
                  **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
@@ -81,11 +82,13 @@ class PolicyAtlasStack(Stack):
         shared_alb = shared_alb_imports.load_balancer
         shared_listener = shared_alb_imports.listener
 
-        # The firewall in front of the API (ADR 0047). Reads backend.waf
-        # from pa_config.json; nothing from it reaches the container.
+        # The firewall in front of the API, the ops pages and Metabase
+        # (ADR 0047). Reads backend.waf from pa_config.json; nothing from it
+        # reaches the container. metabase_host is None where the analytics
+        # stack is not deployed.
         ApiFirewall(self, "ApiFirewall",
             load_balancer_arn=shared_alb.load_balancer_arn,
-            api_host=be_domain,
+            hosts=[be_domain, ops_domain, *([metabase_host] if metabase_host else [])],
             domain_name=domain_name,
             waf_config=be_config.get("waf"),
         )
@@ -369,6 +372,15 @@ class PolicyAtlasStack(Stack):
         )
 
         # --- Ops service ---
+        # The sign-in addresses the browser talks to; both sites' Content
+        # Security Policies list them.
+        cognito_hosted_domains = [
+            f"https://{pa_app_config['cognito_domain_prefix']}.auth."
+            f"{self.region}.amazoncognito.com"
+        ]
+        if auth_domain:
+            # ADR 0049: our own sign-in address, beside the prefix address.
+            cognito_hosted_domains.append(f"https://{auth_domain}")
         # This runs the same image as the public API, but with only the credentials
         # and permissions needed by the operator-facing application.
         ops_task_def = ecs.FargateTaskDefinition(
@@ -393,6 +405,17 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_SELF_SIGNUP": "1" if self_signup_config["enabled"] else "0",
                 "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": str(self_signup_config["max_per_hour"]),
                 "OPS_UI_DIR": "/app/ops-ui",
+                # The ops pages' Content Security Policy (ADR 0048). The ops
+                # service sends it itself, because CloudFront does not serve
+                # these pages. csp_mode governs both sites.
+                "OPS_CONTENT_SECURITY_POLICY": content_security_policy(
+                    api_origin=None,
+                    cognito_region=self.region,
+                    cognito_hosted_domains=cognito_hosted_domains,
+                    waf_captcha=False,
+                    frame_ancestors="'none'",
+                ),
+                "OPS_CSP_MODE": pa_app_config.get("csp_mode") or "",
                 # The same limits as the API, so the ops pages' resolved
                 # limits agree with /me.
                 "RUNS_PER_USER": str(be_config["runs_per_user"]),
@@ -502,13 +525,6 @@ class PolicyAtlasStack(Stack):
             frontend_bucket,
         )
         # Task 064c / ADR 0048: application security headers on every response.
-        cognito_hosted_domains = [
-            f"https://{pa_app_config['cognito_domain_prefix']}.auth."
-            f"{self.region}.amazoncognito.com"
-        ]
-        if auth_domain:
-            # ADR 0049: our own sign-in address, beside the prefix address.
-            cognito_hosted_domains.append(f"https://{auth_domain}")
         security_headers = SecurityHeaders(
             self,
             "SecurityHeaders",

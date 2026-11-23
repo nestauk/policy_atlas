@@ -40,7 +40,9 @@ The same code and the same container image run two services. The environment var
 - `api` (the default): the public web API that the web app uses.
 - `ops`: the ops service. It serves only the ops pages (from the folder that `OPS_UI_DIR`
   names) and the `/api/v1/ops/*` routes. In the cloud, it connects to the database with its
-  own restricted login, `pa_ops`.
+  own restricted login, `pa_ops`. It sends the Content Security Policy (the header that
+  tells a browser where a page may load content from) given in `OPS_CONTENT_SECURITY_POLICY`;
+  `OPS_CSP_MODE=enforce` makes the browser block violations, any other value only reports them.
 
 Both answer `GET /healthz` (the process runs) and `GET /readyz` (the database answers). The ops service has its own OpenAPI document,
 `frontend/openapi-ops.json`. Architecture decision record (ADR)

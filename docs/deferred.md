@@ -1236,6 +1236,21 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Limits in the code
 
+- `ops/commands.py` (`reissue_temporary_password`): `user reissue` on an account that has
+  signed in replaces the password but does not end sessions that are already open (a refresh
+  token lasts 30 days), and it writes no row in the ops action log; the operator's AWS identity
+  is in the command trace only. The command exists for addresses with no mailbox, where the
+  operator and the account holder work together. Condition: a reissue is used after a suspected
+  password leak, or an audit asks who reset whom; then one `AdminUserGlobalSignOut` call, as
+  `user reset-app` makes, and a log row.
+- `ops/cli.py` (`main`): the command line turns an `OpsError` into a `refused:` line, but a
+  Cognito error from the read that checks whether an account is enabled (`_is_enabled`, used by
+  `user create`, `user reset-app` and `user reissue`) reaches the operator as a Python
+  traceback. Nothing is changed in that case; the message is only hard to read. Condition: an
+  operator meets one; then one catch of the Cognito client error in `main`.
+- Shared test accounts have an address with no mailbox, so "Forgot password" cannot work for
+  them and an operator resets their password. An alias that forwards to a real mailbox would
+  remove the operator. Condition: these resets become frequent.
 - `runtime/inherit.py`, `options_scoping/longlist/longlist.py`, the label resolver and
   `api/read_models/repository.py`: only inherit and suggest check again that the owner can still
   read a linked source Task (`_sources_owner_reads`). The longlist build, the Task Agent context,
@@ -1345,10 +1360,9 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   test, about half a day. Until then [DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers asks
   whoever adds a third-party library to rerun the manual pass. Condition: a library change breaks
   the policy unseen.
-- The ops pages and the API's own responses carry no Content Security Policy: the backend serves
-  both through the load balancer, not CloudFront. The ops host is limited to allowlisted addresses;
-  API responses are JSON, from which no page is built. Condition: the ops pages leave the
-  allowlist; then a small backend middleware that adds the headers on the ops host.
+- The API's own responses carry no Content Security Policy: the backend serves them through the
+  load balancer, not CloudFront. They are JSON, from which no page is built. Condition: the API
+  serves a page.
 - Sign-in tokens stay in `sessionStorage` with a 30-day refresh token (owner ruling, ADR 0048). A
   shorter refresh-token lifetime changes how often people sign in, which is a product decision;
   moving tokens out of `sessionStorage` is a larger change to the sign-in flow. Condition: a product
@@ -1356,6 +1370,16 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Limits in the code
 
+- `infra/infra/components/waf.py`: one general rate rule counts an address across the API, the
+  ops pages and Metabase together, and one `waf.mode` switch moves all three to block. A busy
+  Metabase dashboard from one office address uses the same allowance as the product, and a
+  managed rule that wrongly matches a Metabase query can only be undone by returning all three
+  hosts to count. The limit was measured on API traffic only. Condition: the count week shows
+  ops or Metabase traffic near the limit or matching a managed rule; then a rate rule, or a
+  mode, for each host.
+- `api/app.py`: the ops pages send a Content Security Policy but no `Referrer-Policy` or
+  `Permissions-Policy` header (the website gets both from CloudFront). The ops host is limited
+  to allowlisted addresses. Condition: the ops pages leave the allowlist.
 - `.github/workflows/deploy-production.yml`: Actions runs are serialised per environment, but a
   local recovery or bootstrap can still interleave with them (parallel Alembic runs). The runbook
   asks for human coordination. Condition: unattended local operations or a second deploy system;

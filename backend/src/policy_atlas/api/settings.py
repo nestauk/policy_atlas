@@ -49,6 +49,12 @@ class Settings:
             each hour (``POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR``).
         ops_ui_dir: Directory holding the operations single-page application
             (``OPS_UI_DIR``; ``/app/ops-ui`` by default).
+        ops_csp: The Content Security Policy (the header that tells a browser
+            where a page may load content from) for the operations pages
+            (``OPS_CONTENT_SECURITY_POLICY``; the infrastructure code builds
+            it). None sends no such policy.
+        ops_csp_enforced: Whether the browser blocks what ``ops_csp`` forbids
+            (``OPS_CSP_MODE=enforce``) or only reports it in its console.
     """
 
     oidc_issuer: str
@@ -72,6 +78,8 @@ class Settings:
     self_signup_enabled: bool = False
     self_signup_max_per_hour: int = 100
     ops_ui_dir: Path | None = Path("/app/ops-ui")
+    ops_csp: str | None = None
+    ops_csp_enforced: bool = False
 
 
 def load_settings() -> Settings:
@@ -132,6 +140,8 @@ def load_settings() -> Settings:
             "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", default=100
         ),
         ops_ui_dir=Path(_optional("OPS_UI_DIR") or "/app/ops-ui"),
+        ops_csp=_optional("OPS_CONTENT_SECURITY_POLICY"),
+        ops_csp_enforced=_optional("OPS_CSP_MODE") == "enforce",
     )
 
 

@@ -260,13 +260,23 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
-        """Defense-in-depth response headers on the JSON API."""
+        """Defense-in-depth response headers on the JSON API and the ops pages."""
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         if app_settings.service_role == "ops":
             # The ops pages are never embedded; refuse framing (clickjacking).
             response.headers.setdefault("X-Frame-Options", "DENY")
-            response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+            # CloudFront gives the public site its headers; nothing sits in
+            # front of the ops pages, so this service sends its own. Until the
+            # full policy is enforced, the framing ban stays enforced and the
+            # full policy is only reported in the browser console.
+            csp = app_settings.ops_csp
+            if csp and app_settings.ops_csp_enforced:
+                response.headers.setdefault("Content-Security-Policy", csp)
+            else:
+                response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+                if csp:
+                    response.headers.setdefault("Content-Security-Policy-Report-Only", csp)
         # Ignored by browsers over plain HTTP (dev); load-bearing behind TLS.
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=63072000; includeSubDomains"

@@ -50,6 +50,8 @@ setup:
 # Omit ORG to create the account in no organisation.
 #        make org-domain-add ENV=staging DOMAIN=b.org ORG="Org"
 #        make user-deactivate ENV=staging EMAIL=a@b.org   (or SUB=<cognito sub>, not both)
+#        make user-reissue ENV=staging EMAIL=a@b.org   (new temporary password)
+#        make user-reset-app ENV=staging EMAIL=a@b.org   (lost phone: show the QR code again)
 # Optional on every target: OPERATOR="ticket-123" (an annotation; the STS ARN
 # is logged regardless).
 # The wrappers forward through scripts/ops_run.sh to the real CLI
@@ -59,7 +61,7 @@ setup:
 ops-require = $(foreach v,$(1),$(if $($(v)),,$(error $(v)=... is required for this target)))
 OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 
-.PHONY: org-create user-create user-enrol user-resync user-reissue user-de-enrol rows-assign admin-grant admin-revoke ops-grant ops-revoke org-domain-add org-domain-remove user-deactivate user-reactivate
+.PHONY: org-create user-create user-enrol user-resync user-reissue user-reset-app user-de-enrol rows-assign admin-grant admin-revoke ops-grant ops-revoke org-domain-add org-domain-remove user-deactivate user-reactivate
 
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
@@ -75,6 +77,8 @@ user-resync:
 	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user resync --email "$(EMAIL)"
 user-reissue:
 	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reissue --email "$(EMAIL)"
+user-reset-app:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user reset-app $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 user-de-enrol:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user de-enrol $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 user-deactivate:

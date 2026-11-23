@@ -234,3 +234,19 @@ def test_s2_cognito_domain_config_couples_the_user_pool_and_csp():
     hosted_domain = "https://pa-csp-coupling-test.auth.eu-west-2.amazoncognito.com"
     assert hosted_domain in csp.split("connect-src ", maxsplit=1)[1]
     assert f"frame-src 'self' {hosted_domain}" in csp
+
+
+def test_ops_policy_has_no_api_origin_and_refuses_framing():
+    csp = content_security_policy(
+        api_origin=None,
+        cognito_region="eu-west-2",
+        cognito_hosted_domains=["https://sign-in.example.test"],
+        waf_captcha=False,
+        frame_ancestors="'none'",
+    )
+    directives = dict(d.split(" ", 1) for d in csp.split("; "))
+    assert directives["connect-src"] == (
+        "'self' https://cognito-idp.eu-west-2.amazonaws.com https://sign-in.example.test"
+    )
+    assert directives["frame-ancestors"] == "'none'"
+    assert directives["script-src"] == "'self'"

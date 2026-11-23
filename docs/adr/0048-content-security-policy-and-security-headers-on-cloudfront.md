@@ -78,8 +78,8 @@ The pages these decisions rest on (gathered 2026-11-18, more in the task's gitig
   person adding it to rerun the manual pass.
 - HSTS `includeSubDomains` stays in browsers for up to a year after any rollback, so no
   plain-HTTP subdomain can be added under `policyatlas.uk` later.
-- The 065 ops pages and the API's own responses are not served by CloudFront and carry no
-  CSP (recorded in `docs/deferred.md`).
+- The API's own responses are not served by CloudFront and carry no CSP (recorded in
+  `docs/deferred.md`). The ops pages send their own (see the amendment below).
 - Rollback: `csp_mode: "report-only"` and a deploy; a full revert restores the managed
   policy.
 
@@ -124,3 +124,16 @@ to the captcha and token hosts. When the CAPTCHA is on, the policy now has:
 
 The staging CSP is now 814 characters. Production's CSP does not change (the CAPTCHA is off
 there). The decision itself stands.
+
+## Amendment (2026-11-23): a policy for the ops pages
+
+The ops pages are served by the ops service through the load balancer, so they did not get
+the CloudFront policy. The ops service now sends its own. The app stack builds the string
+with the same function (`content_security_policy`) and gives it to the ops container in
+`OPS_CONTENT_SECURITY_POLICY`; a small middleware in the backend sends it. The ops policy has
+no API origin (the pages call their own host), no CAPTCHA hosts, and `frame-ancestors 'none'`.
+
+`csp_mode` governs both sites. In report-only mode the ops pages keep the enforced header
+`Content-Security-Policy: frame-ancestors 'none'` that they had before, beside the
+report-only header. The manual console pass covers both sites before the switch to enforce.
+The API's JSON responses still carry no policy.

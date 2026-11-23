@@ -35,7 +35,8 @@ hard gates of the [task-cycle](../../.claude/skills/task-cycle/SKILL.md) skill.
 - **Browser security headers.** One CloudFront response headers policy sends a Content Security
   Policy built from `infra/pa_config.json`, a Permissions-Policy and HSTS with subdomains. The
   per-environment key `csp_mode` chooses report-only or enforce; each environment switches to
-  enforce after a manual browser check
+  enforce after a manual browser check. The ops service sends its own, stricter policy under
+  the same key
   ([ADR 0048](../adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)).
 - **Accounts and operations.** An operations service behind the office allowlist, with its own
   pages and its own database login, and self-signup for one email domain
