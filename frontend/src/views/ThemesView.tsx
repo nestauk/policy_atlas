@@ -377,6 +377,8 @@ function ScopingThemeSection({ taskId, theme }: { taskId: string; theme: Scoping
                 )}
               >
                 {scrub(option.name)}
+                {/* Grey alone would say it by colour only. */}
+                {option.excluded && " (excluded)"}
               </span>
               <GroupCount count={documentWords(option.documents)} className="shrink-0" />
             </Link>

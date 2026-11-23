@@ -38,6 +38,7 @@ import {
   linkTip,
   routeEdge,
   visibleLinkIds,
+  LAYER_LABEL,
 } from "./tocModel";
 import type { Preview } from "./Suggestions";
 import type { TocBox, TocGraph, TocLink, TocPathway, Verdict } from "./types";
@@ -572,6 +573,9 @@ export function TocCanvas({
           },
           draggable: editing !== null && !connecting && !isLive,
           connectable: false,
+          // The library draws a box as a group, which takes no name from its
+          // content: say the layer and the words.
+          ariaLabel: `${LAYER_LABEL[box.layer]}: ${scrub(box.text)}`,
           // The sketch is not a control: no focus, no click.
           ...(isLive ? { selectable: false, focusable: false } : {}),
         },
@@ -621,7 +625,9 @@ export function TocCanvas({
         },
         selectable: false,
         focusable: !isLive && !link.link_id.startsWith(PREVIEW),
-        ariaLabel: linkTip(link),
+        // Both ends, then the verdict: the verdict alone names every
+        // "Supported" connection the same.
+        ariaLabel: `${scrub(boxById.get(link.source_box_id)?.text ?? "")} to ${scrub(boxById.get(link.target_box_id)?.text ?? "")}: ${linkTip(link)}`,
       };
     });
 

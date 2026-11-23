@@ -78,6 +78,14 @@ describe("canvas", () => {
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
   });
 
+  it("names each box by its layer and words, and each connection by its two ends and verdict", () => {
+    renderResult();
+    const boxes = [...document.querySelectorAll(".react-flow__node-box")];
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const box of boxes) expect(box.getAttribute("aria-label")).toMatch(/^.+: .+/);
+    expect(edge(1)?.getAttribute("aria-label")).toMatch(/^.+ to .+: Supported$/);
+  });
+
   it("marks the critical connection with a warning triangle, not a thicker line", () => {
     renderResult();
     // The mark is the edge's only <g transform>: one on the critical edge, none elsewhere.

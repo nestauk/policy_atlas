@@ -496,7 +496,7 @@ export function SourcesView() {
           <ArrivalProvider settled={firstPaintDone} scopeKey={`${taskId}?${viewKey}`}>
           <Arrival arrivalId="sources-table">
             <div className="sources-frame">
-              <table role="table" className="sources-table">
+              <table role="table" aria-label="Sources" className="sources-table">
                 <SourcesColumns />
                 {header}
                 <tbody role="rowgroup">
