@@ -205,7 +205,7 @@ export function ThemesView() {
   return (
     <main className="py-8">
       {isPending && (
-        <div aria-busy="true" aria-label="Loading themes" className="space-y-3">
+        <div role="status" aria-busy="true" aria-label="Loading themes" className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="anim-breathe h-16 border border-line bg-paper-2" />
           ))}
@@ -314,7 +314,7 @@ function ScopingThemes({ taskId, longlist }: { taskId: string; longlist: ReturnT
   return (
     <main className="py-8">
       {longlist.isPending && (
-        <div aria-busy="true" aria-label="Loading themes" className="space-y-3">
+        <div role="status" aria-busy="true" aria-label="Loading themes" className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="anim-breathe h-16 border border-line bg-paper-2" />
           ))}

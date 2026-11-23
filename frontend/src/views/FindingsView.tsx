@@ -457,7 +457,7 @@ export function FindingsView() {
       )}
 
       {findings.isPending && (
-        <div aria-busy="true" aria-label="Loading findings" className="mt-5 space-y-2">
+        <div role="status" aria-busy="true" aria-label="Loading findings" className="mt-5 space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-16 anim-breathe border border-line bg-paper-2" />
           ))}

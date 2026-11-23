@@ -46,6 +46,7 @@ import { BASELINE_GATE_KIND } from "./checkInPresentation";
 import type { components } from "../../api/gen/types";
 import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
 import { ActionLine } from "./ActionLine";
+import { DoneAnnouncer } from "../../ui/feedback/DoneAnnouncer";
 import { GrowBox } from "./GrowBox";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
@@ -1128,6 +1129,7 @@ export function TaskAgentPane({
           bar's reconnecting line, at the top of this column so it starts
           after the rail. In the sidebar the page's own bar carries it. */}
       {!compact && <ReconnectingBanner connectionStatus={stream.connectionStatus} />}
+      <DoneAnnouncer busy={transcript.isSubmitting} words="The Task Agent replied" />
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -20,6 +20,7 @@ const SKELETON_SECTIONS = ["From search to citation", "Evidence types"] as const
 export function LandscapeSkeleton() {
   return (
     <div
+      role="status"
       aria-busy="true"
       aria-label="Loading the landscape"
       data-testid="landscape-skeleton"

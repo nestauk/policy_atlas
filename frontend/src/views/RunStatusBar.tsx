@@ -14,7 +14,7 @@ import {
   taskAgentConversationId,
   useActiveConversation,
 } from "./workspace/chat/conversationState";
-import { cardRows, currentRow, elapsedSeconds, formatElapsed, isFinished, rowLink, walkKind } from "./workspace/runProgress";
+import { cardRows, currentRow, elapsedSeconds, endedLine, formatElapsed, isFinished, rowLink, walkKind } from "./workspace/runProgress";
 import { useRunWords } from "./workspace/runWords";
 import { useChainStart, waitsForCheck } from "./workspace/tocWalks";
 
@@ -147,6 +147,12 @@ export function RunStatusBar() {
   const nowMs = useNow(open);
   const { words, row, paused } = useRunWords(stream, live?.isOwner ?? false, live?.ownerName ?? null);
   const traces = useMountedTraces();
+  // The run's end, for a screen reader: the bar folds away, so the finish
+  // words go to the same region. Only for a run seen running here; a finish
+  // that was already there when the page opened says nothing.
+  const [sawRunning, setSawRunning] = useState(ticking);
+  if (ticking && !sawRunning) setSawRunning(true);
+  const ended = sawRunning && !ticking ? endedLine(run?.status, walkKind(live?.capability, stream.stages)) : null;
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
 
@@ -292,7 +298,7 @@ export function RunStatusBar() {
           while a run trace (the sidebar's) announces the same words. */}
       {traces === 0 && (
         <p role="status" aria-live="polite" className="sr-only">
-          {open ? words : ""}
+          {open ? words : (ended?.words ?? "")}
         </p>
       )}
     </>

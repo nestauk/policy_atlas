@@ -247,7 +247,7 @@ function CheckInCardBody({
 
   if (compiled !== null) {
     return (
-      <Card aria-live="polite" className="anim-swap-in-fast border-l-2 border-l-orange p-5">
+      <Card className="anim-swap-in-fast border-l-2 border-l-orange p-5">
         <h3 className="text-lead font-bold text-navy">Confirm your steer</h3>
         {steerWords !== null && (
           <div className="mt-2 ml-8 border border-blue-tint bg-blue-tint-2 px-3 py-2">
@@ -339,7 +339,7 @@ function CheckInCardBody({
   if (checkIn.kind === BASELINE_GATE_KIND) {
     const facts = baselineGateFacts(bundleRecord);
     return (
-      <Card aria-live="polite" data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
+      <Card data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
         <h3 className="max-w-prose-measure text-lead font-bold text-navy">{BASELINE_GATE_QUESTION}</h3>
         {!compact && (
           <p data-testid="check-in-facts" className="mt-1 max-w-prose-measure text-meta text-grey">
@@ -394,7 +394,7 @@ function CheckInCardBody({
   const linksToSources = checkIn.stage !== null && SOURCES_CHECK_IN_STAGES.has(checkIn.stage);
 
   return (
-    <Card aria-live="polite" data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
+    <Card data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
       <h3 className="max-w-prose-measure text-lead font-bold text-navy">{scrub(headline.title)}</h3>
       {!compact && headline.facts !== null && (
         <p data-testid="check-in-facts" className="mt-1 max-w-prose-measure text-body text-grey">

@@ -349,6 +349,27 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("says the run has finished, in the same region, when a run it showed ends", () => {
+    live("sources", stream("running"));
+    const view = renderStrip();
+    live("sources", stream("succeeded"));
+    view.rerender(
+      <MemoryRouter initialEntries={["/tasks/t1/sources"]}>
+        <Routes>
+          <Route path="*" element={<RunStatusBar />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(statusBar()).toHaveAttribute("data-open", "false");
+    expect(screen.getByRole("status")).toHaveTextContent("Report ready");
+  });
+
+  it("says nothing for a run that had already finished when the page opened", () => {
+    live("sources", stream("succeeded"));
+    renderStrip();
+    expect(screen.getByRole("status")).toHaveTextContent(/^$/);
+  });
+
   // Owner, round 11: on a scoping walk the bar says the longlist walk's step,
   // never one of its option searches' (child walks on the same stream).
   it("says the longlist walk's step and links to the longlist, never a child search's step", () => {

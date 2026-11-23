@@ -286,7 +286,7 @@ function TocPage({ taskId }: { taskId: string }) {
     if (graph != null && !sawEmpty && graph.check_status === "drafting") setSawEmpty(true);
     return (
       <ReportPage className="md:max-w-[1180px]">
-        <p aria-busy={toc.isPending} className="text-body text-grey">
+        <p role="status" aria-busy={toc.isPending} className="text-body text-grey">
           {toc.isPending ? "Loading the theory of change…" : graph?.check_status === "none" ? "There is no theory of change yet." : "The theory of change is being drafted."}
         </p>
       </ReportPage>
