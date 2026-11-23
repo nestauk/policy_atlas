@@ -4,6 +4,7 @@ Run: uv run --project backend python scripts/evals/post_screening_and_synthesis/
 """
 
 import importlib
+import os
 
 import _bootstrap  # noqa: F401
 from utils import filter_test_set, mark_links, norm_title
@@ -17,6 +18,11 @@ FACT_FIELDS, KeyPoint, flatten_key_points = (
 )
 pick_docs = _ground_truth.pick_docs
 score = importlib.import_module("02_run_evals").score
+
+# The Overton script reads its API key on import. These checks make no request.
+os.environ.setdefault("OVERTON_API_KEY", "unused")
+_overton = importlib.import_module("determine_which_refs_are_in_overton")
+normalise_url, is_url_match = _overton.normalise_url, _overton.is_url_match
 
 
 def test_flatten_key_points_numbers_facts_across_points() -> None:
@@ -86,6 +92,31 @@ def test_mark_links_numbers_external_links_only() -> None:
 def test_norm_title() -> None:
     assert norm_title("Résumé: a Review!") == "resume a review"
     assert norm_title(None) == ""
+
+
+def test_normalise_url_ignores_scheme_www_slash_and_query() -> None:
+    assert (
+        normalise_url("https://www.unicef.org/a/b/")
+        == normalise_url("http://UNICEF.org/a/b?x=1#y")
+        == "unicef.org/a/b"
+    )
+    assert normalise_url("https://unicef.org/a/c") != normalise_url(
+        "https://unicef.org/a/b"
+    )
+    assert normalise_url(None) == ""
+
+
+def test_is_url_match_accepts_same_page_and_parent_page_only() -> None:
+    landing = "https://www.gov.uk/government/publications/ai-in-education"
+    assert is_url_match(landing + "/", "http://gov.uk/government/publications/ai-in-education")
+    assert is_url_match(landing + "/the-html-attachment", landing)
+    # Not a parent: a sibling with the same prefix, a child, and a host with no path.
+    assert not is_url_match(landing + "-module-2", landing)
+    assert not is_url_match(landing, landing + "/the-html-attachment")
+    assert not is_url_match(landing, "https://www.gov.uk/")
+    assert is_url_match("https://www.heathrow.com/", "https://heathrow.com")
+    # A candidate with no URL must not match a reference with no URL.
+    assert not is_url_match("", None)
 
 
 def test_filter_test_set_keeps_sheet_order_and_rejects_unknown() -> None:
