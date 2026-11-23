@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { apiBaseUrl } from "../../api/client";
 import { Button } from "../../ui/brand/Button";
@@ -27,8 +27,12 @@ function overLimitMessage(length: number, max: number): string | null {
 /**
  * Request-access form — posts to the public waitlist endpoint.
  *
- * Length limits mirror the API contract. Over-limit fields show a live
- * warning and block submit until shortened (do not silently truncate).
+ * Length limits mirror the API contract. An over-limit field shows a warning
+ * as it is typed and counts as an error on submit (do not silently truncate).
+ *
+ * Submit stays enabled, so it can take focus and say what is wrong: a failed
+ * submit moves focus to the first field with an error, and a successful one
+ * moves it to the confirmation, which replaces the button.
  */
 export function WaitlistForm() {
   const [email, setEmail] = useState("");
@@ -43,6 +47,12 @@ export function WaitlistForm() {
   const captchaBox = useRef<HTMLDivElement>(null);
   const captcha = useWafCaptcha(captchaBox);
   const captchaPending = captcha.configured && captcha.token === null;
+  const outcome = useRef<HTMLParagraphElement>(null);
+
+  // The confirmation replaces the Submit button, which held focus.
+  useEffect(() => {
+    if (status === "success") outcome.current?.focus();
+  }, [status]);
 
   const emailTrim = email.trim();
   const nameTrim = name.trim();
@@ -65,13 +75,33 @@ export function WaitlistForm() {
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    // A control inside the puzzle may submit the form; that is not the visitor's submit.
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if (submitter != null && captchaBox.current?.contains(submitter)) return;
     setAttempted(true);
     if (!canSubmit) {
-      // Field-level errors are enough — no duplicate form summary.
+      // Field-level errors are enough — no duplicate form summary. Focus goes
+      // to the first field with one; its description is the error.
       setMessage(null);
+      const firstInvalid =
+        emailOver || emailMissing || emailInvalid
+          ? "waitlist-email"
+          : nameOver || nameMissing
+            ? "waitlist-name"
+            : orgOver
+              ? "waitlist-org"
+              : "waitlist-role";
+      document.getElementById(firstInvalid)?.focus();
       return;
     }
-    if (captchaPending) return; // also covers a submit the widget might trigger
+    if (captchaPending) {
+      // When the puzzle did not load, its own message is already on the page.
+      if (!captcha.unavailable) {
+        setStatus("error");
+        setMessage("Solve the puzzle to continue");
+      }
+      return;
+    }
     setStatus("submitting");
     setMessage(null);
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -128,6 +158,7 @@ export function WaitlistForm() {
     >
       <Field
         id="waitlist-email"
+        counting={emailOverMsg !== null}
         label="Email"
         error={
           emailOverMsg ??
@@ -156,6 +187,7 @@ export function WaitlistForm() {
 
       <Field
         id="waitlist-name"
+        counting={nameOverMsg !== null}
         label="Name"
         error={nameOverMsg ?? (attempted && nameMissing ? "Enter your name" : null)}
       >
@@ -177,6 +209,7 @@ export function WaitlistForm() {
 
       <Field
         id="waitlist-org"
+        counting={orgOverMsg !== null}
         label="Organisation"
         labelExtra={<span className="font-normal text-grey">(optional)</span>}
         error={orgOverMsg}
@@ -198,6 +231,7 @@ export function WaitlistForm() {
 
       <Field
         id="waitlist-role"
+        counting={roleOverMsg !== null}
         label="What would you like to use Policy Atlas for?"
         error={
           roleOverMsg ??
@@ -245,8 +279,10 @@ export function WaitlistForm() {
 
       {message !== null && (
         <p
-          role="status"
-          className={cn(SPLASH_PROSE, status === "error" ? "text-red" : "text-navy")}
+          ref={outcome}
+          tabIndex={-1}
+          role={status === "error" ? "alert" : "status"}
+          className={cn(SPLASH_PROSE, "outline-hidden", status === "error" ? "text-red" : "text-navy")}
         >
           {message}
         </p>
@@ -255,7 +291,7 @@ export function WaitlistForm() {
         <div>
           <Button
             type="submit"
-            disabled={status === "submitting" || lengthBlocked || captchaPending}
+            disabled={status === "submitting"}
             className="min-h-12 px-[22px] py-0 text-lead font-extrabold"
           >
             {status === "submitting" ? "Submitting…" : "Submit"}
@@ -278,12 +314,16 @@ function Field({
   label,
   labelExtra,
   error,
+  counting,
   children,
 }: {
   id: string;
   label: string;
   labelExtra?: ReactNode;
   error: string | null;
+  /** The error is the over-limit count, which changes with each key press:
+   *  it is the field's description, not an alert spoken on every key. */
+  counting: boolean;
   children: (describedBy: string | undefined, invalid: boolean) => ReactNode;
 }) {
   const uid = useId();
@@ -299,7 +339,7 @@ function Field({
       </label>
       {children(describedBy, invalid)}
       {error !== null ? (
-        <p id={errorId} role="alert" className={`mt-1.5 ${SPLASH_PROSE} text-red`}>
+        <p id={errorId} role={counting ? undefined : "alert"} className={`mt-1.5 ${SPLASH_PROSE} text-red`}>
           {error}
         </p>
       ) : null}

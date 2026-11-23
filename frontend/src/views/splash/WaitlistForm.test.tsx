@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WAITLIST_LIMITS, WaitlistForm } from "./WaitlistForm";
 
 describe("WaitlistForm length limits", () => {
-  it("shows a live over-limit warning and disables submit", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("describes an over-limit field as it is typed and keeps submit enabled", async () => {
     const user = userEvent.setup();
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     render(<WaitlistForm />);
@@ -14,10 +18,47 @@ describe("WaitlistForm length limits", () => {
     await user.click(role);
     await user.paste("x".repeat(WAITLIST_LIMITS.roleOrReason + 5));
 
-    expect(screen.getByRole("alert")).toHaveTextContent(/too long/i);
-    expect(screen.getByRole("alert")).toHaveTextContent(/5 characters over/i);
-    expect(screen.getByRole("button", { name: /^submit$/i })).toBeDisabled();
+    expect(role).toBeInvalid();
+    expect(role).toHaveAccessibleDescription(/too long — 5 characters over/i);
+    // The count changes with each key press, so it is not an alert.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^submit$/i })).toBeEnabled();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("moves focus to the first field with an error when a submit fails", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(<WaitlistForm />);
+
+    await user.type(screen.getByLabelText(/^email$/i), "ada@example.com");
+    await user.click(screen.getByRole("button", { name: /^submit$/i }));
+
+    const name = screen.getByLabelText(/^name$/i);
+    expect(name).toHaveFocus();
+    expect(name).toBeInvalid();
+    expect(name).toHaveAccessibleDescription("Enter your name");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("moves focus to the confirmation when the request is accepted", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ entry_id: "1", email: "a@b.co", created_at: "2026-01-01" }), {
+        status: 201,
+      }),
+    );
+    render(<WaitlistForm />);
+
+    await user.type(screen.getByLabelText(/^email$/i), "ada@example.com");
+    await user.type(screen.getByLabelText(/^name$/i), "Ada");
+    await user.type(screen.getByLabelText(/what would you like to use policy atlas for/i), "Research");
+    await user.click(screen.getByRole("button", { name: /^submit$/i }));
+
+    const confirmation = await screen.findByRole("status");
+    expect(confirmation).toHaveTextContent("you're on the list");
+    expect(confirmation).toHaveFocus();
+    expect(screen.queryByRole("button", { name: /^submit$/i })).not.toBeInTheDocument();
   });
 
   it("does not submit while a field is over the limit", async () => {
@@ -126,7 +167,7 @@ describe("WaitlistForm CAPTCHA", () => {
     await fillForm(user);
     await user.click(screen.getByRole("button", { name: /^submit$/i }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Please solve the puzzle again");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Please solve the puzzle again");
     expect(renderCaptcha).toHaveBeenCalledTimes(2);
   });
 
@@ -139,7 +180,7 @@ describe("WaitlistForm CAPTCHA", () => {
     await fillForm(user);
     await user.click(screen.getByRole("button", { name: /^submit$/i }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    expect(await screen.findByRole("alert")).toHaveTextContent(
       "Something went wrong. Please try again.",
     );
     expect(renderCaptcha).toHaveBeenCalledTimes(1);
@@ -159,7 +200,20 @@ describe("WaitlistForm CAPTCHA", () => {
     expect(
       screen.getByText("The sign-up check did not load. Reload the page to try again."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^submit$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^submit$/i })).toBeEnabled();
+  });
+
+  it("says to solve the puzzle when the form is submitted before it is solved", async () => {
+    window.AwsWafCaptcha = { renderCaptcha: vi.fn() };
+    const user = userEvent.setup();
+    const fetchSpy = mockFetch(created());
+    render(<WaitlistForm />);
+
+    await fillForm(user);
+    await user.click(screen.getByRole("button", { name: /^submit$/i }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Solve the puzzle to continue");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("says so when the script does not load, and recovers when it does", async () => {
@@ -182,7 +236,6 @@ describe("WaitlistForm CAPTCHA", () => {
     act(() => vi.advanceTimersByTime(10_000));
     expect(screen.getByText(reload)).toBeInTheDocument();
     const submit = screen.getByRole("button", { name: /^submit$/i });
-    expect(submit).toBeDisabled();
     await user.click(submit);
     expect(fetchSpy).not.toHaveBeenCalled();
 
