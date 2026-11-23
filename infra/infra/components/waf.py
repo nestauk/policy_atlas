@@ -1,7 +1,7 @@
-"""The firewall in front of the public API.
+"""The firewall in front of the public API, the ops pages and Metabase.
 
 In plain words, AWS WAF (Web Application Firewall) checks a web request before
-the load balancer sends it to the API.  A web ACL is the firewall's list of
+the load balancer sends it to one of those services.  A web ACL is the firewall's list of
 rules.  A scope-down statement narrows a rule to a host or path.  Rate-based
 rules count requests from an address over a time window; managed rule groups
 are AWS-maintained attack-detection rules.  Count mode records matches without
@@ -45,17 +45,25 @@ def _byte_match(
     )
 
 
-def _api_host(api_host: str) -> wafv2.CfnWebACL.StatementProperty:
+def _protected_hosts(hosts: list[str]) -> wafv2.CfnWebACL.StatementProperty:
     # STARTS_WITH, not EXACTLY: the load balancer routes on the host name and
-    # ignores a ":443" suffix or a trailing dot, so a request that reaches the
-    # API may carry either; an exact match would let it skip these rules.
-    return _byte_match(
-        # single_header is typed Any: a SingleHeaderProperty would render "name",
-        # which the WAF service rejects (docs/knowledge/cdk-any-typed-property-…).
-        field=wafv2.CfnWebACL.FieldToMatchProperty(single_header={"Name": "host"}),
-        constraint="STARTS_WITH",
-        search=api_host,
-        transforms=("LOWERCASE",),
+    # ignores a ":443" suffix or a trailing dot, so a request that reaches a
+    # service may carry either; an exact match would let it skip these rules.
+    matches = [
+        _byte_match(
+            # single_header is typed Any: a SingleHeaderProperty would render "name",
+            # which the WAF service rejects (docs/knowledge/cdk-any-typed-property-…).
+            field=wafv2.CfnWebACL.FieldToMatchProperty(single_header={"Name": "host"}),
+            constraint="STARTS_WITH",
+            search=host,
+            transforms=("LOWERCASE",),
+        )
+        for host in hosts
+    ]
+    if len(matches) == 1:  # an OR statement needs at least two parts
+        return matches[0]
+    return wafv2.CfnWebACL.StatementProperty(
+        or_statement=wafv2.CfnWebACL.OrStatementProperty(statements=matches)
     )
 
 
@@ -136,9 +144,10 @@ class ApiFirewall(Construct):
         scope: The parent construct (the app stack).
         id: The construct id.
         load_balancer_arn: The shared load balancer's ARN (an SSM-resolved token).
-        api_host: The API's host name, ``api.<domain_name>``; the general rate rule
-            and the managed groups match only requests whose Host header starts
-            with it.
+        hosts: The host names the general rate rule and the managed groups
+            protect: the API's, the ops pages' and (where it is deployed)
+            Metabase's. A request matches when its Host header starts with one
+            of them. The rate rule counts one address across all of them.
         domain_name: The environment's domain; the one entry in the token domain
             list when the CAPTCHA is on, so a token issued on the splash page is
             accepted on the API's host.
@@ -148,8 +157,8 @@ class ApiFirewall(Construct):
 
     Raises:
         ValueError: A key is missing or unknown, a value has the wrong type or is
-            not one of the allowed values, or ``captcha`` is true with ``enabled``
-            false. Raised even when ``enabled`` is false, so every environment's
+            not one of the allowed values, ``captcha`` is true with ``enabled``
+            false, or ``hosts`` is empty. Raised even when ``enabled`` is false, so every environment's
             config is checked at synth.
 
     Attributes:
@@ -162,12 +171,15 @@ class ApiFirewall(Construct):
         id: str,
         *,
         load_balancer_arn: str,
-        api_host: str,
+        hosts: list[str],
         domain_name: str,
         waf_config: dict,
     ) -> None:
         super().__init__(scope, id)
         self.web_acl: wafv2.CfnWebACL | None = None
+        if not hosts:
+            # An empty list would leave the rules matching nothing, silently.
+            raise ValueError("ApiFirewall needs at least one host to protect.")
 
         if not isinstance(waf_config, dict):
             raise ValueError("backend.waf must be a dict in pa_config.json.")
@@ -194,7 +206,7 @@ class ApiFirewall(Construct):
         if not enabled:
             return
 
-        rules = self._rules(api_host=api_host, mode=mode, captcha=captcha)
+        rules = self._rules(hosts=hosts, mode=mode, captcha=captcha)
         acl = wafv2.CfnWebACL(
             self,
             "WebAcl",
@@ -254,7 +266,7 @@ class ApiFirewall(Construct):
         )
         logging.node.add_dependency(group)
 
-    def _rules(self, *, api_host: str, mode: str, captcha: bool) -> list[wafv2.CfnWebACL.RuleProperty]:
+    def _rules(self, *, hosts: list[str], mode: str, captcha: bool) -> list[wafv2.CfnWebACL.RuleProperty]:
         rules: list[wafv2.CfnWebACL.RuleProperty] = []
         if captcha:
             rules.append(wafv2.CfnWebACL.RuleProperty(
@@ -273,7 +285,7 @@ class ApiFirewall(Construct):
             "waitlist-rate", 20, WAITLIST_RATE_LIMIT, _waitlist_post(), action={"block": {}}
         ))
         rules.append(_rate_rule(
-            "general-rate", 30, GENERAL_RATE_LIMIT, _api_host(api_host),
+            "general-rate", 30, GENERAL_RATE_LIMIT, _protected_hosts(hosts),
             action={"block": {}} if mode == "block" else {"count": {}},
         ))
         # (rule name, priority, AWS group name, rules inside it always counted)
@@ -292,7 +304,7 @@ class ApiFirewall(Construct):
                         vendor_name="AWS",
                         scope_down_statement=wafv2.CfnWebACL.StatementProperty(
                             and_statement=wafv2.CfnWebACL.AndStatementProperty(
-                                statements=[_api_host(api_host), _not_health()]
+                                statements=[_protected_hosts(hosts), _not_health()]
                             )
                         ),
                         rule_action_overrides=[

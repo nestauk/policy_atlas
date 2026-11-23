@@ -21,18 +21,22 @@ POLICY_NAME = "policy-atlas-v3-security-headers"
 
 def content_security_policy(
     *,
-    api_origin: str,
+    api_origin: str | None,
     cognito_region: str,
     cognito_hosted_domains: list[str],
     waf_captcha: bool,
+    frame_ancestors: str = "'self'",
 ) -> str:
-    """Build the Content Security Policy for one environment.
+    """Build the Content Security Policy for one site in one environment.
 
     Args:
-        api_origin: The HTTPS origin of the application's API.
+        api_origin: The HTTPS origin of the application's API, or None for a
+            site that serves its own API (the ops pages).
         cognito_region: AWS region containing the Cognito user pool.
         cognito_hosted_domains: The HTTPS Cognito hosted sign-in domains.
-        waf_captcha: Whether the API firewall shows AWS WAF CAPTCHA puzzles.
+        waf_captcha: Whether the site shows AWS WAF CAPTCHA puzzles.
+        frame_ancestors: Which pages may show this site in a frame; ``'none'``
+            for the ops pages, which nothing embeds.
 
     Returns:
         The complete CSP header value. ``media-src`` is present only when the
@@ -65,12 +69,12 @@ def content_security_policy(
         f"font-src 'self'{waf_static_source}",
         *media,
         (
-            f"connect-src 'self' {api_origin} {cognito_issuer} "
+            f"connect-src 'self' {api_origin + ' ' if api_origin else ''}{cognito_issuer} "
             f"{hosted_domains}{waf_source}"
         ),
         # 'self': the sign-in library's hidden frame ends on our own address.
         f"frame-src 'self' {hosted_domains}",
-        "frame-ancestors 'self'",
+        f"frame-ancestors {frame_ancestors}",
         "form-action 'self'",
         "object-src 'none'",
         "base-uri 'self'",

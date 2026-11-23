@@ -152,6 +152,14 @@ def test_user_create_sends_the_email_delivery_medium_explicitly(conn: Connection
     assert (row.org_id, row.email, row.display_name) == (org.org_id, email, "New Person")
 
 
+def test_a_minted_password_holds_only_symbols_that_survive_a_copy() -> None:
+    """No character that a shell or a chat app rewrites (``#``, ``*``, ``_``, ``!``, ``^``)."""
+    for _ in range(200):
+        minted = commands._mint_temporary_password()
+        assert all(c.isalnum() or c in "@%+=-" for c in minted)
+        assert any(c in "@%+=-" for c in minted)
+
+
 def test_user_create_manual_invite_mints_and_prints_a_single_use_password(
     conn: Connection,
 ) -> None:
@@ -659,11 +667,14 @@ def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_p
 # --- user reissue ------------------------------------------------------------
 
 
-def test_user_reissue_mints_a_non_permanent_password_for_a_never_signed_in_account() -> None:
+@pytest.mark.parametrize("status", ["FORCE_CHANGE_PASSWORD", "CONFIRMED"])
+def test_user_reissue_mints_a_non_permanent_password_whether_or_not_they_signed_in(
+    status: str,
+) -> None:
     email = unique_email("reissue")
     sub = fresh_sub()
     with cognito() as (client, stubber):
-        expect_status_lookup(stubber, email=email, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        expect_status_lookup(stubber, email=email, sub=sub, status=status)
         expect_reissue(stubber, sub=sub)
         with capture_logs() as logged:
             reissue = commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
@@ -677,14 +688,11 @@ def test_user_reissue_mints_a_non_permanent_password_for_a_never_signed_in_accou
     assert not any(minted in str(event) for event in logged)
 
 
-@pytest.mark.parametrize("status", ["CONFIRMED", "RESET_REQUIRED", "UNCONFIRMED"])
-def test_user_reissue_refuses_an_account_not_awaiting_first_sign_in(status: str) -> None:
-    """A person who set their own password recovers it themselves.
-
-    No ``AdminSetUserPassword`` is queued, so the Stubber fails the test if the
-    refusal comes after the password was already replaced.
-    """
-    email = unique_email("confirmed")
+@pytest.mark.parametrize("status", ["RESET_REQUIRED", "UNCONFIRMED"])
+def test_user_reissue_refuses_an_account_in_any_other_status(status: str) -> None:
+    """No ``AdminSetUserPassword`` is queued, so the Stubber fails the test if
+    the refusal comes after the password was already replaced."""
+    email = unique_email("other-status")
     with cognito() as (client, stubber):
         expect_status_lookup(stubber, email=email, sub=fresh_sub(), status=status)
         with pytest.raises(OpsError, match="Nothing was changed"):

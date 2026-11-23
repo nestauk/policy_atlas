@@ -282,8 +282,8 @@ def build_parser() -> argparse.ArgumentParser:
     user_reissue = user.add_parser(
         "reissue",
         help=(
-            "mint and print a new single-use temporary password for an account that "
-            "has never signed in (FORCE_CHANGE_PASSWORD) — it never accepts one"
+            "mint and print a new single-use temporary password for an account, "
+            "whether or not it has signed in before — it never accepts one"
         ),
     )
     user_reissue.add_argument("--email", required=True, type=_email)

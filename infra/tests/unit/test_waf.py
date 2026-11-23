@@ -18,11 +18,23 @@ def _configs() -> dict:
     return json.loads((INFRA_ROOT / "pa_config.json").read_text())
 
 
-def _synth(config: dict, *, api_host: str = "api.v3.policyatlas.uk",
+HOSTS = ["api.v3.policyatlas.uk", "ops.v3.policyatlas.uk", "metabase.v3.policyatlas.uk"]
+
+
+def _host_statement(hosts: list[str] = HOSTS) -> dict:
+    matches = [{"ByteMatchStatement": {
+        "FieldToMatch": {"SingleHeader": {"Name": "host"}},
+        "PositionalConstraint": "STARTS_WITH", "SearchString": host,
+        "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
+    }} for host in hosts]
+    return matches[0] if len(matches) == 1 else {"OrStatement": {"Statements": matches}}
+
+
+def _synth(config: dict, *, hosts: list[str] = HOSTS,
            domain_name: str = "v3.policyatlas.uk") -> dict:
     app = cdk.App()
     stack = cdk.Stack(app, "WafStack", env=Environment(account="111111111111", region="eu-west-2"))
-    ApiFirewall(stack, "Firewall", load_balancer_arn=ALB_ARN, api_host=api_host,
+    ApiFirewall(stack, "Firewall", load_balancer_arn=ALB_ARN, hosts=hosts,
                 domain_name=domain_name, waf_config=config)
     return Template.from_stack(stack).to_json()
 
@@ -135,11 +147,7 @@ def test_w3_general_rate_rule_is_host_scoped_and_mode_controlled():
         rule = _rule(_synth({"enabled": True, "mode": mode, "captcha": False}), "general-rate")
         rate = rule["Statement"]["RateBasedStatement"]
         assert rate["Limit"] == waf.GENERAL_RATE_LIMIT
-        assert rate["ScopeDownStatement"] == {"ByteMatchStatement": {
-            "FieldToMatch": {"SingleHeader": {"Name": "host"}},
-            "PositionalConstraint": "STARTS_WITH", "SearchString": "api.v3.policyatlas.uk",
-            "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
-        }}
+        assert rate["ScopeDownStatement"] == _host_statement()
         assert rule["Action"] == action
 
 
@@ -159,12 +167,7 @@ def test_w4_managed_rules_are_host_scoped_skip_health_and_keep_body_counted():
             group = rule["Statement"]["ManagedRuleGroupStatement"]
             assert group["VendorName"] == "AWS" and group["Name"] == group_name
             statements = group["ScopeDownStatement"]["AndStatement"]["Statements"]
-            host = statements[0]["ByteMatchStatement"]
-            assert host == {
-                "FieldToMatch": {"SingleHeader": {"Name": "host"}},
-                "PositionalConstraint": "STARTS_WITH", "SearchString": "api.v3.policyatlas.uk",
-                "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
-            }
+            assert statements[0] == _host_statement()
             paths = statements[1]["NotStatement"]["Statement"]["OrStatement"]["Statements"]
             assert [item["ByteMatchStatement"]["SearchString"] for item in paths] == list(waf.HEALTH_PATHS)
             assert all(item["ByteMatchStatement"]["PositionalConstraint"] == "EXACTLY" for item in paths)
@@ -230,3 +233,11 @@ def test_w8_logging_and_visibility_configs_are_rendered_for_matches_only():
     # Every Any-typed field (SingleHeader, UriPath, …) must render CloudFormation's
     # PascalCase keys; `aws wafv2 check-capacity` rejected a lower-case "name" (2026-11-18).
     assert not [key for key in _keys(acl["Properties"]) if key[0].islower()]
+
+
+def test_one_host_renders_without_an_or_statement_and_no_host_is_refused():
+    config = {"enabled": True, "mode": "count", "captcha": False}
+    rule = _rule(_synth(config, hosts=HOSTS[:1]), "general-rate")
+    assert rule["Statement"]["RateBasedStatement"]["ScopeDownStatement"] == _host_statement(HOSTS[:1])
+    with pytest.raises(ValueError, match="at least one host"):
+        _synth(config, hosts=[])

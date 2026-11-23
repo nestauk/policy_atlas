@@ -73,6 +73,7 @@ def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
         "user-enrol": dict(ENV="prod", EMAIL="a@b.org", NAME="A Name", ORG="An Org"),
         "user-resync": dict(ENV="staging", EMAIL="a@b.org"),
         "user-reissue": dict(ENV="staging", EMAIL="a@b.org"),
+        "user-reset-app": dict(ENV="staging", EMAIL="a@b.org"),
         "user-de-enrol": dict(ENV="staging", SUB="sub-1234"),
         "user-deactivate": dict(ENV="staging", EMAIL="a@b.org"),
         "user-reactivate": dict(ENV="prod", SUB="sub-1234"),
@@ -93,7 +94,7 @@ def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
 def test_the_subject_wrappers_reach_their_own_command_by_email_or_sub() -> None:
     parser = build_parser()
     pairs = [("admin", "grant"), ("admin", "revoke"), ("ops", "grant"), ("ops", "revoke")]
-    pairs += [("user", "deactivate"), ("user", "reactivate")]
+    pairs += [("user", "deactivate"), ("user", "reactivate"), ("user", "reset-app")]
     for group, command in pairs:
         for subject in (dict(EMAIL="a@b.org"), dict(SUB="sub-1234")):
             args = parser.parse_args(_dry_run(f"{group}-{command}", ENV="staging", **subject))
@@ -160,7 +161,7 @@ def test_no_wrapper_carries_a_credential_shaped_variable() -> None:
     wrapper_block = makefile[makefile.index("ops-require =") :]
     wrapper_block = wrapper_block[: wrapper_block.index("\ndev:")]
     recipe_lines = [line for line in wrapper_block.splitlines() if line.startswith("\t")]
-    assert len(recipe_lines) == 15  # one forwarding line per wrapper, nothing else
+    assert len(recipe_lines) == 16  # one forwarding line per wrapper, nothing else
     for line in recipe_lines:
         for word in ("PASSWORD", "SECRET", "TOKEN", "DATABASE_URL", "database-url"):
             assert word not in line

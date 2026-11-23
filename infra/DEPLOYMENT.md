@@ -368,8 +368,12 @@ synth-time context query and must not run before the VPC exists.
      no password from anyone, and the mode needs no IAM beyond
      `AdminCreateUser`. If that password expires or is lost before first
      sign-in, `make user-reissue ENV=<env> EMAIL=<user-email>` mints and prints
-     a replacement on the same terms (it refuses any account that has already
-     signed in; needs `AdminSetUserPassword`). SES-backed pool email is now in
+     a replacement on the same terms (needs `AdminSetUserPassword`). The same
+     command resets the password of an account that has already signed in: the
+     account gets a temporary password that must be changed at the next sign-in.
+     Use it for an address with no mailbox (a shared test account, for example).
+     A person with a working mailbox should use "Forgot password" on the sign-in
+     page instead. SES-backed pool email is now in
      place through task 065; see [Pool email through SES (task 065)](#pool-email-through-ses-task-065).
 
      **Removing a person's access (task 064a, Q10; task 066).** `user de-enrol`
@@ -867,18 +871,21 @@ rules live in one object, the **web ACL** (`policy-atlas-v3-api`, built by
 `infra/infra/components/waf.py` in the app stack and attached to the load
 balancer). Each rule can **count** a request (note that it matched and let it
 through), **block** it (answer 403), or ask for a **CAPTCHA** (answer 405 until
-the browser presents a solved-puzzle token). Every rule is scoped to the API
-host or to the waitlist path, so Metabase traffic on the same load balancer
-matches nothing. ADR 0047 has the reasoning.
+the browser presents a solved-puzzle token). The general rules are scoped to
+three hosts on that load balancer: the API, the ops pages and (where it is
+deployed) Metabase. The waitlist rules are scoped to the waitlist path. The ops
+pages and Metabase also keep their own allowlists of addresses. ADR 0047 has
+the reasoning.
 
 **The rules, in order.** `waitlist-captcha` (only when the CAPTCHA is on: a
 `POST` to `/api/v1/waitlist` without a valid token is refused with 405 and the
 header `x-amzn-waf-action: captcha`); `waitlist-rate` (more than 50 waitlist
 posts in 5 minutes from one address are blocked, always); `general-rate` (more
-than 6,000 requests in 5 minutes from one address to the API host);
+than 6,000 requests in 5 minutes from one address to the three hosts
+together);
 `managed-common`, `managed-known-bad-inputs`, `managed-ip-reputation` (AWS's
 own rule groups for common web attacks, known bad inputs and bad-reputation
-addresses, applied to the API host except `/healthz` and `/readyz`, so the
+addresses, applied to the three hosts except `/healthz` and `/readyz`, so the
 load balancer's health check and the deploy's readiness call can never be
 refused by them). The common group's `SizeRestrictions_BODY` rule (a body over
 8 KB) is always counted and never blocks, because chat messages, plan edits
@@ -902,6 +909,9 @@ runs with `mode: count` for a week so the rules show what they *would* block
 without blocking anyone. Right after the deploy, do the deliberate pass: sign
 in, open the task list, send one chat message over 8 KB, edit a plan, import a
 theory-of-change image, open a public task view, and submit the waitlist form.
+Also use the ops pages (open each page, change one quota) and Metabase (open a
+dashboard, run and save one question): `mode` is one switch for all three
+hosts, and Metabase sends long queries that a managed rule may match.
 Then run the report:
 
 ```bash
@@ -1002,7 +1012,9 @@ the error responses answer with `/index.html`. A **response headers policy**
 is attached to both cache behaviours (the default one and `/index.html`). It
 replaced AWS's managed `SECURITY_HEADERS` policy, which cannot be changed.
 The API's responses come from the load balancer and the ops pages (task 065)
-from the backend, so neither gets these headers. ADR 0048 has the reasoning.
+from the backend, so neither gets these headers. The ops service sends its own
+Content Security Policy instead (see "The ops pages" below). ADR 0048 has the
+reasoning.
 
 **The headers.**
 
@@ -1096,6 +1108,16 @@ for p in / /index.html /tasks/x; do
 done
 ```
 
+**The ops pages.** The ops service sends its own policy, because CloudFront
+does not serve those pages. The app stack builds it with the same function and
+gives it to the ops container (`OPS_CONTENT_SECURITY_POLICY`). It is stricter
+than the website's: no API origin, no CAPTCHA hosts, and `frame-ancestors
+'none'`. The same `csp_mode` key governs it. In report-only mode the ops pages
+still enforce `frame-ancestors 'none'` in a second header. Run the same manual
+pass on `https://ops.<domain_name>`: the proof in step 1, then sign-in,
+sign-out, every ops page, one change that shows a toast, and a deep link. Both
+sites must pass before the switch to enforce.
+
 **Switching to enforce.** After a report-only pass with no unexplained line,
 set `csp_mode` to `"enforce"` for that environment, merge and deploy the
 normal way, run the `curl` check, and repeat the manual pass at once: apart
@@ -1180,8 +1202,8 @@ their known email address): the next person to sign in with that password
 links their own phone. Then run:
 
 ```bash
-uv run python -m policy_atlas.ops --env staging user reset-app --email <user-email>
-# or: ... user reset-app --sub <cognito-subject>
+make user-reset-app ENV=staging EMAIL=<user-email>
+# or: make user-reset-app ENV=staging SUB=<cognito-subject>
 ```
 
 It signs the person out everywhere, then removes the app link, and records the

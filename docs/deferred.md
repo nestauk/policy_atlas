@@ -1345,10 +1345,9 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   test, about half a day. Until then [DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers asks
   whoever adds a third-party library to rerun the manual pass. Condition: a library change breaks
   the policy unseen.
-- The ops pages and the API's own responses carry no Content Security Policy: the backend serves
-  both through the load balancer, not CloudFront. The ops host is limited to allowlisted addresses;
-  API responses are JSON, from which no page is built. Condition: the ops pages leave the
-  allowlist; then a small backend middleware that adds the headers on the ops host.
+- The API's own responses carry no Content Security Policy: the backend serves them through the
+  load balancer, not CloudFront. They are JSON, from which no page is built. Condition: the API
+  serves a page.
 - Sign-in tokens stay in `sessionStorage` with a 30-day refresh token (owner ruling, ADR 0048). A
   shorter refresh-token lifetime changes how often people sign in, which is a product decision;
   moving tokens out of `sessionStorage` is a larger change to the sign-in flow. Condition: a product

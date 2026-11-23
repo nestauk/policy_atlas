@@ -1494,3 +1494,13 @@ def test_cert_stack_uses_its_namespaced_cloudformation_id():
     manifest_path = Path(ASSEMBLY.directory) / "manifest.json"
     artifacts = json.loads(manifest_path.read_text())["artifacts"]
     assert "PaV3CertStack" in artifacts
+
+
+def test_firewall_covers_the_api_and_ops_hosts():
+    _, acl = _resources(TEMPLATES["app"], "AWS::WAFv2::WebACL")[0]
+    general = next(rule for rule in acl["Properties"]["Rules"] if rule["Name"] == "general-rate")
+    scope = general["Statement"]["RateBasedStatement"]["ScopeDownStatement"]
+    hosts = [item["ByteMatchStatement"]["SearchString"] for item in scope["OrStatement"]["Statements"]]
+    # Metabase's host joins them through `metabase_host`, which infra/app.py
+    # passes where the analytics stack is deployed.
+    assert hosts == ["api.v3.policyatlas.uk", "ops.v3.policyatlas.uk"]

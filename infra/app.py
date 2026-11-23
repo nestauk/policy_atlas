@@ -141,6 +141,11 @@ if stage == "all":
         env=pa_env,
         env_name=env_name,
         ops_allowlist_size=ops_allowlist_size,
+        # So the firewall's rules also cover Metabase, which shares the load balancer.
+        metabase_host=(
+            f"{metabase_config['metabase_subdomain']}.{metabase_config['domain_name']}"
+            if deploy_analytics else None
+        ),
         cross_region_references=True,
     )
 

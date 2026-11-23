@@ -322,7 +322,7 @@ class Resync(Record):
 
 @dataclass(frozen=True)
 class Reissue(Record):
-    """A fresh temporary password for an account that never completed first sign-in.
+    """A fresh temporary password for an account.
 
     Attributes:
         user_id: The Cognito subject.
@@ -339,7 +339,7 @@ class Reissue(Record):
         """Render the reissue line, carrying the password once."""
         return (
             f"reissued {self.email} ({self.user_id})\ntemporary password "
-            f"(single-use, 30-day expiry, they set their own at first sign-in): "
+            f"(single-use, 30-day expiry, they set their own at the next sign-in): "
             f"{self.temporary_password}"
         )
 
@@ -667,10 +667,12 @@ def _mint_temporary_password() -> str:
     Generated, never accepted: no command accepts a password, because
     this value originates here, not from an operator. 20
     characters with every Cognito-default class guaranteed (upper, lower,
-    digit, symbol); the symbol set avoids quotes, backslashes and ``$`` so the
-    printed value copies cleanly through a shell.
+    digit, symbol). The symbol set holds only characters that survive a copy
+    through a shell and a chat or email app: no quotes, backslashes or ``$``;
+    no ``!`` or ``^`` (shell history); no ``*`` or ``_`` (chat apps read pairs
+    of them as bold and italic and remove them); no ``#`` (comment, tag).
     """
-    symbols = "!@#%^*-_+="
+    symbols = "@%+=-"
     pools = (string.ascii_lowercase, string.ascii_uppercase, string.digits, symbols)
     everything = "".join(pools)
     chars = [secrets.choice(pool) for pool in pools]
@@ -1066,13 +1068,15 @@ def _record_unenrolled(conn: Connection, *, sub: str, email: str, display_name: 
 def reissue_temporary_password(
     cognito: CognitoIdentityProviderClient, *, pool_id: str, email: str
 ) -> Reissue:
-    """Replace the expired or lost temporary password of a never-signed-in account.
+    """Replace an account's password with a new single-use temporary one.
 
-    **Only ``FORCE_CHANGE_PASSWORD`` accounts.** Anyone who has set their own
-    password recovers it themselves with "Forgot password"; an operator setting
-    one for them would lock them out of a password they know and hand the
-    operator a working credential for their account. The new password is set
-    non-permanent, so the person still chooses their own at first sign-in.
+    Serves an account that never signed in (``FORCE_CHANGE_PASSWORD``) and one
+    that has (``CONFIRMED``). A person with a working mailbox should use "Forgot
+    password" instead: this call replaces a password they may still know and
+    gives the operator a working credential for their account. It exists for a
+    lost invitation and for an address with no mailbox. The new password is
+    always set non-permanent, so the person chooses their own at the next
+    sign-in.
 
     Touches Cognito only: the account's enrolment, if any, is unchanged, and an
     account kept after a failed ``user create`` database write is reissuable.
@@ -1086,19 +1090,18 @@ def reissue_temporary_password(
         The reissue, carrying the minted temporary password.
 
     Raises:
-        OpsError: If the pool holds no such address, the account is not
-            awaiting first sign-in, or Cognito refuses the change.
+        OpsError: If the pool holds no such address, the account's status is
+            neither of the two above, or Cognito refuses the change.
     """
     _require_filter_safe(email)
     user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
     if user is None:
         raise OpsError(f"no account in the pool for {email}")
     status = user.get("UserStatus")
-    if status != "FORCE_CHANGE_PASSWORD":
+    if status not in ("FORCE_CHANGE_PASSWORD", "CONFIRMED"):
         raise OpsError(
-            f"{email} is {status}, not FORCE_CHANGE_PASSWORD: only an account that has "
-            "never signed in can be reissued. Nothing was changed. If they have "
-            "forgotten their own password, they reset it from the sign-in page."
+            f"{email} is {status}: only a FORCE_CHANGE_PASSWORD or CONFIRMED account "
+            "can be reissued. Nothing was changed."
         )
     minted = _mint_temporary_password()
     try:
