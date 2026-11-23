@@ -20,6 +20,22 @@ const SHEET_EXIT_MS = 200;
 export const SHEET_SCRIM_CLASS =
   "fixed inset-0 z-40 bg-navy/40 transition-opacity duration-200 ease-out starting:opacity-0 data-[state=closed]:animate-[scrim-out_200ms_ease-out_forwards]";
 
+/*
+ * Where focus goes back to when a sheet closes. Radix returns focus to the
+ * dialog's trigger, but every sheet here is opened from state, with no
+ * trigger, so focus would fall to the top of the page. The sheet remembers
+ * the control that had focus when it opened. A sheet opened from inside
+ * another (a claim's source) keeps the first one's opener: its own is gone
+ * by the time it closes.
+ */
+let opener: HTMLElement | null = null;
+
+function rememberOpener(): void {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || active === document.body) opener = null;
+  else if (active.closest('[role="dialog"]') === null) opener = active;
+}
+
 /**
  * The sheet's root. It leaves the way it came: asked to close, it plays its exit (200 ms on
  * the drawer curve along its own edge, the scrim fading with it) before it
@@ -94,6 +110,17 @@ export function SheetContent({
           className,
         )}
         {...props}
+        // Radix fires this just before it moves focus into the sheet.
+        onOpenAutoFocus={(event) => {
+          rememberOpener();
+          props.onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          props.onCloseAutoFocus?.(event);
+          if (event.defaultPrevented || opener === null || !opener.isConnected) return;
+          event.preventDefault();
+          opener.focus();
+        }}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div>

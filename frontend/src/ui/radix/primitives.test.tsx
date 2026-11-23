@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Button } from "../brand/Button";
@@ -26,6 +27,32 @@ describe("Sheet", () => {
     expect(screen.getByText("Dossier body")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("returns focus to the control that opened it when it has no trigger", async () => {
+    function Page() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Source 3
+          </button>
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetContent title="Claim provenance">
+              <p>Body</p>
+            </SheetContent>
+          </Sheet>
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Page />);
+    const marker = screen.getByRole("button", { name: "Source 3" });
+    await user.click(marker);
+    expect(screen.getByRole("dialog", { name: "Claim provenance" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(marker).toHaveFocus();
   });
 
   it("closes with the one CloseButton: a 16 px glyph, not a character", () => {
