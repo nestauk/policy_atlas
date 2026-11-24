@@ -1,99 +1,154 @@
-# Post-screening synthesis coverage eval
+# Post-screening and synthesis evaluation
 
-These scripts measure the stages **after screening**: classify, appraise, screen_full, characterise, select, extract, group and synthesise. The question is: given a published POST or CAPE briefing's own reference list as the corpus, does the Policy Atlas report capture the briefing's key facts?
+## Overview
 
-The search and screening evals (`../search`, `../screening`) cover the earlier stages. This one starts where they stop, so search is bypassed and stage-1 screening is pre-filled.
+These scripts measure the evidence search stages **after search & screening**: classify, appraise, screen_full, characterise, select, extract, group and synthesise.
 
----
+The grounding judge in the production pipeline provides a measure of whether every claim in the report is justified. This eval goes in the opposite direction: given a set of facts that comprise the essential information that a policymaker would need in order to understand a policy question, is each and every one of these facts represented in the Policy Atlas report? This complements the separate [search](../search) and [screening](../screening) evaluations.
 
-## What is being measured
+The approach is based on the method of checking summary completeness via atomic facts of [FineSurE](https://aclanthology.org/2024.acl-long.51/) and [factscore](https://aclanthology.org/2023.emnlp-main.741/).
 
-One item is one published briefing from the team's test-set Google Sheet (tab `POST_test_set`; 19 briefings at the time of writing: 4 CAPE rapid evidence assessments, 6 POSTbriefs, 5 POSTnotes, 4 POST rapid responses). The sheet is the source of truth: add a row there to add a briefing. Each briefing has a slug in the `Doc ID` column, such as `effects_artificial_light`; the slug names its briefing file, its ground-truth and cache folders, its run folder and its Langfuse dataset item. For each briefing:
+## Ground truth dataset
 
-1. **Ground truth.** Three model calls. The first extracts the briefing's reference list. The second is given that list and the briefing and returns the briefing's key points, each tied to the references it cites. The third sees only the key points, not the briefing, and breaks each into atomic facts: one claim per fact, self-contained, so the judge can grade it alone. Withholding the briefing from the third call stops detail the point does not state from leaking into the facts. The model chooses how many points and how many facts per point. Each fact row carries its point's id and text. A human checks both lists and marks rows to keep.
-2. **Corpus.** Each kept reference is resolved to text: OpenAlex by DOI or strict title match, then the production URL cascade, fetcher and parser. A reference with no full text but an OpenAlex abstract enters as `abstract_only`. One with neither is dropped and recorded.
-3. **Run.** A task is seeded with an approved plan at the chosen analysis depth, the corpus is ingested as uploads, and every source gets a stage-1 `relevant` screen row. The plan walk then runs with no search backends, so acquire adds nothing and the walk's own stage-1 screen has nothing to do. `screen_full` (standard and deep) runs as in production; its demotions are recorded.
-4. **Judge.** The report's markdown (citation markers stripped) is graded against each key fact by a model, one call per fact. Verdicts: `fully_represented`, `partially_represented`, `not_represented`, `misrepresented`, `uncertain`.
+We use as our ground truth a set of 15 [POST briefings](https://post.parliament.uk/type/postbrief/) covering various policy domains. Our assumption is that each of these briefing covers the most important and up-to-date information on a given policy topic, and that this information is summarised in a way that makes it digestible and presents the most important information to a policy audience.
 
-**Coverage** is the share of key facts judged `fully_represented`. It is reported with two denominators: all checked facts (`coverage_all`), and only facts with at least one reference that made it into the corpus (`coverage_ingested`). The gap between them is the cost of unfetchable sources, not of the pipeline. Each has a lenient twin (`coverage_all_lenient`, `coverage_ingested_lenient`) whose numerator also counts `partially_represented`. The gap between strict and lenient is the share of facts the report touches but states incompletely.
+### Dataset details
 
-The eval-side model for extraction and judging is `gpt-5.6-luna`. The pipeline runs with its production backends and models.
+* Number of briefings: 15
 
-## Data
+* Editable ground truth metadata stored in Google Sheets [here](https://docs.google.com/spreadsheets/d/1ysmdUcOXGLjtse5KgsGlYIpdpQ8vwf1YSOToevAAhns/edit?gid=1489018505#gid=1489018505) This file includes a research question that the briefing could plausibly answer, and that can be used as the input to a Policy Atlas search.
 
-The important raw data is:
+* Source briefing files: `eval/datasets/synthesis/inputs/briefings/` (S3)
 
-* [Google Sheets] `05. Evals >> synthesis >> Post test set`: this is a reference sheet that records: the short slug for each briefing; its title; when it was published; the corresponding RQ that will be run through the Policy Atlas pipeline.
+* Langfuse dataset: `synthesis-coverage`
 
-* [s3] `eval/datasets/synthesis/inputs/briefings/` This folder contains the downloaded pdf/html files for the briefings used in this experiment. They were downloaded by hand because the POST domain blocks bots.
+## Methodology
 
-## Files
+The experiment comprises four steps.
 
-```
-00_update_ground_truth.py  sheet vs Langfuse -> extract + resolve the new briefings
-01_upload_to_langfuse.py   ground truth -> S3 and Langfuse dataset `synthesis-coverage` (dry run by default)
-02_run_evals.py            seed, run, report, judge, score, run folder, Langfuse experiment
-utils.py                   paths, sheet and CSV readers, parser and model helpers
-google_utils.py            Google Sheets read with a service account
-plot_coverage.py           ingested-denominator coverage per briefing -> html and png in the run folder (--run <folder>)
-prompts/extract_references_v1.txt   reference list
-prompts/extract_key_points_v1.txt   key points with reference labels
-prompts/decompose_facts_v1.txt      key points -> atomic facts (no briefing)
-prompts/judge_v1.txt                one fact vs report -> verdict
-tests/test_synthesis.py    offline self-checks (part of `make eval-check`)
-inputs/briefings/<slug>.*  hand-downloaded briefings (S3)
-ground_truth/<slug>/       references.csv, key_facts.csv, corpus_resolution.csv (human-checked, S3)
-datasets/<slug>/refs/      resolved reference text cache (S3)
-results/runs/<date>-<depth>-<label>/<slug>/   report.md, facts.csv, corpus.csv, eval_results.json (gitignored, S3)
-```
+**1. Ground truth generation**
 
-The script numbers are the steps a person takes, in order.
+For each briefing, an LLM:
 
-## Quickstart
+* Extracts its reference list.
 
-Run all commands from the repo root. The OpenAI and Langfuse keys come from `backend/.env`. The Google service-account key that the sheet is shared with lives at `infra/.credentials/afsmumsnet-454163761a82.json` (gitignored); set `GOOGLE_SHEETS_CREDENTIALS` in `backend/.env` only to point somewhere else. The database is the local dev one.
+* Identifies the briefing's key points and their supporting references.
 
-To download the reference data and the extracted key facts and references for each one:
-```sh
-# Once per checkout: fetch the briefings, ground truth and caches.
+* Decomposes these points into individual, self-contained facts.
+
+The extracted references and facts are manually reviewed before inclusion in the evaluation.
+
+The extraction prompts can be found in `scripts/evals/post_screening_and_synthesis/prompts/`
+
+**2. Corpus construction**
+
+The cited references are retrieved using OpenAlex and the production document-fetching pipeline.
+
+Full-text documents are preferred, with abstracts used where full text is unavailable. References that cannot be retrieved are recorded and excluded from the ingested corpus.
+
+**3. Pipeline execution**
+
+Policy Atlas runs using the briefing's research question and the constructed corpus.
+
+Search and initial screening are bypassed, allowing the evaluation to isolate the downstream stages, including full-text screening, extraction and synthesis.
+
+**4. Evaluation**
+
+An LLM judge compares the generated Policy Atlas report against each ground-truth fact, assigning one of five verdicts: fully_represented / partially_represented / not_represented / misrepresented / uncertain
+
+TODO: dig into how well this judge is doing!
+
+The judge prompt can be found at `scripts/evals/post_screening_and_synthesis/prompts/judge_v1.txt`
+
+## Evaluation metrics
+
+The primary metric is **fact coverage**: the proportion of ground-truth atomic facts represented in the generated Policy Atlas evidence report.
+
+| Metric | Description |
+|---|---|
+| `coverage_all` | Proportion of all ground-truth facts fully represented. "All" = regardless of whether or not the sources for these facts could be obtained; it's therefore not guaranteed that the PA pipeline actually had access to the information needed to reproduce these facts. |
+| `coverage_ingested` | Proportion of facts fully represented, restricted to facts supported by at least one ingested reference i.e. facts that the PA pipeline had access to. |
+| `coverage_all_lenient` | As `coverage_all`, also counting partially represented facts |
+| `coverage_ingested_lenient` | As `coverage_ingested`, also counting partially represented facts |
+
+The ingested-denominator metrics help distinguish failures of evidence synthesis from failures to retrieve source material.
+
+## Running the experiment
+
+All commands should be run from the repository root.
+
+### Prerequisites
+
+- Python dependencies installed via `uv`
+- OpenAI and Langfuse credentials in `backend/.env`
+- Google Sheets service-account credentials
+- Access to the evaluation S3 bucket
+- Local development database
+
+### 1. Download the dataset
+
+```bash
 uv run --project backend python scripts/evals/sync_s3.py synthesis download
 ```
 
-To add a new briefing to the dataset:
+### 2. Update ground truth
 
-1. Add details in the Google Sheet and add the pdf/html to the s3 bucket at `eval/datasets/synthesis/inputs/briefings/`
+After adding any new briefings to the Google Sheet and S3, run:
 
-2. Run `uv run --project backend python scripts/evals/post_screening_and_synthesis/00_update_ground_truth.py`. This will extract the references and key facts for the new briefing.
-
-3. Check the LLM outputs (key facts; references)
-
-4. Push the ground truth to S3 and the key facts to Langfuse: `uv run --project backend --env-file backend/.env \
-    python scripts/evals/post_screening_and_synthesis/01_upload_to_langfuse.py --upload`
-
-To run the evals (one by one for each briefing - in the example, we just specify `airports_health_impacts`. List all of them in the command to run the evals for all 15):
+```bash
+uv run --project backend python scripts/evals/post_screening_and_synthesis/00_update_ground_truth.py
 ```
+
+Manually review the generated references and key facts, then upload the approved data:
+
+```bash
 uv run --project backend --env-file backend/.env \
-    python scripts/evals/post_screening_and_synthesis/02_run_evals.py \
-    --docs airports_health_impacts --depth deep --run-label mini
+  python scripts/evals/post_screening_and_synthesis/01_upload_to_langfuse.py --upload
 ```
 
-Rapid responses cite by hyperlink and have no reference list. For an `.html` briefing the extract step marks each external link `[n]` in the text and appends a generated list, so those references have the link text as title and no authors or year.
+### 3. Run the evaluation
+
+```bash
+uv run --project backend --env-file backend/.env \
+  python scripts/evals/post_screening_and_synthesis/02_run_evals.py \
+  --docs airports_health_impacts \
+  --depth deep \
+  --run-label example
+```
+
+Replace `airports_health_impacts` with the desired briefing ID.
+
+[TODO: Document standard experiment configuration, including analysis depth, model versions and which briefings to include.]
+
+### 4. Visualise results
+
+```bash
+uv run --project backend python \
+  scripts/evals/post_screening_and_synthesis/plot_coverage.py \
+  --run <run-directory>
+```
+
+This produces coverage visualisations for the specified evaluation run.
 
 ## Outputs
 
-Per briefing, the run folder holds `report.md`, `facts.csv` (one row per fact with its point id, verdict, supporting quote and rationale), `corpus.csv` (one row per ingested reference with text basis and stage-2 status) and `eval_results.json` (task, scope and capability-run ids, the Langfuse session id, git commit, judge model and prompt hash, token totals, and the scores).
+Results are saved under:
 
-The judge's cost is recorded as `judge_llm_cost_usd_computed`: computed from the price table in `../screening/metrics.py`, not spent. The pipeline's own spend is read from Langfuse by session id (see `docs/knowledge/eval-cost-figures-name-their-unit.md`).
+`results/runs/<run-id>/<briefing-id>/`
 
-When the Langfuse keys are set, the eval's own calls are traced too. Each judge call is a generation named `eval.synthesis.judge` in the same session as the briefing's pipeline walk; the three extract calls are generations named `eval.synthesis.extract_references`, `eval.synthesis.extract_key_points` and `eval.synthesis.decompose_facts`. All carry `experiment: synthesis-coverage` and the prompt version in their metadata, so they are filterable alongside the pipeline's traces and separate from user sessions, which carry a user id and no `experiment` key. `--no-langfuse` turns all of it off.
+| File | Contents |
+|---|---|
+| `report.md` | Generated Policy Atlas report |
+| `facts.csv` | Ground-truth facts, judge verdicts and explanations |
+| `corpus.csv` | Ingested references and processing status |
+| `eval_results.json` | Coverage scores, run metadata and costs |
 
-Task rows are kept in the database so a report can be opened in the app by task id.
+Evaluation runs and model calls are also tracked in Langfuse.
 
-## Limits
+## TODOs
 
-- The judge is a model. Spot-check its verdicts against `report.md` before trusting a number.
-- Coverage is a mean over facts, so a key point split into five facts weighs five times one split into one. `point_id` in `facts.csv` lets you regroup by point.
-- The judge runs once per fact, so its cost scales with how finely the extractor splits the points.
-- A dropped reference lowers `coverage_all` but not `coverage_ingested`. Compare both.
-- Resolution runs once and is cached by reference label. A changed `references.csv` row needs its cache file under `datasets/<slug>/refs/` deleted.
-- Two references with the same URL become two sources. Mark one `keep=n`.
+* Move the judge LLM calls from OpenAI to Bedrock and use a different model family, e.g. an Anthropic model, llama etc
+
+* Detailed error analysis - which facts were not captured by the Policy Atlas synthesis?
+
+* Inspect the performance of the LLM judge. Is it consistently labelling fully represented vs. partially represented etc?
