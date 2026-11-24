@@ -94,7 +94,7 @@ def test_w1_web_acl_association_config_pin_and_validation():
     configs = _configs()
     staging = configs["staging"]["policy_atlas_config"]["backend"]["waf"]
     prod = configs["prod"]["policy_atlas_config"]["backend"]["waf"]
-    assert staging == {"enabled": True, "mode": "count", "captcha": True}
+    assert staging == {"enabled": True, "mode": "block", "captcha": True}
     assert prod == {"enabled": True, "mode": "count", "captcha": False}
 
     acl_id, acl = _acl(APP)
