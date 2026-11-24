@@ -307,7 +307,7 @@ Both faces are licensed. Their binaries are never committed to the public reposi
 - **Caption** (400 to 600, 12px, 1.4): eyebrows, fine print, tooltip text, citation markers, user email in the account menu.
 - **Label** (700 or 800, 14px, uppercase, tracking 0.06em, Grey): pane headings (Extrabold), plan-step and check-in eyebrows (Bold; the check-in eyebrow is Electric Blue), report outline headings. The conversation list, table headers and the settled scope card's group labels use the same treatment at Caption size.
 - **Chip** (600, 11.5px): a deliberate off-scale token. Chips sit below caption text (owner ruling).
-- **Hero** (`text-hero`, clamp 40 to 68px, 1.02) and **Hero 2** (`text-hero-2`, clamp 28 to 40px, 1.1): the splash page's two responsive headlines, named tokens because the splash persuades rather than operates. Splash prose is Lead.
+- **Hero** (`text-hero`, clamp 2.5 to 4.25rem, 1.02) and **Hero 2** (`text-hero-2`, clamp 1.75 to 2.5rem, 1.1), in rem so they grow with browser zoom: the splash page's two responsive headlines, named tokens because the splash persuades rather than operates. Splash prose is Lead.
 
 ### Named Rules
 **The Sixteen Floor Rule.** Body prose never renders below 16px. Meta and caption sizes are for labels, cells and markers, never for sentences a reader must read.

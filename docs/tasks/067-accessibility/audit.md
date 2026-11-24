@@ -1,7 +1,9 @@
 # Audit: 067 accessibility (WCAG 2.2 AA)
 
-> **Status:** drafted 2026-11-23 from the code on `dev` at `08c4fe50`. Nothing is changed
-> yet. Source: the external review of the landing page and stylesheet
+> **Status:** audited 2026-11-23 from the code on `dev` at `08c4fe50`; then worked on
+> branch `task/067-accessibility`. The last section, "Status after the work", says what is
+> done and what is open. `verification.md` has the evidence and the manual test list.
+> Source: the external review of the landing page and stylesheet
 > (`accessibility_improvements.md`, parts 1 to 3), plus a code audit of the signed-in views.
 > This file is the map for the work. It follows the layout of
 > `docs/tasks/064-security-hardening/programme.md`.
@@ -450,3 +452,54 @@ One commit for each row, in this order. Rows marked **D** wait for an owner deci
 | 13 | Names and small items | H2 to H8, C6, C7, R2, R3, R5 to R12, V6, V7, F5 |
 | 14 | Lint rule, axe spec, cut-corner test | G1 to G4 |
 | 15 | `DESIGN.md` (Focus Rule, field borders, colours) and a summary with the manual test list | |
+
+## Status after the work
+
+The findings above describe `dev` before the work. This table says where each one stands on
+`task/067-accessibility`.
+
+### Done
+
+| Findings | What changed |
+|---|---|
+| Part 1: 1 | Inset ring kept (D1); a source test guards it (G4). |
+| Part 1: 2; K10 | Navy border on every field, select trigger, checkbox and radio (D2). |
+| Part 1: 3; K9 | `outline-hidden` in place of `outline-none`; fields take the house ring; white ring on the plan panel. |
+| Part 1: 4 | Hero sizes in `rem`. |
+| Part 1: 5 | `<main>` and `<footer>` on the landing page. |
+| Part 1: 6 | `ExternalLink` on 13 links (the fourteenth, in `EvidenceMarks`, already said it in its `aria-label`). |
+| Part 1: 7 | One `@custom-variant` applies every `hover:` style on `:focus-visible`; links inside a sentence are underlined. |
+| Part 1: 8 | The splash animation stops after 5 seconds (D3). |
+| Part 1: 9 | Focus to the first error; Submit not disabled for incomplete input; the confirmation takes focus; a server error is an alert. |
+| Part 1: 11 | Comment and `DESIGN.md` corrected. |
+| K1, K3, K4, K6, K7; V1 | Start button, Red Deep, placeholders, verdict dashes (D4, D5). |
+| H1, P1, F2, R4 | Skip link, titles, focus after a route change, `aria-current`. |
+| L1 to L5 | Run end and reply end announced; check-in card not a live region; loading states have a status role. |
+| C1, C5 | Focus returns when a sheet closes; a contents link moves focus. |
+| F1, F4 | The plan document takes focus and closes when focus leaves it; the chat field gets focus back. |
+| T1; T2 (three of five tables); V2, V3, V5 | Table names and scopes; map data table; canvas names; "(excluded)". |
+| S1 | **Measured in a browser:** at 320 by 256 the content pane was 0px tall. The viewport lock now applies from 30rem of height. |
+| G1 to G4 | Lint rules, axe spec (both pages: no violations), cut-corner test. No CI workflow change was necessary. |
+
+### Open: needs an owner decision
+
+| Finding | Why it waits |
+|---|---|
+| C2, C3 | `DESIGN.md` § "A value with a reason" says these reasons show "on hover only … out of the tab order; the dossier carries the same words". That is a recorded design decision, so the audit does not change it. The dossier is reachable by keyboard, which is an equivalent path. Recommendation: make the hint a focusable button, as `InfoHint` is. |
+| K2 | "✓ verified" in Green on Paper 2 is 2.99:1. A colour change: `text-green-deep`. |
+| K5 | Ops console: Orange on its tint is 2.50:1. A colour change. |
+| K8 | Text under revision at opacity 0.55 is 3.84:1 for a short time. |
+| K11 to K14 | Line and map colours under 3:1. The dashes (V1) and the map table (V2) now carry the meaning; darker colours are the full fix. |
+
+### Open: not done in this task
+
+| Finding | Severity | Note |
+|---|---|---|
+| C4 | medium | The chat's claim `<span role="button">` contains the marker buttons. The fix changes which panel a keyboard user can open, so it needs a design choice. |
+| C8 (new) | medium | In the chat, an inline citation marker's accessible name is "[1]". The report's markers say "Source 1: <title>". 16 unit tests and one journey test find the marker by "[1]". |
+| F3 | medium | Focus after a check-in is answered. |
+| R1, R2, R3 | medium | Radio role on option buttons; the task row's name; reasons for disabled controls. |
+| S2, S3, S4 | medium | Keyboard scrolling of the conversation panes; the Agent tab's footer; the plan beside the conversation at 320px. |
+| V4 | medium | Moving a canvas box from the keyboard. |
+| S6 (measured) | low | Task pages are 328px wide in a 320px viewport: 8px of horizontal overflow. |
+| H2 to H8, C6, C7, T2 (two tables), T3 to T5, V6, V7, F5, R5 to R12, S5 | low | As listed above. |
