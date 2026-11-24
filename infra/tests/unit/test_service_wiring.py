@@ -202,7 +202,7 @@ def test_ops_container_has_the_complete_least_privilege_environment_and_secret_m
             "https://auth.v3.policyatlas.uk; "
             "frame-ancestors 'none'; form-action 'self'; object-src 'none'; base-uri 'self'"
         ),
-        "OPS_CSP_MODE": "report-only",
+        "OPS_CSP_MODE": "enforce",
         "RUNS_PER_USER": "3",
         "TASK_QUOTA_PER_YEAR": "50",
         "DB_POOL_SIZE": "5",

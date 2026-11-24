@@ -95,7 +95,15 @@ def _custom_headers(policy: dict) -> dict[str, dict]:
     }
 
 
-def test_s1_to_s4_report_only_properties_match_each_environment_config():
+def _csp(policy: dict) -> str:
+    """The policy's CSP string, from whichever header carries it."""
+    enforced = policy["SecurityHeadersConfig"].get("ContentSecurityPolicy")
+    if enforced:
+        return enforced["ContentSecurityPolicy"]
+    return _custom_headers(policy)["Content-Security-Policy-Report-Only"]["Value"]
+
+
+def test_s1_to_s4_properties_match_each_environment_config():
     configurations = _configurations()
     expected = {"staging": STAGING_CSP, "prod": PROD_CSP}
     for environment, csp in expected.items():
@@ -114,7 +122,8 @@ def test_s1_to_s4_report_only_properties_match_each_environment_config():
             for behavior in distribution_config["CacheBehaviors"]
         )
         policy = _policy(template)
-        security = policy["SecurityHeadersConfig"]
+        security = dict(policy["SecurityHeadersConfig"])
+        enforced = security.pop("ContentSecurityPolicy", None)
         assert security == {
             "ContentTypeOptions": {"Override": True},
             "FrameOptions": {"FrameOption": "SAMEORIGIN", "Override": False},
@@ -131,13 +140,18 @@ def test_s1_to_s4_report_only_properties_match_each_environment_config():
             "XSSProtection": {"Protection": True, "ModeBlock": True, "Override": False},
         }
         headers = _custom_headers(policy)
-        assert headers["Content-Security-Policy-Report-Only"] == {
-            "Header": "Content-Security-Policy-Report-Only", "Value": csp, "Override": True,
-        }
+        # Exactly one of the two CSP headers, chosen by the environment's csp_mode.
+        if app_config["csp_mode"] == "enforce":
+            assert enforced == {"ContentSecurityPolicy": csp, "Override": True}
+            assert "Content-Security-Policy-Report-Only" not in headers
+        else:
+            assert enforced is None
+            assert headers["Content-Security-Policy-Report-Only"] == {
+                "Header": "Content-Security-Policy-Report-Only", "Value": csp, "Override": True,
+            }
         assert headers["Permissions-Policy"] == {
             "Header": "Permissions-Policy", "Value": PERMISSIONS_POLICY, "Override": True,
         }
-        assert "ContentSecurityPolicy" not in security
         directives = dict(d.split(" ", 1) for d in csp.split("; "))
         for host in ("captcha-sdk", "captcha", "token"):
             source = f"https://*.eu-west-2.{host}.awswaf.com"
@@ -230,7 +244,7 @@ def test_s2_cognito_domain_config_couples_the_user_pool_and_csp():
     _, domain = _resources(COUPLING_APP_TEMPLATE, "AWS::Cognito::UserPoolDomain")[0]
     assert domain["Properties"]["Domain"] == "pa-csp-coupling-test"
     policy = _policy(COUPLING_APP_TEMPLATE)
-    csp = _custom_headers(policy)["Content-Security-Policy-Report-Only"]["Value"]
+    csp = _csp(policy)
     hosted_domain = "https://pa-csp-coupling-test.auth.eu-west-2.amazoncognito.com"
     assert hosted_domain in csp.split("connect-src ", maxsplit=1)[1]
     assert f"frame-src 'self' {hosted_domain}" in csp

@@ -1411,20 +1411,21 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Work to do
 
-- **Planned** (the firewall's block switch, [ADR
-  0047](adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md)) Both environments run the
-  firewall in count mode (`waf.mode: count`), and production's CAPTCHA is off (`waf.captcha:
-  false`), so production's waitlist has the rate rule and the honeypot only. After each
-  environment's count week and the deliberate pass, set `mode: block` in `infra/pa_config.json`,
-  deploy and repeat the pass ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § The firewall). Staging
-  first; production's CAPTCHA goes on after the staging live check. Condition: the staging live
-  check passes.
-- **Planned** (the Content Security Policy's enforce switch, [ADR
-  0048](adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)) Both environments
-  send the policy in report-only mode (`csp_mode: "report-only"`). After each environment's manual
-  pass, set `csp_mode: "enforce"` in `infra/pa_config.json`, deploy and repeat the pass
-  ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers). Staging first. Condition: the staging
-  report-only pass has no unexplained line.
+- **Planned** (the firewall's block switch on production, [ADR
+  0047](adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md)) Staging blocks (`waf.mode:
+  block`). Production still runs the firewall in count mode (`waf.mode: count`), and its CAPTCHA is
+  off (`waf.captcha: false`), so production's waitlist has the rate rule and the honeypot only.
+  After production's count week and the deliberate pass, set `mode: block` in
+  `infra/pa_config.json`, deploy and repeat the pass ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § The
+  firewall). Production's CAPTCHA goes on after the staging live check. Condition: the staging
+  pass in block mode shows no refused normal request.
+- **Planned** (the Content Security Policy's enforce switch on production, [ADR
+  0048](adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)) Staging enforces
+  the policy (`csp_mode: "enforce"`), on the website and the ops pages. Production still sends it
+  in report-only mode (`csp_mode: "report-only"`). After production's manual pass, set `csp_mode:
+  "enforce"` in `infra/pa_config.json`, deploy and repeat the pass
+  ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers). Condition: the staging pass in
+  enforce mode shows no Content Security Policy line apart from the deliberate one.
 - **Now** The dead-letter, NAT traffic and writer CPU-credit alarms have no notification action (no
   SNS, Simple Notification Service, topic), and the firewall has no alarms. Add one topic with an
   email subscription, then an alarm on `BlockedRequests` for the general rate rule and the managed

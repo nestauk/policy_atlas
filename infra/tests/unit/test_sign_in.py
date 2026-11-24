@@ -11,6 +11,7 @@ from aws_cdk.assertions import Template
 from infra.cert_stack import PaV3CertStack
 from infra.cognito_auth import CognitoAuth, sign_in_block
 from infra.policy_atlas_stack import PolicyAtlasStack
+from tests.unit.test_security_headers import _csp, _policy
 from tests.unit.test_synth import (
     CDK_CONTEXT,
     CERT_ENV,
@@ -108,9 +109,7 @@ def _domains(template: dict) -> list[dict]:
 
 
 def _csp_directives(template: dict) -> dict[str, str]:
-    [(_, policy)] = _resources(template, "AWS::CloudFront::ResponseHeadersPolicy")
-    headers = policy["Properties"]["ResponseHeadersPolicyConfig"]["CustomHeadersConfig"]["Items"]
-    [csp] = [h["Value"] for h in headers if h["Header"] == "Content-Security-Policy-Report-Only"]
+    csp = _csp(_policy(template))
     return dict(directive.split(" ", 1) for directive in csp.split("; "))
 
 
