@@ -508,8 +508,9 @@ database role.
 **First-deploy order.**
 
 1. Create the allowlist parameter.
-2. Deploy with `ops.desired_count` set to 0. The service exists but runs no
-   tasks.
+2. Deploy with `ops.desired_count` set to 1. One deploy is enough: the template
+   always creates the service with no tasks, and `deploy.sh` starts it only
+   after the migration and the ops database login check.
 3. Grant the first ops role from your machine:
 
    ```bash
@@ -517,12 +518,8 @@ database role.
    make ops-grant ENV=staging EMAIL=<email>
    ```
 
-   Only the CLI can grant `is_ops`; no web page can.
-4. Set `ops.desired_count` to 1 and deploy again.
-
-   The committed staging config already has `desired_count` 1. On an
-   environment where the ops service has never run, set it to 0 for step 2,
-   then back to 1.
+   Only the CLI can grant `is_ops`; no web page can. Until this step the pages
+   run but nobody can use them.
 
 **Self-signup.** `self_signup.enabled` in `pa_config.json` is false by default
 (`max_per_hour` caps the invitations the sweep sends, and its failed attempts, per hour; an enrolment of an existing account sends nothing and is not capped). Before switching it on, make sure the
@@ -1157,8 +1154,8 @@ account; this is the first).
 ### Sign-in: authenticator codes, branded page, own address (task 064d)
 
 ADR 0049. One block in `infra/pa_config.json` under `policy_atlas_config`
-turns each part on. With no block, nothing changes (production today; a test
-compares production's template with a saved copy).
+turns each part on. With no block, nothing changes (a test compares a template
+built without the block with a saved copy).
 
 ```json
 "sign_in": {"mfa": "app", "page": "managed", "domain": "auth.v3.policyatlas.uk"}

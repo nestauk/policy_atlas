@@ -20,6 +20,7 @@ from tests.unit.test_synth import (
     ENV_NAME,
     INFRA_ROOT,
     NETWORK_CONFIG,
+    NO_SIGN_IN_APP_TEMPLATE,
     PA_CONFIG,
     PROD_APP_TEMPLATE,
     TEMPLATES,
@@ -51,10 +52,10 @@ def _sign_in_resources(app_template: dict, cert_template: dict) -> dict:
     }
 
 
-def test_production_sign_in_resources_equal_baseline():
+def test_sign_in_resources_without_a_block_equal_baseline():
     # With no `sign_in` block the change adds nothing. Regenerate the baseline only from
     # code that predates the change: UPDATE_SIGN_IN_BASELINE=1 make -C infra test.
-    rendered = _sign_in_resources(PROD_APP_TEMPLATE, TEMPLATES["cert"])
+    rendered = _sign_in_resources(NO_SIGN_IN_APP_TEMPLATE, TEMPLATES["cert"])
     if os.environ.get("UPDATE_SIGN_IN_BASELINE") == "1":
         BASELINE.parent.mkdir(exist_ok=True)
         BASELINE.write_text(json.dumps(rendered, indent=1, sort_keys=True) + "\n")
