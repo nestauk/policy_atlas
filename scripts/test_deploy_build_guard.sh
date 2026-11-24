@@ -214,6 +214,7 @@ case "$1 $2" in
   "ecs update-service"|"ecs wait"|"cloudfront wait") exit 0 ;;
   "s3 sync")
     if [[ "$*" == *"frontend/public/fonts/"* ]]; then
+      echo "fonts sync" >>"$PA_STUB_CALLS"
       mkdir -p frontend/public/fonts
       touch frontend/public/fonts/guard-font.woff2
     fi
@@ -240,6 +241,7 @@ chmod +x "$stub_dir/npx"
 cat >"$stub_dir/pnpm" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$1" == "build:ops" ]]; then
+  echo "build ops" >>"$PA_STUB_CALLS"
   mkdir -p ../backend/ops-ui
   touch ../backend/ops-ui/index.html
 fi
@@ -254,8 +256,16 @@ EOF
 chmod +x "$stub_dir/curl"
 
 order_output="$work_dir/order.out"
-PATH="$stub_dir:$PATH" PA_DEPLOY_ORDER_ONLY=1 \
+PATH="$stub_dir:$PATH" PA_DEPLOY_ORDER_ONLY=1 PA_STUB_CALLS="$work_dir/calls.log" \
   bash "$deploy_script" update >"$order_output"
+
+# The ops pages are built from the same public folder as the app, so the fonts
+# must be there before that build.
+if [[ "$(head -n 1 "$work_dir/calls.log")" != "fonts sync" ]] || ! grep -qx "build ops" "$work_dir/calls.log"; then
+  echo "ERROR: the ops pages were built before the fonts were fetched" >&2
+  cat "$work_dir/calls.log" >&2
+  exit 1
+fi
 
 expected_order=$'check ops allowlist\nbuild ops pages\ncdk deploy\ncheck ops secret\ncheck ops service\nstop api\nstop ops\nmigrate\nstart api\npublish frontend\nstart ops'
 actual_order="$(grep -E '^(check ops allowlist|build ops pages|cdk deploy|check ops secret|check ops service|stop api|stop ops|migrate|start api|start ops|publish frontend)$' "$order_output")"
