@@ -47,11 +47,19 @@ STAGING_CSP = (
     "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'"
 )
 PROD_CSP = (
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data: blob:; font-src 'self'; connect-src 'self' "
-    "https://api.policyatlas.uk https://cognito-idp.eu-west-2.amazonaws.com "
-    "https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com; "
-    "frame-src 'self' https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com; "
+    "default-src 'self'; "
+    "script-src 'self' https://*.eu-west-2.captcha-sdk.awswaf.com "
+    "https://*.eu-west-2.captcha.awswaf.com https://*.eu-west-2.token.awswaf.com; "
+    "style-src 'self' 'unsafe-inline' https://static.captcha.awswaf.com; "
+    "img-src 'self' data: blob:; font-src 'self' https://static.captcha.awswaf.com; "
+    "media-src 'self' data:; "
+    "connect-src 'self' https://api.policyatlas.uk "
+    "https://cognito-idp.eu-west-2.amazonaws.com "
+    "https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com https://auth.policyatlas.uk "
+    "https://*.eu-west-2.captcha-sdk.awswaf.com https://*.eu-west-2.captcha.awswaf.com "
+    "https://*.eu-west-2.token.awswaf.com; "
+    "frame-src 'self' https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com "
+    "https://auth.policyatlas.uk; "
     "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'"
 )
 

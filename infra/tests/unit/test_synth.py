@@ -127,8 +127,8 @@ CERT_STACK = PaV3CertStack(
     env=CERT_ENV,
     cross_region_references=True,
 )
-# The staging config names our own sign-in address (ADR 0049), which needs its
-# certificate; CERT_STACK stays without one so its template matches production's.
+# Each config names our own sign-in address (ADR 0049), which needs its
+# certificate; CERT_STACK stays without one, as the saved sign-in baseline expects.
 AUTH_CERT_STACK = PaV3CertStack(
     APP,
     "PaV3CertStackAuth",
@@ -267,6 +267,26 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackProdCsp",
         pa_config=prod_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    # An environment with no sign_in block, a report-only CSP, the default email
+    # sender and no CAPTCHA: the state the saved sign-in baseline was written from. It takes the website certificate
+    # from AUTH_CERT_STACK because one more reader of CERT_STACK would add an
+    # export to that stack's template, which the baseline also holds.
+    no_sign_in_config = json.loads(json.dumps(prod_config))
+    del no_sign_in_config["policy_atlas_config"]["sign_in"]
+    no_sign_in_config["policy_atlas_config"]["csp_mode"] = "report-only"
+    no_sign_in_config["policy_atlas_config"]["email"]["enabled"] = False
+    no_sign_in_config["policy_atlas_config"]["backend"]["waf"]["captcha"] = False
+    NO_SIGN_IN_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackNoSignIn",
+        pa_config=no_sign_in_config,
+        certificate=AUTH_CERT_STACK.certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -297,6 +317,7 @@ NO_EMAIL_APP_TEMPLATE = Template.from_stack(NO_EMAIL_APP_STACK).to_json()
 ENFORCE_APP_TEMPLATE = Template.from_stack(ENFORCE_APP_STACK).to_json()
 COUPLING_APP_TEMPLATE = Template.from_stack(COUPLING_APP_STACK).to_json()
 PROD_APP_TEMPLATE = Template.from_stack(PROD_APP_STACK).to_json()
+NO_SIGN_IN_APP_TEMPLATE = Template.from_stack(NO_SIGN_IN_APP_STACK).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()

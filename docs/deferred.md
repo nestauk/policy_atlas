@@ -1294,14 +1294,16 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Work to do
 
-- **Planned** (production switch-on of the sign-in change, [ADR
+- **Planned** (production release of the sign-in change, [ADR
   0049](adr/0049-authenticator-app-mfa-branded-sign-in-page-own-sign-in-address.md)) Staging requires
   an authenticator-app code (MFA, multi-factor authentication) and has the branded sign-in page on
-  `auth.v3.policyatlas.uk`. Production has no `sign_in` block yet, so an admin account there still
-  reads every organisation's rows behind a password alone, an accepted risk ([ADR
-  0033](adr/0033-organisation-tenancy-and-global-admin-read.md)). Steps: `infra/DEPLOYMENT.md`
-  § Sign-in. Condition: the staging live checks pass, and before the first real organisation is
-  enrolled in production.
+  `auth.v3.policyatlas.uk`. The `prod` config has the same `sign_in` block (on
+  `auth.policyatlas.uk`), and production gets it at its next release. Until that release an admin
+  account there still reads every organisation's rows behind a password alone, an accepted risk
+  ([ADR 0033](adr/0033-organisation-tenancy-and-global-admin-read.md)). Before the release: record
+  the staging live checks in `docs/tasks/064d-mfa/verification.md` and send the user warning at
+  least one working day ahead. Steps: `infra/DEPLOYMENT.md` § Sign-in. Condition: the next
+  production release.
 - **Planned** (the rest of review finding M-13) Cognito threat protection: a leaked-password block
   and risk-based sign-in checks. It needs the Plus plan (about $0.02 per monthly active user, no
   free tier). Condition: a separate approval; the app codes already stop a stolen password alone.
@@ -1413,19 +1415,20 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 - **Planned** (the firewall's block switch on production, [ADR
   0047](adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md)) Staging blocks (`waf.mode:
-  block`). Production still runs the firewall in count mode (`waf.mode: count`), and its CAPTCHA is
-  off (`waf.captcha: false`), so production's waitlist has the rate rule and the honeypot only.
-  After production's count week and the deliberate pass, set `mode: block` in
-  `infra/pa_config.json`, deploy and repeat the pass ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § The
-  firewall). Production's CAPTCHA goes on after the staging live check. Condition: the staging
-  pass in block mode shows no refused normal request.
+  block`). The `prod` config also sets `waf.mode: block`, so production's first release with the
+  firewall blocks at once, without a count week of its own: it relies on staging's. Do the
+  deliberate pass right after that release, and keep the emergency off switch at hand
+  ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § The firewall). The waitlist CAPTCHA goes on in the
+  same release (`waf.captcha: true`): submit the waitlist form once in that pass, with the puzzle
+  and its audio option. Condition: the staging pass in block mode shows no refused normal request.
 - **Planned** (the Content Security Policy's enforce switch on production, [ADR
   0048](adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)) Staging enforces
-  the policy (`csp_mode: "enforce"`), on the website and the ops pages. Production still sends it
-  in report-only mode (`csp_mode: "report-only"`). After production's manual pass, set `csp_mode:
-  "enforce"` in `infra/pa_config.json`, deploy and repeat the pass
-  ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers). Condition: the staging pass in
-  enforce mode shows no Content Security Policy line apart from the deliberate one.
+  the policy (`csp_mode: "enforce"`), on the website and the ops pages. The `prod` config also
+  sets `csp_mode: "enforce"`, so production's first release with the policy enforces it at once,
+  without a report-only pass of its own: it relies on staging's. Do the manual pass on the website
+  and the ops pages right after that release; the rollback is `csp_mode: "report-only"` and a
+  deploy ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers). Condition: the staging
+  pass in enforce mode shows no Content Security Policy line apart from the deliberate one.
 - **Now** The dead-letter, NAT traffic and writer CPU-credit alarms have no notification action (no
   SNS, Simple Notification Service, topic), and the firewall has no alarms. Add one topic with an
   email subscription, then an alarm on `BlockedRequests` for the general rate rule and the managed

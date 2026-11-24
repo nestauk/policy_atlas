@@ -95,7 +95,7 @@ def test_w1_web_acl_association_config_pin_and_validation():
     staging = configs["staging"]["policy_atlas_config"]["backend"]["waf"]
     prod = configs["prod"]["policy_atlas_config"]["backend"]["waf"]
     assert staging == {"enabled": True, "mode": "block", "captcha": True}
-    assert prod == {"enabled": True, "mode": "count", "captcha": False}
+    assert prod == {"enabled": True, "mode": "block", "captcha": True}
 
     acl_id, acl = _acl(APP)
     properties = acl["Properties"]
@@ -181,11 +181,9 @@ def test_w4_managed_rules_are_host_scoped_skip_health_and_keep_body_counted():
 
 
 def test_w5_captcha_rule_precedes_rate_rule_and_controls_token_domains():
-    prod = _configs()["prod"]["policy_atlas_config"]["backend"]["waf"]
-    for config in (prod, {"enabled": True, "mode": "count", "captcha": False}):
-        _, acl = _acl(_synth(config))
-        assert "TokenDomains" not in acl["Properties"]
-        assert all(rule["Name"] != "waitlist-captcha" for rule in acl["Properties"]["Rules"])
+    _, acl = _acl(_synth({"enabled": True, "mode": "count", "captcha": False}))
+    assert "TokenDomains" not in acl["Properties"]
+    assert all(rule["Name"] != "waitlist-captcha" for rule in acl["Properties"]["Rules"])
     for domain in ("v3.policyatlas.uk", "policyatlas.uk"):
         template = _synth({"enabled": True, "mode": "count", "captcha": True}, domain_name=domain)
         _, acl = _acl(template)
