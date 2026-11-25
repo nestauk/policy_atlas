@@ -123,7 +123,10 @@ def load_resolved(doc_id: str) -> list[dict[str, Any]]:
         path = ref_cache_path(doc_id, ref["label"])
         if not path.exists():
             raise FileNotFoundError(
-                f"run `00_update_ground_truth.py --rerun {doc_id}` first: {path}"
+                f"no cached resolution at {path}. Download the dataset "
+                "(`sync_s3.py synthesis download`). If it is still missing, "
+                f"`00_update_ground_truth.py --rerun {doc_id}` rebuilds it, but that "
+                "extracts again and overwrites the `keep` edits in the CSVs."
             )
         out.append(json.loads(path.read_text(encoding="utf-8")))
     return out
@@ -349,7 +352,18 @@ def judge_facts(
 def score(
     facts: list[dict[str, str]], verdicts: dict[str, str], ingested_labels: set[str]
 ) -> dict[str, Any]:
-    """Coverage over all facts and over facts with at least one ingested source.
+    """Coverage over all facts and over two "ingested" subsets of them.
+
+    A fact carries every reference label of its key point, so the labels do not say
+    which reference supports which fact. ``coverage_ingested`` keeps a fact if at
+    least one label was ingested, so it can count a retrieval failure as a synthesis
+    miss: it is a lower bound on coverage of the facts the pipeline had access to.
+    ``coverage_all_refs_ingested`` keeps a fact only if every label was ingested, so
+    each of its misses is a synthesis miss. It is an estimate from a smaller subset
+    (key points with few references are over-represented), not an upper bound.
+    It is ``None`` when no fact qualifies, which is common: a briefing whose key
+    points each cite a dropped reference has an empty subset, and 0.0 would read as
+    "nothing covered".
 
     Strict coverage counts ``fully_represented`` only; lenient coverage also counts
     ``partially_represented``.
@@ -365,6 +379,9 @@ def score(
     ingested = [
         f for f in facts if set(f["ref_labels"].split(LABEL_SEP)) & ingested_labels
     ]
+    all_refs_ingested = [
+        f for f in facts if set(f["ref_labels"].split(LABEL_SEP)) <= ingested_labels
+    ]
     strict = {"fully_represented"}
     lenient = {"fully_represented", "partially_represented"}
 
@@ -375,10 +392,17 @@ def score(
     return {
         "n_facts": len(facts),
         "n_ingested": len(ingested),
+        "n_all_refs_ingested": len(all_refs_ingested),
         "coverage_all": share(facts, strict),
         "coverage_ingested": share(ingested, strict),
+        "coverage_all_refs_ingested": (
+            share(all_refs_ingested, strict) if all_refs_ingested else None
+        ),
         "coverage_all_lenient": share(facts, lenient),
         "coverage_ingested_lenient": share(ingested, lenient),
+        "coverage_all_refs_ingested_lenient": (
+            share(all_refs_ingested, lenient) if all_refs_ingested else None
+        ),
         **{f"n_{v}": c for v, c in counts.items()},
     }
 
@@ -484,11 +508,14 @@ def run_doc(
     (out / "eval_results.json").write_text(
         json.dumps(record, indent=2), encoding="utf-8"
     )
+    all_refs = scores["coverage_all_refs_ingested"]
     print(
         f"doc {doc_id}: walk {outcome.status}, report {len(report)} chars, "
         f"stage-2 demoted {record['n_stage2_demoted']}, "
         f"coverage all={scores['coverage_all']:.2f} "
         f"ingested={scores['coverage_ingested']:.2f} "
+        f"all-refs-ingested={all_refs if all_refs is None else round(all_refs, 2)} "
+        f"(n={scores['n_all_refs_ingested']}) "
         f"(lenient {scores['coverage_all_lenient']:.2f} / "
         f"{scores['coverage_ingested_lenient']:.2f}) -> {out}"
     )
@@ -504,6 +531,14 @@ def item_scores(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
         Evaluation(name="coverage_all_lenient", value=scores["coverage_all_lenient"]),
         Evaluation(
             name="coverage_ingested_lenient", value=scores["coverage_ingested_lenient"]
+        ),
+        *(
+            Evaluation(name=key, value=scores[key])
+            for key in (
+                "coverage_all_refs_ingested",
+                "coverage_all_refs_ingested_lenient",
+            )
+            if scores[key] is not None  # no score is better than a false 0.0
         ),
         Evaluation(name="n_facts", value=scores["n_facts"]),
         Evaluation(name="n_fully", value=scores["n_fully_represented"]),

@@ -26,6 +26,7 @@ set -a; source ../../../backend/.env; set +a
 ../../../backend/.venv/bin/python determine_which_refs_are_in_overton.py
 ```
 """
+
 import json
 from collections import defaultdict
 import html
@@ -53,6 +54,7 @@ MAX_PAGES = 1  # Maximum pages of results to retrieve per title
 TITLE_TAG = re.compile(r"<title[^>]*>(.*?)</title>", re.S | re.I)
 
 session = requests.Session()
+
 
 def normalise_title(title: str) -> str:
     """Normalise a title for comparing search results."""
@@ -153,18 +155,14 @@ def get_page(title: str, page: int) -> dict:
         # Overton requires no more than one request per second.
         time.sleep(2)
 
-        response = session.get(
-            API_URL, params=params, timeout=30
-        )
+        response = session.get(API_URL, params=params, timeout=30)
 
         if response.status_code == 429:
             time.sleep(2 ** (attempt + 1))
             continue
 
         if response.status_code != 200:
-            raise RuntimeError(
-                f"Overton returned HTTP {response.status_code}"
-            )
+            raise RuntimeError(f"Overton returned HTTP {response.status_code}")
 
         return response.json()
 
@@ -217,25 +215,26 @@ def search_title(title: str, urls: set[str]) -> tuple[list[dict], int]:
                 for candidate_title in (overton_title, translated_title)
             )
 
-            candidates.append({
-                "overton_title": overton_title,
-                "translated_title": translated_title,
-                "policy_document_id": doc_id,
-                "pdf_document_id": doc.get("pdf_document_id"),
-                "source": (doc.get("source") or {}).get("title"),
-                "published_on": doc.get("published_on"),
-                "document_url": (
-                    doc.get("document_url")
-                    or doc.get("policy_document_url")
-                ),
-                "title_similarity": round(similarity, 3),
-                "exact_title_match": similarity == 1.0,
-                "url_match": any(
-                    is_url_match(url, doc.get(field))
-                    for url in urls
-                    for field in ("document_url", "pdf_url")
-                ),
-            })
+            candidates.append(
+                {
+                    "overton_title": overton_title,
+                    "translated_title": translated_title,
+                    "policy_document_id": doc_id,
+                    "pdf_document_id": doc.get("pdf_document_id"),
+                    "source": (doc.get("source") or {}).get("title"),
+                    "published_on": doc.get("published_on"),
+                    "document_url": (
+                        doc.get("document_url") or doc.get("policy_document_url")
+                    ),
+                    "title_similarity": round(similarity, 3),
+                    "exact_title_match": similarity == 1.0,
+                    "url_match": any(
+                        is_url_match(url, doc.get(field))
+                        for url in urls
+                        for field in ("document_url", "pdf_url")
+                    ),
+                }
+            )
 
         if not results or page >= int(info.get("pages", 1)):
             break
@@ -246,6 +245,7 @@ def search_title(title: str, urls: set[str]) -> tuple[list[dict], int]:
     )
 
     return candidates, total_results
+
 
 def load_existing_results(path: Path) -> dict:
     """Load previous searches to support resuming interrupted runs."""
@@ -261,12 +261,12 @@ def load_existing_results(path: Path) -> dict:
 
     return results
 
+
 if __name__ == "__main__":
-    
     references_files = []
     for dir in GROUND_TRUTH_DIR.iterdir():
         references_files.extend(dir.glob("*references.csv"))
-    
+
     # 1. Read all titles, retaining their source files.
     titles_to_search = defaultdict(set)
     urls_by_title = defaultdict(set)
@@ -290,7 +290,6 @@ if __name__ == "__main__":
                 if is_link_text:
                     link_text_refs[title] = (doc_id, row["label"], row["url"])
 
-
     # 2. Load previous results.
     existing_results = load_existing_results(OUTPUT_PATH)
 
@@ -308,14 +307,9 @@ if __name__ == "__main__":
     print(f"Found {len(titles_to_search)} unique titles.")
     print(f"Already completed: {len(completed & titles_to_search.keys())}")
 
-
     # 3. Search and append each result immediately.
     with OUTPUT_PATH.open("a", encoding="utf-8") as f:
-
-        for i, (title, source_files) in enumerate(
-            titles_to_search.items(), start=1
-        ):
-
+        for i, (title, source_files) in enumerate(titles_to_search.items(), start=1):
             if title in completed:
                 continue
 

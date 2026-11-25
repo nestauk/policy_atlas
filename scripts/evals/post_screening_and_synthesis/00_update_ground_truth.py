@@ -26,19 +26,25 @@ came from) with ``keep=y`` on every row. Then each kept reference is resolved to
 text: OpenAlex by DOI, else by strict title match; then the production URL cascade,
 fetcher and parser; the briefing's own URL is tried last. No full text but an OpenAlex
 abstract gives an ``abstract_only`` chunk; otherwise the reference is ``dropped`` with a
-reason. Each outcome is cached in ``datasets/<doc_id>/refs/<label>.json`` (rerun is
-network-free) and summarised in ``ground_truth/<doc_id>/corpus_resolution.csv``.
+reason. Each outcome is cached in ``datasets/<doc_id>/refs/<label>.json`` and
+summarised in ``ground_truth/<doc_id>/corpus_resolution.csv``. With ``--rerun`` the
+three model calls run again, but a reference is not fetched again if the cache
+holds its label with the same title, DOI and URL.
 
-A human then edits the ``keep`` columns, reruns this script to re-resolve if references
-changed, and pushes with ``01_upload_to_langfuse.py``.
+A human then edits the ``keep`` columns and pushes with ``01_upload_to_langfuse.py``.
+A ``keep=n`` edit needs no second run of this script: the later steps filter on ``keep``
+when they read the CSVs. No path resolves references again without extracting again,
+so a hand-edited or hand-added reference row cannot be resolved.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 import _bootstrap  # noqa: F401
@@ -462,6 +468,39 @@ def resolve_ref(
     }
 
 
+def identify_ref(ref: dict[str, str]) -> dict[str, str]:
+    """The fields of a ``references.csv`` row that decide what ``resolve_ref`` fetches.
+
+    The title is normalised so that a change of case or punctuation between two
+    extractions does not count as a different reference.
+    """
+    return {
+        "title": norm_title(ref["title"]),
+        "doi": ref["doi"].strip().lower(),
+        "url": ref["url"].strip(),
+    }
+
+
+def load_cached_ref(path: Path, ref: dict[str, str]) -> dict[str, Any] | None:
+    """The cached resolution of a reference, or ``None`` if it must be resolved.
+
+    The cache file is named by label only, and a second extraction can give a label a
+    corrected DOI or URL, or a different reference. So a record is reused only if the
+    identity stored in it (``identify_ref``) matches the current row.
+
+    Args:
+        path: The cache file for this reference's label.
+        ref: A kept row of ``references.csv``.
+    """
+    if not path.exists():
+        return None
+    cached = json.loads(path.read_text(encoding="utf-8"))
+    if cached.get("ref") != identify_ref(ref):
+        logging.warning("%s is for a different reference; resolving again", path)
+        return None
+    return cached
+
+
 def resolve(doc_id: str, *, workers: int) -> None:
     """Resolve every kept reference of one briefing, caching per reference.
 
@@ -474,9 +513,10 @@ def resolve(doc_id: str, *, workers: int) -> None:
 
     def one(ref: dict[str, str]) -> dict[str, Any]:
         path = ref_cache_path(doc_id, ref["label"])
-        if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
-        resolved = resolve_ref(doc_id, ref, fetcher)
+        cached = load_cached_ref(path, ref)
+        if cached is not None:
+            return cached
+        resolved = {**resolve_ref(doc_id, ref, fetcher), "ref": identify_ref(ref)}
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(resolved, ensure_ascii=False), encoding="utf-8")
         return resolved

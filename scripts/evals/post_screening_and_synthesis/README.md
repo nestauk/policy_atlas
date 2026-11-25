@@ -67,11 +67,13 @@ The primary metric is **fact coverage**: the proportion of ground-truth atomic f
 | Metric | Description |
 |---|---|
 | `coverage_all` | Proportion of all ground-truth facts fully represented. "All" = regardless of whether or not the sources for these facts could be obtained; it's therefore not guaranteed that the PA pipeline actually had access to the information needed to reproduce these facts. |
-| `coverage_ingested` | Proportion of facts fully represented, restricted to facts supported by at least one ingested reference i.e. facts that the PA pipeline had access to. |
+| `coverage_ingested` | Proportion of facts fully represented, restricted to facts whose key point cites at least one ingested reference. A fact carries every reference of its key point, so the reference that supports a given fact may be one that was not ingested. This metric can therefore count a retrieval failure as a synthesis miss: read it as a lower bound. |
+| `coverage_all_refs_ingested` | As `coverage_ingested`, restricted to facts whose key point has every reference ingested. The PA pipeline had access to the source of each of these facts, so a miss here is a synthesis miss. The denominator is smaller, so the number is noisier; it is empty (`null`, no Langfuse score) for a briefing where every key point cites a reference that was not ingested. |
 | `coverage_all_lenient` | As `coverage_all`, also counting partially represented facts |
 | `coverage_ingested_lenient` | As `coverage_ingested`, also counting partially represented facts |
+| `coverage_all_refs_ingested_lenient` | As `coverage_all_refs_ingested`, also counting partially represented facts |
 
-The ingested-denominator metrics help distinguish failures of evidence synthesis from failures to retrieve source material.
+The ingested-denominator metrics help distinguish failures of evidence synthesis from failures to retrieve source material. `coverage_ingested` is a lower bound on the coverage of facts that the PA pipeline had access to. `coverage_all_refs_ingested` is an estimate of it from a subset of facts (key points with few references are over-represented), not an upper bound.
 
 ## Running the experiment
 
