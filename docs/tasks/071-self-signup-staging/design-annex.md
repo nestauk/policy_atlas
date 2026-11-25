@@ -2,7 +2,7 @@
 
 The states and words for the surfaces of [contract.md](contract.md). Terms: contract § Terms.
 
-> **Version:** 1 · Mock: none (the ops surfaces reuse the existing ops page patterns) ·
+> **Version:** 2 · Mock: https://claude.ai/artifact/GqkMxEqCd6W6EfkB6EdS2g (private, six scenes) ·
 > Frozen: _pending the owner_ · Polish rounds: _log below_
 
 ## Rules for this slice
@@ -15,7 +15,7 @@ The states and words for the surfaces of [contract.md](contract.md). Terms: cont
 
 ## Fixed example data
 
-- Organisation "DHSC", cohort "DHSC pilot 2027", domain `dhsc.example`.
+- Organisation "DHSC", cohort "DHSC pilot 2027", domains `dhsc.example` and `ukhsa.example`.
 - Link label "DHSC pilot", code `K7Q2-M9XD-3FHP`, 63 of 120 used, expires 14 Feb 2027.
 - File `pilot.csv` with 100 people; line 7 has a bad email; line 12 repeats line 3.
 
@@ -33,10 +33,10 @@ The states and words for the surfaces of [contract.md](contract.md). Terms: cont
   reviewing your request and will get in touch. Already have an account? Use Sign in."
 - **Never:** a word that says whether the address, the domain or the code was accepted.
 
-### Invitation email (contract A3, open)
+### Invitation email (contract A3)
 
 - One sentence after "You set your own password the first time you sign in.": "You also
-  connect an authenticator app, such as Microsoft Authenticator."
+  set up an authenticator app on your phone."
 
 ### Ops: Add person (contract B7)
 
@@ -77,24 +77,25 @@ A switch at the top of Add person: "One person" · "Many from a file".
 
 ### Ops: Invite links (contract D7)
 
-Tab "Invite links" between Cohorts and Requests. Title "Invite links"; primary "Create
-link". Under the title: "An invite link lets people from one email domain request access
-and get an account without approval, until the link is full, expires or is revoked."
+Tab "Invite links" between Cohorts and Waitlist (the Requests page shows as "Waitlist"). Title "Invite links"; primary "Create
+link". Under the title: "An invite link lets people from the email domains you choose request
+access and get an account without approval, until the link is full, expires or is revoked."
 
-- **Table:** Label · Organisation · Cohorts · Email domain · Used ("63 of 120") · Expires ·
+- **Table:** Label · Organisation · Cohorts · Email domains · Used ("63 of 120") · Expires ·
   Status (`ACTIVE`, `EXPIRED`, `FULL`, `REVOKED`) · actions. Empty: "No invite links yet."
 - **Row menu:** "Copy link" (toast "Link copied") · "Edit…" · "Revoke…".
 - **Create dialog ("Create invite link"):** "Label" · "Organisation" · "Cohorts (optional)" ·
-  "Email domain" (help: "Only addresses at this domain can use the link, for example
-  dhsc.gov.uk.") · "Maximum uses" · "Expires on". Button "Create link". After: the dialog
-  shows the link with "Copy link" and "Anyone with this link and an address at <domain> can
+  "Email domains" (a text box, help: "Only addresses at these domains can use the link. One
+  domain on each line, for example dhsc.gov.uk. At most 10.") · "Maximum uses" · "Expires on". Button "Create link". After: the dialog
+  shows the link with "Copy link" and "Anyone with this link and an address at one of these domains can
   get an account. Share it only with the group."
 - **Edit dialog:** "Label", "Maximum uses", "Expires on". The organisation, cohorts and
-  domain are shown and cannot be changed, with: "To change these, revoke this link and
+  domains are shown and cannot be changed, with: "To change these, revoke this link and
   create a new one." A revoked link has no "Edit…".
 - **Revoke dialog:** "Revoke <label>? People who use the link after this get no account
   through it. The <n> accounts already made stay." Button "Revoke link".
-- **Refusals:** "Enter a domain such as dhsc.gov.uk, with no @." · "Maximum uses must be
+- **Refusals:** "Line <n>: enter a domain such as dhsc.gov.uk, with no @." · "Enter at least one domain." ·
+  "A link can have at most 10 domains." · "This domain is on the list twice." · "Maximum uses must be
   from 1 to 1,000." · "Choose a date in the next 90 days." · "This link already has <n>
   uses. The maximum cannot be lower." · "A revoked link cannot be changed."
 - **Expires on:** a date. The link works to the end of that day in the operator's time zone.
@@ -114,12 +115,16 @@ and get an account without approval, until the link is full, expires or is revok
 
 ## Scenes (mock)
 
-Not built. If the owner asks for a mock round: (1) create a link, (2) the list with one
-link of each status, (3) a file with two errors, (4) a file run with one failure, (5) a
-request that shows "full".
+Built, round 1: (1) the list with one link of each status and the row menu, (2) the create
+dialog, (3) the created link, (4) a file with two errors, (5) a file run with one failure,
+(6) the Waitlist page with each reason.
 
 ## Owner rulings
 
 - 2026-11-25: scope of the task (contract § Owner rulings). The words are not yet approved.
+- 2026-11-25: several domains for each link; the email sentence names no product; a mock
+  round.
 
 ## Polish log
+
+- Mock round 1 (2026-11-25): six scenes published; waits for the owner.

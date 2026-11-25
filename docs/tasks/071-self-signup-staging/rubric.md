@@ -76,6 +76,7 @@ Each slice row names the kind of test that proves it.
         organisation (sweep tests). The sweep redeems a link when no domain is listed.
 28. [ ] D5.4: a redeemed request has the account in the link's organisation, the link's
         cohorts, `invite_link_id` set and one sweep audit row (sweep test, stored rows).
+        D5.1: a link with two domains redeems a request from each (sweep test).
 29. [ ] D5.5, I4: with `max_uses` 1 and two requests, one is redeemed and one waits (sweep
         test); two redemptions of one link on two connections end without a deadlock and
         with one use (bounded test).
@@ -93,7 +94,8 @@ Each slice row names the kind of test that proves it.
 34. [ ] D5.11: manual Approve of a request with a code does not set `invite_link_id` (route
         test).
 35. [ ] D6: create, list, update and revoke work, refuse the out-of-range values, and write
-        their audit rows; `max_uses` below the uses is refused; a revoked link cannot be
+        their audit rows; no domain, more than 10 domains or a repeated domain is refused;
+        `max_uses` below the uses is refused; a revoked link cannot be
         changed; a non-ops caller is refused (route tests).
         I8: create, update, revoke and one full redemption by the sweep run on a real
         `pa_ops` connection (login test).
@@ -119,5 +121,5 @@ Each slice row names the kind of test that proves it.
 
 **Docs**
 
-44. [ ] `web-api.md`, `infra/DEPLOYMENT.md`, the ADR 0046 amendment, the living copy file and
+44. [ ] A3: the invitation email holds the annex sentence. `web-api.md`, `infra/DEPLOYMENT.md`, the ADR 0046 amendment, the living copy file and
         `docs/deferred.md` are updated as the contract's § Scope says.

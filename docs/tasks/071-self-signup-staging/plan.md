@@ -40,7 +40,7 @@ These signatures are part of the briefs. The agents implement them; they do not 
    - `new_code() -> str` — the stored form (no hyphens).
    - `display(code: str) -> str` — `XXXX-XXXX-XXXX`.
 2. `commands.py`:
-   - `create_invite_link(conn, *, label, org, cohorts, allowed_domain, max_uses, expires_at, created_by, now) -> InviteLink`
+   - `create_invite_link(conn, *, label, org, cohorts, allowed_domains, max_uses, expires_at, created_by, now) -> InviteLink`
    - `update_invite_link(conn, *, invite_link_id, label, max_uses, expires_at, now) -> InviteLink`
    - `revoke_invite_link(conn, *, invite_link_id, now) -> InviteLink`
    - `redeem_request(conn, cognito, *, pool_id, entry_id, now) -> Approval | None`. Lock
@@ -55,7 +55,7 @@ These signatures are part of the briefs. The agents implement them; they do not 
      new (`add_to_cohort` reports it); all on the caller's transaction.
 3. The candidate query (D5.3, D5.8), one statement:
    waiting requests where the email domain is listed, **or** an `invite_link` row exists
-   with the same code, `revoked_at IS NULL`, `expires_at > now`, the same domain, and
+   with the same code, `revoked_at IS NULL`, `expires_at > now`, a domain list that holds the request's domain, and
    `(SELECT count(*) FROM waitlist_entry WHERE invite_link_id = link) < max_uses`;
    oldest first; limit 200. The statement runs when no domain is listed (the shortcut at
    `sweep.py:91` goes). The listed-domain map is used only for a candidate with no valid link.
@@ -100,7 +100,7 @@ the same commit (a phase that changes a route or a body is not green without it)
 | 6 | Sweep: the candidate query, the tick lock, `redeem_request`, the Requests reason field. Tests: links with no listed domain; two requests for one link on two connections (bounded by a timeout, so a deadlock fails the test); a second tick that finds the tick lock taken does nothing; 250 unknown-code requests ahead of one redeemable request. | D5, D8, I3–I5, I9 | deep-reasoner | V (includes D) |
 | 7 | Public form: the words; read the code from the fragment (`#invite=`), remove it from the address bar, scroll to the form; the invite line; tests. | A1, A2, D4 | frontend-designer (words from the annex; the lead owns them) | FF |
 | 8 | Ops pages: `CohortsField`; Add person; Approve dialogs; Add many; Invite links; the Requests line; the Organisations refusal; mock fixtures; tests. | B7, C3–C6, D7–D9 | frontend-designer | FF |
-| 9 | Docs: `web-api.md`, `infra/DEPLOYMENT.md`, the living copy file, `docs/deferred.md`. A3 (email sentence) only if the owner said yes. | Scope § Docs, A3 | lead | F |
+| 9 | Docs: `web-api.md`, `infra/DEPLOYMENT.md`, the living copy file, `docs/deferred.md`. A3: the email sentence. | Scope § Docs, A3 | lead | F |
 | 10 | Exit: simplify pass; rollback rehearsal on a local database; `verification.md`. | E4, rubric | lead | V |
 
 Each phase ends with a commit on `task/071-self-signup-staging`.
@@ -144,5 +144,6 @@ prompt.
 
 1. Approve the contract (the gate table in it).
 2. Approve the words in the annex, or change them.
-3. A3: the authenticator sentence in the invitation email, yes or no.
-4. A mock round for the ops pages before the build, yes or no.
+3. The mock: say "direction settled", or name the changes.
+
+Settled on 2026-11-25: the email sentence (yes, no product name); the mock round (made).

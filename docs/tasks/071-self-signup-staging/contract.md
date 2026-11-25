@@ -18,8 +18,8 @@ all of Nesta:
    and corrects the words on the public page.
 2. **Operator adds people.** Add person can put the person in cohorts, and can add many
    people from one file.
-3. **Invite link.** An operator makes a link for one organisation, its cohorts and one email
-   domain. A person who uses Request access through the link gets an invitation without an
+3. **Invite link.** An operator makes a link for one organisation, its cohorts and a short list of
+   email domains. A person who uses Request access through the link gets an invitation without an
    operator. This is for a pilot where only some people of a domain get access and we do not
    hold their names.
 
@@ -68,6 +68,12 @@ its live checks recorded in `verification.md`. Production self-signup stays off.
 7. Invite links are in scope.
 8. The words in part A are drafts until the owner approves them
    ([design-annex.md](design-annex.md)).
+9. A failed request waits 15 minutes before the next try (D5 rule 13): agreed.
+10. A new invite code replaces an older one on a waiting request (D3 rule 4): agreed.
+11. An invite link can have several email domains, 1 to 10 (D1, D5 rule 1, D6).
+12. The invitation email gets one sentence about the authenticator app, with no product
+    name (A3).
+13. A mock of the ops pages is made before the build (§ Design annex).
 
 ## Part A — words on the public page
 
@@ -77,8 +83,9 @@ the same for every request.
 **A2.** The form shows one extra line when the page address carries an invite code (D4). The
 line depends on the address only, never on an answer from the server.
 
-**A3.** ❓ Open (owner): one sentence about the authenticator app in the invitation email
-(`infra/email/invitation.html`). In scope only if the owner says yes.
+**A3.** The invitation email (`infra/email/invitation.html`) gains one sentence about the
+authenticator app (annex § Invitation email). It names no product. Both environments use
+this one file, so production gets the sentence at its next deploy.
 
 ## Part B — cohorts at Add person and at Approve
 
@@ -162,8 +169,8 @@ organisation gets no second invitation (the existing rule of `ensure_account_enr
 
 - `invite_link`: `invite_link_id` (uuid, key); `code` (text, unique, a check that it is 12
   characters of the code alphabet); `label` (text, 1 to 200 characters); `org_id` (to
-  `organisation`, required); `allowed_domain` (text, required, a check that it is lower
-  case); `max_uses` (integer, a check that it is above 0); `expires_at` (timestamp with time
+  `organisation`, required); `allowed_domains` (a list of text, required, a check that it holds 1 to
+  10 entries; the command makes each entry lower case and refuses a repeat); `max_uses` (integer, a check that it is above 0); `expires_at` (timestamp with time
   zone, required); `revoked_at` (timestamp with time zone, null until revoked); `created_at`
   (timestamp with time zone); `created_by` (text, the operator's user id, as
   `ops_action.actor_user_id`).
@@ -212,7 +219,7 @@ without a code.
 **D5. Redemption (the sweep).**
 
 1. A waiting request is **redeemable** when its `invite_code` matches a link that is not
-   revoked, is before `expires_at`, has uses left, and whose `allowed_domain` equals the
+   revoked, is before `expires_at`, has uses left, and whose `allowed_domains` hold the
    request's email domain (the same exact, lower-case match as a listed domain).
 2. **Uses** of a link = the number of requests whose `invite_link_id` is that link.
 3. The sweep takes redeemable requests and listed-domain requests together, oldest first.
@@ -259,9 +266,10 @@ without a code.
 
 - `GET /api/v1/ops/invite-links` — every link with its organisation, cohorts, uses, state
   and full web address.
-- `POST /api/v1/ops/invite-links` — create: `label`, `org_id`, `cohort_ids`, `allowed_domain`,
+- `POST /api/v1/ops/invite-links` — create: `label`, `org_id`, `cohort_ids`, `allowed_domains`,
   `max_uses`, `expires_at`. Audit `invite_link.create`.
-- `POST /api/v1/ops/invite-links/{id}` — change `label`, `max_uses`, `expires_at` only.
+- `POST /api/v1/ops/invite-links/{id}` — change `label`, `max_uses`, `expires_at` only (the domains of a link do not change; an
+  operator revokes the link and makes a new one).
   `max_uses` below the link's current uses is refused, checked under the link row lock. A
   revoked link cannot be changed. Audit `invite_link.update`.
 - `POST /api/v1/ops/invite-links/{id}/revoke` — set `revoked_at`. Accounts already made
@@ -272,7 +280,8 @@ without a code.
 - `expires_at` is a full date and time with its zone (RFC 3339). The page offers a date and
   sends the end of that day in the operator's own time zone.
 - Limits: `max_uses` 1 to 1,000; `expires_at` in the future and at most 90 days ahead;
-  `allowed_domain` follows the listed-domain rule (`_normalise_domain`).
+  `allowed_domains` holds 1 to 10 domains with no repeat, and each follows the listed-domain
+  rule (`_normalise_domain`).
 - The code never appears in a log line of the backend or in an audit row. The audit target
   is the link's id. The list answer carries the code inside the web address, for ops users
   only.
@@ -294,15 +303,15 @@ sweep there would act on invite links only.
 
 **D11. The abuse ceiling, stated honestly.** ADR 0046 decision 7 says invitations go "only
 to addresses in a listed domain". After this task: only to addresses in a listed domain
-**or in the one domain of a valid invite link**. A person who holds a link can enter
-addresses of that domain that are not theirs. The ceiling is: one invitation for each
+**or in one of the domains of a valid invite link**. A person who holds a link can enter
+addresses of those domains that are not theirs. The ceiling is: one invitation for each
 address ever, at most `max_uses` for each link, at most `max_per_hour` each hour, only to
-that domain, and the public form's puzzle and rate rule. A guessed code gives no answer to
-test against (D3 rule 2) and is useless without a mailbox in the link's domain.
+those domains, and the public form's puzzle and rate rule. A guessed code gives no answer to
+test against (D3 rule 2) and is useless without a mailbox in one of the link's domains.
 
 A link holder can also put the link's code on another person's **waiting** request, if the
 holder knows that person's address (D3 rule 4). The result is the same as a new request for
-that address: an invitation to the mailbox owner, in the link's domain only. It cannot stop
+that address: an invitation to the mailbox owner, in the link's domains only. It cannot stop
 or delay an account (D5 rule 3). A holder of two links for one domain can move a waiting
 person from one link to the other; this is accepted.
 
@@ -360,6 +369,7 @@ downgrade.
   - New listed domains, and editing the domain table on the ops pages.
   - A default cohort for a listed domain.
   - An invite link with no domain rule, and a visible code field on the form.
+  - A change to the domains of a link after it is made.
   - A per-row organisation or cohort in the CSV file.
   - Email to operators when a request needs a check.
   - The sweep interval.
@@ -381,7 +391,7 @@ This contract asks the owner to approve these gated changes:
 | Schema | Two tables and two columns (D1) |
 | Auth and tenancy | A new way for an account to be made in an organisation (D5); new `pa_ops` grants (D1) |
 | Public interface | An optional field on `POST /api/v1/waitlist` (D3); optional fields and new routes on the ops interface (B1, C2, D6) |
-| Production config | None for production. Staging: one new ops-service environment value (D6) and the switch (E2) |
+| Production config | No production config value. The email sentence (A3) reaches production at its next deploy. Staging: one new ops-service environment value (D6) and the switch (E2) |
 | Dependencies, CI, scaffold, runtime egress | None. No new library; the CSV reader is Python's standard `csv` |
 
 Generated files (`frontend/openapi.json`, `frontend/openapi-ops.json`, the generated types)
@@ -393,7 +403,7 @@ change only through `make openapi-sync`.
 |---|---|
 | I1 | The answer of `POST /api/v1/waitlist` has the same status, fields and headers for every accepted body, whatever the code, the domain or the state of the address. Its values are the email sent, a new id and the time. Equal timing is not promised; no code or link lookup runs in the request. |
 | I2 | The public API never reads `invite_link` and never calls Cognito. |
-| I3 | No account is made through a link whose state is not `active`, or for an address outside the link's domain. |
+| I3 | No account is made through a link whose state is not `active`, or for an address outside the link's domains. |
 | I4 | A link never has more uses than `max_uses`, after a redemption or after an edit. |
 | I5 | A request that cannot be redeemed, or that keeps failing, never stops one that can be redeemed, and a code never holds back a listed-domain request. |
 | I6 | A refused or failed Add person or Approve leaves no cohort membership. |
@@ -426,6 +436,10 @@ this contract:
 how the existing sweep retries; D3 rule 4 lets a new code replace an old one; D4 fixes the
 form of the link.
 
+**Owner's answer (2026-11-25):** D5 rule 13 and D3 rule 4 are agreed. The owner asked for
+several domains for each link, which changed D1, D5 rule 1, D6 and D11 **after** the Codex
+review. Codex has not read that change; the code-stage review covers it.
+
 ## Public / private boundary
 
 Public-safe: the code, the docs, the annex. Private: real email addresses, any real CSV
@@ -434,8 +448,8 @@ Tests use made-up addresses.
 
 ## Design annex
 
-[design-annex.md](design-annex.md) version 1. No mock yet; the surfaces follow the patterns
-of the existing ops pages. The owner may ask for a mock round before the build. Polish round
+[design-annex.md](design-annex.md) version 2. Mock: a private page with six scenes
+(https://claude.ai/artifact/GqkMxEqCd6W6EfkB6EdS2g), waiting for the owner's "direction settled". Polish round
 budget: one round at the end of build and one at the end of review.
 
 ## Model route
