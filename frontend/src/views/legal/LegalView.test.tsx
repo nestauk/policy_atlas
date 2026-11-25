@@ -6,7 +6,7 @@ import { PrivacyView } from "./PrivacyView";
 import { TermsView } from "./TermsView";
 
 describe("Privacy notice", () => {
-  it("renders the notice, DPO contact, and vendor privacy links", () => {
+  it("renders the notice, DPO contact, vendor privacy links, and the analytics, waitlist and email wording", () => {
     render(
       <MemoryRouter>
         <PrivacyView />
@@ -27,7 +27,14 @@ describe("Privacy notice", () => {
     );
     expect(screen.queryByText(/Clerk/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Supabase/)).not.toBeInTheDocument();
-    expect(screen.getByText(/we do not collect, process, or store/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "PostHog's privacy notice" })).toHaveAttribute(
+      "href",
+      "https://posthog.com/privacy",
+    );
+    expect(screen.getByText("Last updated: 25/11/2026")).toBeInTheDocument();
+    expect(screen.getByText(/we add you to our waitlist/)).toBeInTheDocument();
+    expect(screen.getByText(/Every product update has an unsubscribe link/)).toBeInTheDocument();
+    expect(screen.getByText(/record the IP address/)).toBeInTheDocument();
   });
 });
 
