@@ -64,8 +64,8 @@ export function PrivacyView() {
           email address, your
           organisation (if you give it), and what you tell us about how you would use the tool. We
           use this information only to review your request and to contact you about access to the
-          beta. We keep it until the private beta ends, or until you ask us to remove it (contact
-          the DPO at the address above). We do not share it outside Nesta. The lawful basis is our
+          beta. We keep it until you ask us to remove it (contact the DPO at the address
+          above). We do not share it outside Nesta. The lawful basis is our
           legitimate interest in responding to your request.
         </p>
         <p>
