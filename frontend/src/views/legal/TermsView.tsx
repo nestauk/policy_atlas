@@ -3,7 +3,7 @@ import { LegalList, LegalPage, LegalSection } from "./LegalPage";
 /** Terms of use at `/terms`. Copy is owner-supplied. */
 export function TermsView() {
   return (
-    <LegalPage title="Terms of use" updated="18/08/2026">
+    <LegalPage title="Terms of use" updated="25/11/2026">
       <LegalSection title="1. Introduction">
         <p>
           These Terms of Use (&quot;Terms&quot;) govern your access to and use of Policy Atlas (the
@@ -87,7 +87,6 @@ export function TermsView() {
         </p>
         <LegalList>
           <li>Amazon Bedrock: For text generation and summarisation.</li>
-          <li>OpenAI: For text generation and summarisation.</li>
           <li>Amazon Cognito: For user authentication.</li>
           <li>Amazon Aurora PostgreSQL: For database management.</li>
           <li>OpenAlex and Overton: For data sourcing.</li>

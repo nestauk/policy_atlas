@@ -68,7 +68,6 @@ For data storage & security, your account details, search queries and results ar
 In relation to AI & Third-Party Processors, we use the following services to operate the tool:
 
 - **Amazon Bedrock:** Processes your search queries and uploaded files to generate summaries, using OpenAI models via the AWS Bedrock API. Bedrock inputs and outputs are not shared with model providers and are not used to train base models.
-- **OpenAI:** Processes your search queries and uploaded files to generate summaries. OpenAI does not use data submitted via their API to train their models. See [OpenAI's privacy notice](https://openai.com/policies/privacy-policy).
 - **Overton & OpenAlex:** These are our data sources; search keywords are sent to these APIs to retrieve relevant documents, but no personal data is shared with them.
 - **Amazon Simple Email Service (SES):** Sends our emails to your email address, from Nesta's AWS environment.
 - **PostHog:** Provides product analytics (see section 3) and stores the data in the European Union. See [PostHog's privacy notice](https://posthog.com/privacy).

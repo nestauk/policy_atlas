@@ -1,7 +1,6 @@
 import { ExternalNoticeLink, LegalList, LegalPage, LegalSection } from "./LegalPage";
 
 const AWS_PRIVACY = "https://aws.amazon.com/privacy/";
-const OPENAI_PRIVACY = "https://openai.com/policies/privacy-policy";
 const POSTHOG_PRIVACY = "https://posthog.com/privacy";
 
 /** Privacy notice at `/privacy`. Copy is owner-supplied. */
@@ -155,12 +154,6 @@ export function PrivacyView() {
             <strong>Amazon Bedrock:</strong> Processes your search queries and uploaded files to generate summaries,
             using OpenAI models via the AWS Bedrock API. Bedrock inputs and outputs are not shared
             with model providers and are not used to train base models.
-          </li>
-          <li>
-            <strong>OpenAI:</strong> Processes your search queries and uploaded files to generate summaries. OpenAI
-            does not use data submitted via their API to train their models. See{" "}
-            <ExternalNoticeLink href={OPENAI_PRIVACY}>OpenAI&apos;s privacy notice</ExternalNoticeLink>
-            .
           </li>
           <li>
             <strong>Overton &amp; OpenAlex:</strong> These are our data sources; search keywords are

@@ -76,12 +76,19 @@ only if the build matches them:
    Task 068 must build it before the first send. The DPO should confirm that legitimate
    interest with an opt-out is the right basis.
 6. **Transfer safeguards.** The notice says transfers outside the UK have recognised
-   safeguards. The DPO should confirm the agreements with AWS, OpenAI and PostHog.
+   safeguards. The DPO should confirm the agreements with AWS and PostHog.
+
+## OpenAI removed (owner ruling, 2026-11-25)
+
+The product does not call OpenAI's own service: staging and production use the `bedrock`
+model route. The OpenAI line is removed from the notice and from the terms of use (whose
+"Last updated" date changes too). The Bedrock line still says that Bedrock runs OpenAI
+models. The `openai-direct` route and its key stay in the code and the deployment as a
+fallback. **If someone switches to that route, both pages are wrong until OpenAI is added
+back.**
 
 ## Left as it was, on purpose
 
-- OpenAI stays in the provider list. Production uses Bedrock, but the direct route still
-  exists and the terms of use name OpenAI.
 - Reading of tasks by organisation colleagues and by admins is not described (task 033
   decided not to change the notice for it).
 

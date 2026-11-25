@@ -21,10 +21,7 @@ describe("Privacy notice", () => {
       "href",
       "https://aws.amazon.com/privacy/",
     );
-    expect(screen.getByRole("link", { name: "OpenAI's privacy notice" })).toHaveAttribute(
-      "href",
-      "https://openai.com/policies/privacy-policy",
-    );
+    expect(screen.queryByText(/OpenAI:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Clerk/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Supabase/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "PostHog's privacy notice" })).toHaveAttribute(
@@ -46,7 +43,7 @@ describe("Terms of use", () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole("heading", { name: "Terms of use" })).toBeInTheDocument();
-    expect(screen.getByText("Last updated: 18/08/2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated: 25/11/2026")).toBeInTheDocument();
     expect(screen.getByText(/1144091/)).toBeInTheDocument();
     expect(screen.getByText(/SC042833/)).toBeInTheDocument();
     expect(screen.getByText(/The courts of England and Wales have exclusive jurisdiction/)).toBeInTheDocument();
@@ -54,7 +51,7 @@ describe("Terms of use", () => {
     expect(screen.getByText(/Amazon Cognito: For user authentication/)).toBeInTheDocument();
     expect(screen.getByText(/Amazon Aurora PostgreSQL: For database management/)).toBeInTheDocument();
     expect(screen.getByText(/Amazon Bedrock: For text generation and summarisation/)).toBeInTheDocument();
-    expect(screen.getByText(/OpenAI: For text generation and summarisation/)).toBeInTheDocument();
+    expect(screen.queryByText(/OpenAI:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Clerk/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Supabase/)).not.toBeInTheDocument();
   });
