@@ -13,9 +13,11 @@ from types import SimpleNamespace
 from typing import Any, Literal, cast
 
 import boto3
+import httpx
+import openai
 import pytest
 import sqlalchemy as sa
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, NoCredentialsError, ReadTimeoutError
 from botocore.response import StreamingBody
 from botocore.stub import ANY, Stubber
 from sqlalchemy import select
@@ -35,6 +37,7 @@ from policy_atlas.core.embeddings import (
     AdaptivePool,
     CohereEmbeddingBackend,
     OpenAIEmbeddingBackend,
+    ProviderProtocolError,
     StubEmbeddingBackend,
     Throttled,
     derive_units,
@@ -352,6 +355,107 @@ def test_embed_unit_split_isolates_one_poisoned_unit_in_128() -> None:
     assert len(successes) == 127
     assert [unit.chunk_id for unit, _exc in failures] == [poison_chunk_id]
     assert embedder.call_sizes == [128, 64, 32, 16, 8, 4, 2, 1, 1, 2, 4, 8, 16, 32, 64]
+
+
+class _ScriptedEmbedder:
+    """Raises the scripted error for each call in turn; ``None`` means the call works."""
+
+    mode = "stub"
+
+    def __init__(self, outcomes: list[Exception | None]) -> None:
+        self._outcomes = outcomes
+        self.call_sizes: list[int] = []
+
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
+        outcome = self._outcomes[len(self.call_sizes)]
+        self.call_sizes.append(len(texts))
+        if outcome is not None:
+            raise outcome
+        return [[0.0] * EMBEDDING_DIMENSIONS for _text in texts]
+
+
+def _units(count: int) -> list[Any]:
+    return [
+        embeddings_module._UnitWork(
+            chunk_id=uuid.uuid4(), unit_index=0, start=0, end=1, text=f"unit {i}"
+        )
+        for i in range(count)
+    ]
+
+
+_OPENAI_REQUEST = httpx.Request("POST", "https://api.openai.com/v1/embeddings")
+
+
+def _bedrock_error(code: str, status: int) -> ClientError:
+    response = {"Error": {"Code": code}, "ResponseMetadata": {"HTTPStatusCode": status}}
+    return ClientError(cast(Any, response), "InvokeModel")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        openai.APITimeoutError(request=_OPENAI_REQUEST),
+        openai.APIConnectionError(request=_OPENAI_REQUEST),
+        openai.APIStatusError(
+            "unavailable", response=httpx.Response(503, request=_OPENAI_REQUEST), body=None
+        ),
+        ReadTimeoutError(endpoint_url="https://bedrock-runtime.eu-west-2.amazonaws.com"),
+        _bedrock_error("ServiceUnavailableException", 503),
+        _bedrock_error("ModelTimeoutException", 408),
+        _bedrock_error("UnknownError", 500),
+        ProviderProtocolError("Cohere embeddings response body was invalid."),
+    ],
+    ids=[
+        "openai-timeout",
+        "openai-connection",
+        "openai-server-error",
+        "bedrock-read-timeout",
+        "bedrock-service-unavailable",
+        "bedrock-model-timeout",
+        "bedrock-server-error",
+        "malformed-reply",
+    ],
+)
+def test_embed_unit_split_stops_after_three_calls_in_an_outage(error: Exception) -> None:
+    units = _units(96)
+    embedder = _ScriptedEmbedder([error, error, error])
+
+    successes, failures = embeddings_module._embed_units_with_isolation(embedder, units)
+
+    assert successes == []
+    assert [unit for unit, _exc in failures] == units
+    assert all(exc is error for _unit, exc in failures)
+    assert embedder.call_sizes == [96, 48, 48]
+
+
+def test_embed_unit_split_keeps_the_half_that_works_after_an_outage() -> None:
+    units = _units(96)
+    outage = openai.APITimeoutError(request=_OPENAI_REQUEST)
+    embedder = _ScriptedEmbedder([outage, None, outage, outage, outage])
+
+    successes, failures = embeddings_module._embed_units_with_isolation(embedder, units)
+
+    assert [unit for unit, _vector in successes] == units[:48]
+    assert [unit for unit, _exc in failures] == units[48:]
+    assert embedder.call_sizes == [96, 48, 48, 24, 24]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [_bedrock_error("ValidationException", 400), NoCredentialsError()],
+    ids=["bedrock-validation", "missing-credentials"],
+)
+def test_embed_unit_split_continues_for_errors_that_are_not_an_outage(error: Exception) -> None:
+    units = _units(4)
+    embedder = _ScriptedEmbedder([error] * 7)
+
+    successes, failures = embeddings_module._embed_units_with_isolation(embedder, units)
+
+    assert successes == []
+    assert [unit for unit, _exc in failures] == units
+    assert embedder.call_sizes == [4, 2, 1, 1, 2, 1, 1]
 
 
 # --- Budget guard ---

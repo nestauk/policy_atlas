@@ -35,7 +35,13 @@ from typing import Any, Literal, Protocol, TypedDict
 import boto3
 import structlog
 from botocore.config import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import (
+    ClientError,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 from sqlalchemy import ColumnElement, exists, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -107,6 +113,10 @@ class Throttled(Exception):  # noqa: N818 - a signal, named for what the provide
         super().__init__(f"{provider} embedding request throttled")
         self.provider = provider
         self.retry_after_s = retry_after_s
+
+
+class ProviderProtocolError(RuntimeError):
+    """The provider sent a malformed reply: the provider's fault, not one text's."""
 
 
 class _UnitDict(TypedDict):
@@ -251,7 +261,8 @@ class OpenAIEmbeddingBackend:
         Raises:
             Throttled: The provider refused the request for its rate limit (429);
                 the caller decides when to try again.
-            RuntimeError: If the provider returns a different number of vectors.
+            ProviderProtocolError: If the provider returns a different number of
+                vectors.
         """
         if not texts:
             return []
@@ -263,7 +274,9 @@ class OpenAIEmbeddingBackend:
         vectors = [list(item.embedding) for item in items]
         log.info("embedding.openai.response", text_count=len(texts), vector_count=len(vectors))
         if len(vectors) != len(texts):
-            raise RuntimeError("OpenAI embeddings response length did not match input length.")
+            raise ProviderProtocolError(
+                "OpenAI embeddings response length did not match input length."
+            )
         return vectors
 
     def _create_embeddings_with_backoff(self, texts: list[str]) -> Any:
@@ -348,7 +361,7 @@ class CohereEmbeddingBackend:
             Throttled: Bedrock refused a request for its rate limit (token or
                 request quota); the caller decides when to try again.
             ClientError: If Bedrock rejects a request for another reason.
-            RuntimeError: If Bedrock returns an invalid embedding response.
+            ProviderProtocolError: If Bedrock returns an invalid embedding response.
         """
         if not texts:
             return []
@@ -412,14 +425,18 @@ class CohereEmbeddingBackend:
             body = json.loads(response["body"].read())
             vectors = body["embeddings"]["float"]
         except (KeyError, TypeError, json.JSONDecodeError) as exc:
-            raise RuntimeError("Cohere embeddings response body was invalid.") from exc
+            raise ProviderProtocolError("Cohere embeddings response body was invalid.") from exc
         if not isinstance(vectors, list) or len(vectors) != text_count:
-            raise RuntimeError("Cohere embeddings response length did not match input length.")
+            raise ProviderProtocolError(
+                "Cohere embeddings response length did not match input length."
+            )
         if any(
             not isinstance(vector, list) or len(vector) != EMBEDDING_DIMENSIONS
             for vector in vectors
         ):
-            raise RuntimeError("Cohere embeddings response had an invalid vector dimension.")
+            raise ProviderProtocolError(
+                "Cohere embeddings response had an invalid vector dimension."
+            )
         return vectors
 
 
@@ -796,6 +813,47 @@ def validate_vector(vector: object) -> list[float]:
     return validated
 
 
+_BEDROCK_OUTAGE_CODES = frozenset(
+    {
+        "ModelTimeoutException",
+        "ServiceUnavailableException",
+        "InternalServerException",
+        "ModelNotReadyException",
+    }
+)
+
+
+def _is_outage(exc: Exception) -> bool:
+    """True when the provider itself is failing, not one of the texts sent to it.
+
+    The list is fixed: a timeout, a dropped connection, a server error (status 500
+    or above), a Bedrock service-side error code, or a malformed reply. Anything
+    else, such as a Bedrock ``ValidationException`` or a missing AWS credential,
+    is not an outage.
+    """
+    if isinstance(
+        exc,
+        (
+            APITimeoutError,
+            APIConnectionError,
+            ReadTimeoutError,
+            ConnectTimeoutError,
+            EndpointConnectionError,
+            ConnectionClosedError,
+            ProviderProtocolError,
+        ),
+    ):
+        return True
+    if isinstance(exc, APIStatusError):
+        return exc.status_code >= 500
+    if isinstance(exc, ClientError):
+        if exc.response.get("Error", {}).get("Code") in _BEDROCK_OUTAGE_CODES:
+            return True
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        return isinstance(status, int) and status >= 500
+    return False
+
+
 def _embed_units_with_isolation(
     embedder: EmbeddingBackend, units: list[_UnitWork]
 ) -> tuple[list[tuple[_UnitWork, list[float]]], list[tuple[_UnitWork, Exception]]]:
@@ -804,6 +862,12 @@ def _embed_units_with_isolation(
     The split retries both halves and then only the failing half recursively, so
     one poisoned unit in ``n`` units adds about ``2 * ceil(log2(n))`` calls over
     the initial failed batch while allowing healthy sibling units to persist.
+
+    When the failure is an outage (see :func:`_is_outage`), each half is tried
+    once. If both halves fail with an outage too, the split stops and every unit
+    fails with its half's error, so a provider outage costs 3 calls per batch.
+    Otherwise a half that worked keeps its vectors and a half that failed is
+    split further. A half that already failed is not sent again as a whole.
 
     Args:
         embedder: Live or stub embedding backend.
@@ -817,28 +881,58 @@ def _embed_units_with_isolation(
     """
     if not units:
         return [], []
+    result = _embed_batch_once(embedder, units)
+    if isinstance(result, Exception):
+        return _split_failed_batch(embedder, units, result)
+    return list(zip(units, result, strict=True)), []
+
+
+def _embed_batch_once(
+    embedder: EmbeddingBackend, units: list[_UnitWork]
+) -> list[list[float]] | Exception:
+    """One provider call for the batch: its checked vectors, or the error it raised."""
     try:
         raw_vectors = embedder.embed_texts([unit.text for unit in units])
         if len(raw_vectors) != len(units):
             raise ValueError(
                 f"embedding backend returned {len(raw_vectors)} vectors for {len(units)} texts"
             )
-        vectors = [validate_vector(vector) for vector in raw_vectors]
+        return [validate_vector(vector) for vector in raw_vectors]
     except Throttled:
         raise  # the pool waits and resends the whole batch; never split for throttling
     except Exception as exc:
-        if len(units) == 1:
-            return [], [(units[0], exc)]
-        midpoint = len(units) // 2
-        left_vectors, left_failures = _embed_units_with_isolation(
-            embedder, units[:midpoint]
-        )
-        right_vectors, right_failures = _embed_units_with_isolation(
-            embedder, units[midpoint:]
-        )
+        return exc
+
+
+def _split_failed_batch(
+    embedder: EmbeddingBackend, units: list[_UnitWork], error: Exception
+) -> tuple[list[tuple[_UnitWork, list[float]]], list[tuple[_UnitWork, Exception]]]:
+    """Find the failing units of a batch that already failed with ``error``."""
+    if len(units) == 1:
+        return [], [(units[0], error)]
+    midpoint = len(units) // 2
+    halves = [units[:midpoint], units[midpoint:]]
+    if not _is_outage(error):
+        left_vectors, left_failures = _embed_units_with_isolation(embedder, halves[0])
+        right_vectors, right_failures = _embed_units_with_isolation(embedder, halves[1])
         return left_vectors + right_vectors, left_failures + right_failures
 
-    return list(zip(units, vectors, strict=True)), []
+    results = [_embed_batch_once(embedder, half) for half in halves]
+    stop = all(isinstance(result, Exception) and _is_outage(result) for result in results)
+    if stop:
+        log.warning("embedding.outage_split_stopped", text_count=len(units))
+    successes: list[tuple[_UnitWork, list[float]]] = []
+    failures: list[tuple[_UnitWork, Exception]] = []
+    for half, result in zip(halves, results, strict=True):
+        if not isinstance(result, Exception):
+            successes += zip(half, result, strict=True)
+        elif stop:
+            failures += [(unit, result) for unit in half]
+        else:
+            half_successes, half_failures = _split_failed_batch(embedder, half, result)
+            successes += half_successes
+            failures += half_failures
+    return successes, failures
 
 
 def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
