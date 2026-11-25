@@ -74,6 +74,9 @@ PAYWALL_MARKERS = (
 
 # The project page tells a host who is fetching and how to reach us.
 USER_AGENT = "policy-atlas/0.1 (+https://www.nesta.org.uk/project/policy-atlas/)"
+# The compression formats a host may answer with. The HTTP library would also offer
+# zstd, where a tiny answer can expand to gigabytes before the size cap sees it.
+ACCEPT_ENCODING = "gzip, deflate"
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
@@ -317,7 +320,7 @@ class LiveDocumentFetcher:
             timeout=httpx.Timeout(FETCH_TIMEOUT_S),
             follow_redirects=False,
             trust_env=False,
-            headers={"User-Agent": USER_AGENT},
+            headers={"User-Agent": USER_AGENT, "Accept-Encoding": ACCEPT_ENCODING},
             cookies=cookie_jar,
         )
         self._global_semaphore = threading.Semaphore(FETCH_MAX_CONCURRENCY)
@@ -959,7 +962,11 @@ def fetch_europe_pmc_xml(
             timeout=httpx.Timeout(timeout),
             follow_redirects=False,
             trust_env=False,
-            headers={"User-Agent": USER_AGENT, "Accept": "application/xml"},
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "application/xml",
+                "Accept-Encoding": ACCEPT_ENCODING,
+            },
         ) as client, client.stream("GET", url) as response:
             if response.status_code != 200:
                 log.info("europe_pmc.no_full_text", pmcid=pmcid, status_code=response.status_code)

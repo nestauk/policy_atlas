@@ -21,6 +21,7 @@ from policy_atlas.evidence_search.sourcing.fetch_live import (
     LiveDocumentFetcher,
     _BlockedURL,
     _PinnedIPNetworkBackend,
+    fetch_europe_pmc_xml,
 )
 from policy_atlas.evidence_search.sourcing.ingest_full_text import FETCH_DEADLINE, _redact_url
 
@@ -426,6 +427,22 @@ def test_cookie_and_authorization_headers_never_ride_requests() -> None:
     assert all("authorization" not in request.headers for request in requests)
     assert all("cookie" not in request.headers for request in requests)
     assert list(fetcher._client.cookies.jar) == []
+
+
+def test_both_clients_ask_for_gzip_or_deflate_only() -> None:
+    fetcher, requests, _ = _fetcher(lambda _request: _ok_response())
+    fetcher.fetch("https://example.com/doc")
+
+    def record(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=b"<article/>")
+
+    fetch_europe_pmc_xml("PMC1", timeout=5.0, transport=httpx.MockTransport(record))
+
+    assert [request.headers["accept-encoding"] for request in requests] == [
+        "gzip, deflate",
+        "gzip, deflate",
+    ]
 
 
 def test_redact_url_and_logs_drop_query_strings() -> None:

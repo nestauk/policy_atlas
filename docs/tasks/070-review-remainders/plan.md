@@ -2,7 +2,8 @@
 
 > **Status:** drafted 2026-11-25, revised the same day after the adversarial review (see
 > the last section) and after the owner removed the text limits. The owner accepted the
-> two gaps of findings 2 and 3. Not approved. Item ids (A1 to A3) are the contract's.
+> two gaps of findings 2 and 3. Approved 2026-11-25: the owner gave the instruction to
+> implement. Item ids (A1 to A3) are the contract's.
 
 **Tier 3.** A1 adds one reply to the public interface (HTTP 413) and A2 changes a header the running product
 sends to outside servers. Both are hard gates, so the tier cannot be lower. No ADR: no

@@ -3,8 +3,8 @@
 > **Status:** contract approved 2026-11-25 by the owner (scope A1 to A3). Revised the same
 > day after the adversarial review (Codex, read-only; rulings in [plan.md](plan.md)): A2 no
 > longer claims to close M-05 in full (owner accepted both gaps). Text limits removed from
-> A1 by the owner. Plan approved: not yet. ADR: none. No code is
-> written yet.
+> A1 by the owner. Plan approved 2026-11-25 (the owner gave the instruction to implement).
+> ADR: none.
 
 ## Goal
 
