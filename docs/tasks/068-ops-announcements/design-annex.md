@@ -4,9 +4,9 @@ The script for the Announcements pages on the ops site and the unsubscribe page 
 public site. The contract cites this file by version. Looks live here and in the mock, not
 in the contract.
 
-> **Version:** 2 · Mock: https://claude.ai/artifact/9eoXRJFp9XeTTKM9tATZmq (private to the
+> **Version:** 3 · Mock: https://claude.ai/artifact/9eoXRJFp9XeTTKM9tATZmq (private to the
 > owner) · Frozen: 2026-11-25 (owner approved the journey; picture field and the cuts below
-> added the same day; version 2: the not-signed-in rule) · Polish rounds: log below
+> added the same day; version 2: the not-signed-in rule; version 3: the reply address) · Polish rounds: log below
 
 ## Rules for this slice
 
@@ -120,7 +120,8 @@ Three numbered groups and a preview.
   Unsubscribe from product updates. We still send service notices about your account."
 - Footer, service notice: "You get this email because you have a Policy Atlas account.
   This is a service notice about your account."
-- Last line: "Questions? Reply to this email or write to support@…"
+- Last line: "Questions? Reply to this email or write to discoveryhub@nesta.org.uk."
+  A reply goes to that address (contract § Two parts).
 
 ### Unsubscribe page (public site, `/unsubscribe`)
 
@@ -131,7 +132,7 @@ No sign-in. The link alone changes nothing, because mail scanners open links.
 - **After Unsubscribe:** "You will get no more product updates" · link "Changed your mind?
   Get product updates again".
 - **After the link:** "You will get product updates again".
-- **Bad or missing link:** "This link does not work. Write to support@… and we will
+- **Bad or missing link:** "This link does not work. Write to discoveryhub@nesta.org.uk and we will
   unsubscribe you."
 
 ## Scenes (mock)

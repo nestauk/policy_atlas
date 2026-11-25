@@ -27,8 +27,10 @@ What changes in 068a because 068b comes later:
   forwarder and no `email.inbound` switch.
 - The privacy text (C3) and the documents (E6) say nothing about incoming email.
 - Until 068b is live, no address at the product domain can receive email. A reply to an
-  announcement comes back to its sender as undeliverable. **Open, for the owner:** where
-  replies go in 068a (§ Owner rulings at the gate).
+  announcement comes back to its sender as undeliverable. So in 068a every announcement names the
+  **reply address** `discoveryhub@nesta.org.uk` (a shared team inbox) as Reply-To, and the footer and the
+  unsubscribe page name it where the annex said `support@…`. Part 068b decides whether
+  this changes.
 
 ## Goal
 
@@ -155,6 +157,7 @@ by hand and stays so.
   with "- " is a list item. No other markup, and no HTML from the operator.
 - A button link must start with `https://`. A picture address must be one that B3 returned.
 - The footer follows the kind (annex § The email).
+- Every email carries the header `Reply-To` with the reply address (§ Two parts).
 - A product update carries the person's unsubscribe link and the headers
   `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. A service
   notice carries neither. The header address is the C1 route on the public API.
@@ -245,7 +248,7 @@ send). Only the person can set or clear it: no ops route and no `pa_ops` grant w
 
 ### Step D — the ops pages
 
-Built to [design-annex.md](design-annex.md) version 2.
+Built to [design-annex.md](design-annex.md) version 3.
 
 - **D1.** The Announcements section and the list.
 - **D2.** Compose: kind, audience, message, picture, preview, test. The browser makes a
@@ -265,7 +268,8 @@ Three switches in `infra/pa_config.json`: `email.enabled` (it exists) controls E
   `updates@<sender domain>`; and `ses:ListSuppressedDestinations`, which SES does not let
   us limit to one identity, so its resource is `*`. The public API role gains no SES action. A test pins
   both.
-- **E2. Ops settings.** The ops container gains the From address, the public site and API
+- **E2. Ops settings.** The ops container gains the From address, the reply address
+  (`email.reply_to` in `infra/pa_config.json`, one committed value), the public site and API
   addresses, and the picture bucket name. The test that pins the ops environment changes
   to match.
 - **E3. Picture hosting.** A new bucket with all public access blocked. The existing
@@ -367,7 +371,7 @@ review records stay in the gitignored `research/` folder.
 
 ## Design annex
 
-[design-annex.md](design-annex.md) version 2 (mock:
+[design-annex.md](design-annex.md) version 3 (mock:
 https://claude.ai/artifact/9eoXRJFp9XeTTKM9tATZmq). This contract pins behaviours, states,
 interfaces and invariants; looks and copy live in the annex. Polish round budget: 2 rounds
 at the end of build and 2 at the end of review.
@@ -477,9 +481,8 @@ one-click POST (check 2).
   review. It is minor (one more left-out reason, no new column, no new route), so the
   review was not run again.
 - The task is split into 068a (send) and 068b (receive): § Two parts.
-- **Open: replies in 068a.** The choices: (1) the email names an existing inbox as
-  Reply-To, and the footer names it; every recipient sees that address; (2) no Reply-To,
-  and no announcement goes to production accounts before 068b is live.
+- Replies in 068a: the owner chose a Reply-To, `discoveryhub@nesta.org.uk`, "for now". Every recipient
+  sees this address.
 
 ## For the owner to confirm at the gate
 

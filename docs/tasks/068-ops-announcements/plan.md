@@ -257,6 +257,9 @@ environments at first), the ops environment, the synth tests, the pin tests in
 `test_service_wiring.py`. Done: rubric 25 to 28.
 
 ### Phase 9 — Infra: incoming email (E5) (`deep-reasoner`)
+**Reply address (068a):** the mailer adds `Reply-To` from the ops setting `email.reply_to`;
+the unsubscribe page holds the same address as a constant.
+
 **Part 068b: not built in 068a** (contract § Two parts). A draft until 068b's own gate.
 The MX record, bucket, rule set, activation, forwarder and its tests; `email.inbound`
 false in both environments at first. Done: rubric 29.
