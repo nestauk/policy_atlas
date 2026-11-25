@@ -442,6 +442,13 @@ Not reviewed by this pass, so checked by the live checks instead: DMARC alignmen
 1), the MX record's effect on Cognito email (check 8), the firewall in front of the
 one-click POST (check 2).
 
+## Owner rulings at the gate (2026-11-25)
+
+- Point 4 below ("test before send" is a rule of the page): agreed.
+- Invariant I1's "Not confirmed" row: accepted.
+- Point 5 below: the owner states that the Data Protection Officer has signed off. The
+  build still records the approval and the final wording in `verification.md` (rubric 23).
+
 ## For the owner to confirm at the gate
 
 1. **No drafts on the server.** The browser keeps unsent text. (A lead simplification.)
