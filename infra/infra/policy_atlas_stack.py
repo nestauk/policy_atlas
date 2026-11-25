@@ -35,6 +35,7 @@ from aws_cdk import (
 )
 from aws_cdk import Fn
 from infra.cognito_auth import CognitoAuth, sign_in_block
+from infra.components.email import Email
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
 from infra.components.security_headers import SecurityHeaders, content_security_policy
@@ -390,7 +391,7 @@ class PolicyAtlasStack(Stack):
             memory_limit_mib=ops_config["memory_limit_mib"],
             family="policy-atlas-v3-ops",
         )
-        ops_task_def.add_container(
+        ops_container = ops_task_def.add_container(
             "policy-atlas-ops-container",
             image=backend_image,
             cpu=ops_config["cpu"],
@@ -597,6 +598,19 @@ class PolicyAtlasStack(Stack):
                     response_page_path="/index.html",
                 ),
             ],
+        )
+
+        # Announcement email from the ops server, and the DMARC record
+        # (components/email.py).
+        Email(self, "Email",
+            email_config=pa_app_config.get("email"),
+            hosted_zone=hosted_zone,
+            distribution=distribution,
+            response_headers_policy=security_headers,
+            ops_task_role=ops_task_def.task_role,
+            ops_container=ops_container,
+            public_site_url=f"https://{domain_name}",
+            public_api_url=f"https://{be_domain}",
         )
 
         r53.ARecord(self, "FrontendARecord",

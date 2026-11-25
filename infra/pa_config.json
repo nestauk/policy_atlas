@@ -10,7 +10,10 @@
                 "enabled": true,
                 "sender_domain": "v3.policyatlas.uk",
                 "from_address": "no-reply@v3.policyatlas.uk",
-                "from_name": "Policy Atlas"
+                "from_name": "Policy Atlas",
+                "announcements": false,
+                "pictures": false,
+                "reply_to": "discoveryhub@nesta.org.uk"
             },
             "backend": {
                 "cpu": 2048,
@@ -54,7 +57,10 @@
                 "enabled": true,
                 "sender_domain": "policyatlas.uk",
                 "from_address": "no-reply@policyatlas.uk",
-                "from_name": "Policy Atlas"
+                "from_name": "Policy Atlas",
+                "announcements": false,
+                "pictures": false,
+                "reply_to": "discoveryhub@nesta.org.uk"
             },
             "backend": {
                 "cpu": 2048,

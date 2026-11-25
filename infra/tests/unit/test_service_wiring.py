@@ -3,7 +3,9 @@ import json
 import tomllib
 from pathlib import Path
 
-from tests.unit.test_synth import BEDROCK_APP_TEMPLATE, OPENAI_APP_TEMPLATE, TEMPLATES, _resources
+from tests.unit.test_synth import (
+    ANNOUNCEMENTS_APP_TEMPLATE, BEDROCK_APP_TEMPLATE, OPENAI_APP_TEMPLATE, TEMPLATES, _resources,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -45,6 +47,15 @@ OPS_ENVIRONMENT_NAMES = {
     "OPS_CONTENT_SECURITY_POLICY", "OPS_CSP_MODE",
     "RUNS_PER_USER", "TASK_QUOTA_PER_YEAR", "DB_POOL_SIZE", "DB_MAX_OVERFLOW",
     "FORWARDED_ALLOW_IPS", "LOG_LEVEL", "LOG_FORMAT", "PA_BACKEND_MODE",
+}
+
+# Set on the ops container only when email.announcements is true.
+ANNOUNCEMENT_ENVIRONMENT = {
+    "ANNOUNCEMENT_FROM_ADDRESS": "Policy Atlas <updates@v3.policyatlas.uk>",
+    "ANNOUNCEMENT_REPLY_TO": "discoveryhub@nesta.org.uk",
+    "PUBLIC_SITE_URL": "https://v3.policyatlas.uk",
+    "PUBLIC_API_URL": "https://api.v3.policyatlas.uk",
+    "ANNOUNCEMENT_IMAGE_BUCKET": None,
 }
 
 
@@ -216,6 +227,22 @@ def test_ops_container_has_the_complete_least_privilege_environment_and_secret_m
     assert set(secrets) == {"DATABASE_URL"}
     assert "OpsDbSecret" in json.dumps(secrets["DATABASE_URL"])
     assert "db_connection_string" in json.dumps(secrets["DATABASE_URL"])
+
+
+def test_announcement_settings_reach_only_the_ops_container_and_only_when_switched_on():
+    ops = _container(_task_definition("policy-atlas-v3-ops", ANNOUNCEMENTS_APP_TEMPLATE))
+    environment = {item["Name"]: item["Value"] for item in ops["Environment"]}
+    assert set(environment) == OPS_ENVIRONMENT_NAMES | set(ANNOUNCEMENT_ENVIRONMENT)
+    bucket_id = next(
+        logical_id
+        for logical_id, _ in _resources(ANNOUNCEMENTS_APP_TEMPLATE, "AWS::S3::Bucket")
+        if logical_id.startswith("EmailImageBucket")
+    )
+    assert {name: environment[name] for name in ANNOUNCEMENT_ENVIRONMENT} == {
+        **ANNOUNCEMENT_ENVIRONMENT, "ANNOUNCEMENT_IMAGE_BUCKET": {"Ref": bucket_id},
+    }
+    api = _container(_task_definition("policy-atlas-v3-api", ANNOUNCEMENTS_APP_TEMPLATE))
+    assert not {item["Name"] for item in api["Environment"]} & set(ANNOUNCEMENT_ENVIRONMENT)
 
 
 def test_ops_and_api_task_roles_hold_only_their_expected_cognito_permissions():

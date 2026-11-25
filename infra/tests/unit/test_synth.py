@@ -235,6 +235,27 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
+    # Announcement sending and picture hosting, whatever the committed
+    # environment says (both off): both on, and pictures only (the state after
+    # sending is rolled back). The website certificate comes from
+    # AUTH_CERT_STACK, so CERT_STACK keeps the exports the saved sign-in
+    # baseline holds.
+    EMAIL_SWITCH_APP_STACKS = {}
+    for announcements, stack_id in ((True, "PaV3AppStackAnnouncements"), (False, "PaV3AppStackPicturesOnly")):
+        switch_config = json.loads(json.dumps(PA_CONFIG))
+        switch_config["policy_atlas_config"]["email"]["announcements"] = announcements
+        switch_config["policy_atlas_config"]["email"]["pictures"] = True
+        EMAIL_SWITCH_APP_STACKS[announcements] = PolicyAtlasStack(
+            APP,
+            stack_id,
+            pa_config=switch_config,
+            certificate=AUTH_CERT_STACK.certificate,
+            auth_certificate=AUTH_CERT_STACK.auth_certificate,
+            env=ENV,
+            env_name=ENV_NAME,
+            ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+            cross_region_references=True,
+        )
     enforce_config = json.loads(json.dumps(PA_CONFIG))
     enforce_config["policy_atlas_config"]["csp_mode"] = "enforce"
     ENFORCE_APP_STACK = PolicyAtlasStack(
@@ -314,6 +335,8 @@ OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_
 IN_PROCESS_APP_TEMPLATE = Template.from_stack(IN_PROCESS_APP_STACK).to_json()
 EMAIL_APP_TEMPLATE = Template.from_stack(EMAIL_APP_STACK).to_json()
 NO_EMAIL_APP_TEMPLATE = Template.from_stack(NO_EMAIL_APP_STACK).to_json()
+ANNOUNCEMENTS_APP_TEMPLATE = Template.from_stack(EMAIL_SWITCH_APP_STACKS[True]).to_json()
+PICTURES_ONLY_APP_TEMPLATE = Template.from_stack(EMAIL_SWITCH_APP_STACKS[False]).to_json()
 ENFORCE_APP_TEMPLATE = Template.from_stack(ENFORCE_APP_STACK).to_json()
 COUPLING_APP_TEMPLATE = Template.from_stack(COUPLING_APP_STACK).to_json()
 PROD_APP_TEMPLATE = Template.from_stack(PROD_APP_STACK).to_json()

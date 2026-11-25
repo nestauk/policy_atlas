@@ -261,8 +261,10 @@ Built to [design-annex.md](design-annex.md) version 3.
 
 ### Step E — AWS setup (CDK, per environment)
 
-Three switches in `infra/pa_config.json`: `email.enabled` (it exists) controls E4;
-`email.announcements` controls E1 to E3; `email.inbound` controls E5.
+Four switches in `infra/pa_config.json`: `email.enabled` (it exists) controls E4;
+`email.announcements` controls E1 and E2; `email.pictures` controls E3 (the bucket and
+the CloudFront path; the ops role's put permission and the bucket setting need both
+switches); `email.inbound` controls E5.
 
 - **E1. Send permission.** The ops task role gains two separate statements:
   `ses:SendEmail`, limited to the sender identity and to the From address
@@ -354,8 +356,9 @@ this contract's gate.
   - E5: set `email.inbound` false and deploy. The MX record, rule, bucket and forwarder
     go, with any incoming email still in the bucket (at most 14 days; the team inbox
     keeps its copies); email to the domain is returned to its sender as before.
-  - E1 to E3: set `email.announcements` false and deploy. The send routes answer 503. The
-    picture bucket stays, so pictures in sent emails keep working.
+  - E1 and E2: set `email.announcements` false and deploy, and leave `email.pictures`
+    true. The send routes answer 503. The picture bucket and its CloudFront path stay,
+    so pictures in sent emails keep working.
   - A1: `alembic downgrade a3c9e1f7b2d4` with both services stopped, and the image
     deployed after is the one before this task.
   - E4: remove the record.
@@ -482,6 +485,9 @@ one-click POST (check 2).
   review. It is minor (one more left-out reason, no new column, no new route), so the
   review was not run again.
 - The task is split into 068a (send) and 068b (receive): § Two parts.
+- Picture hosting has its own switch, `email.pictures` (2026-11-25, during the build).
+  With one switch, the rollback of sending also removed the CloudFront path, so pictures
+  in emails already sent would break. Step E and the rollback text above say the new rule.
 - Replies in 068a: the owner chose a Reply-To, `discoveryhub@nesta.org.uk`, "for now". Every recipient
   sees this address.
 
