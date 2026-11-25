@@ -87,6 +87,16 @@ models. The `openai-direct` route and its key stay in the code and the deploymen
 fallback. **If someone switches to that route, both pages are wrong until OpenAI is added
 back.**
 
+## Terms of use brought in line (owner request, 2026-11-25)
+
+Four small changes in `frontend/src/views/legal/TermsView.tsx`, so the two pages agree:
+
+1. Section 5 lists Amazon S3 (uploaded files), Amazon Simple Email Service and PostHog.
+2. Section 3 says not to "input or upload" personal or confidential data.
+3. Section 4 "Your Inputs" covers uploaded files as well as queries.
+4. Section 2 says "other outputs" in place of "blueprints", a word the product no longer
+   uses.
+
 ## Left as it was, on purpose
 
 - Reading of tasks by organisation colleagues and by admins is not described (task 033

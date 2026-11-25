@@ -51,6 +51,9 @@ describe("Terms of use", () => {
     expect(screen.getByText(/Amazon Cognito: For user authentication/)).toBeInTheDocument();
     expect(screen.getByText(/Amazon Aurora PostgreSQL: For database management/)).toBeInTheDocument();
     expect(screen.getByText(/Amazon Bedrock: For text generation and summarisation/)).toBeInTheDocument();
+    expect(screen.getByText(/Amazon S3: For storage of uploaded files/)).toBeInTheDocument();
+    expect(screen.getByText(/Amazon Simple Email Service: For sending email/)).toBeInTheDocument();
+    expect(screen.getByText(/PostHog: For product analytics/)).toBeInTheDocument();
     expect(screen.queryByText(/OpenAI:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Clerk/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Supabase/)).not.toBeInTheDocument();
