@@ -73,10 +73,10 @@ export function PrivacyView() {
           how people use Policy Atlas and to improve it. PostHog records how you interact with the
           app: the pages you open, the controls you select and the actions you take. We do not send
           the content of your work to PostHog: not the text of your queries, the files you upload
-          or the generated results. PostHog also records your IP address, basic details of your
-          browser and device, and an identifier: your email address if you are signed in, or a
-          random one if you are not. PostHog stores this data in the European Union. We do not use
-          it for advertising.
+          or the generated results. PostHog also records basic details of your browser and device,
+          and an identifier: your email address if you are signed in, or a random one if you are
+          not. PostHog does not store your IP address. PostHog stores this data in the European
+          Union. We do not use it for advertising.
         </p>
       </LegalSection>
 

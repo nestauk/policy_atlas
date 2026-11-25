@@ -63,6 +63,10 @@ only if the build matches them:
    stop sending model prompts and answers (`privacy_mode=False` today); and hide click text
    (`mask_all_text: true`), because a click can carry a task name. Page addresses must not
    carry content either.
+   The notice also says that PostHog does not store the IP address. This is a setting in
+   the PostHog console, not in our code: turn on "Discard client IP data" in the production
+   project before go-live. Check two things then: that location (country, city) is not
+   kept either, and that events from the API carry no IP address.
 4. **Deletion.** The notice promises to delete personal data "from our systems and from
    PostHog" when the pilot ends or on request. No command does this today. Someone must
    delete by hand in each place: the database, the upload storage, Cognito (the sign-in
