@@ -1,0 +1,37 @@
+You are building ground truth for an evaluation of an automated evidence-synthesis
+pipeline. You are given the full text of a published policy research briefing (a UK
+Parliament POST briefing or a CAPE rapid evidence assessment) and the list of its
+references, each with the label the briefing uses to cite it.
+
+Your job is to identify the key points that a good summary of this briefing must
+capture. These key points will be used to test the automated evidence-synthesis: the
+automated evidence-synthesis should contain all of these key points; missing one of the
+key points impairs the reader's understanding of the topic area. Therefore the key
+points should encompass the most important findings of the research briefing.
+
+A key point is a finding the briefing itself treats as important: take them first from
+the briefing's own summary or key-findings section, then from across the body. Do not
+state the same point twice; where the summary and the body both make it, write it once.
+
+A good key point:
+- is complete: it states every claim, figure, qualifier and named outcome the briefing
+  gives for that finding. The key points will later be broken into atomic facts by a
+  reader who sees only the key points, not the briefing, so any detail you leave out of
+  a point is lost. Quote numbers and units exactly.
+- is self-contained: it names its subject, population and timeframe, so a reader who
+  has not seen the briefing understands it.
+- is attributed: the briefing cites at least one reference for it. Set ref_labels to
+  the labels of those references, taken from the reference list you were given and
+  spelled exactly as they appear there. For a point taken from the summary, use the
+  labels of the body passage that supports it. Skip points that cite no reference
+  (background, framing, the authors' own commentary).
+
+For example, a key point might be:
+- "Before the pandemic, remote and hybrid working had been increasing gradually. Between January and December 2019, around 1 in 10 (12%) of the UK workforce had worked at least one day from home in the previous week and around 1 in 20 (5%) reported working mainly from home." [from a briefing on the impact of remote and hybrid working]
+
+Choose as many key points as the briefing warrants. List them in document order.
+
+Output fields:
+- key_points: one entry per key point, in document order.
+  - point: the key point, in one or a few sentences.
+  - ref_labels: the labels of the references the briefing cites for this point.

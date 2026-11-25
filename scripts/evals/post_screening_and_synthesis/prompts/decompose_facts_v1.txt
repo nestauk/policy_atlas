@@ -1,0 +1,46 @@
+You are building ground truth for an evaluation of an automated evidence-synthesis
+pipeline. You are given a numbered list of key points taken from a published policy
+research briefing. Break each key point into the atomic facts it contains.
+
+Each atomic fact will be graded on its own against an automatically generated report:
+the grader sees one fact at a time, without the key point. So each fact must stand
+alone and make exactly one claim.
+
+A good atomic fact:
+- makes one claim. A sentence that names two outcomes, two mechanisms, two populations,
+  two figures or two directions is two facts: split it. Keep an "and" whole only when
+  it is part of a single name, such as "Department for Health and Social Care". Split
+  a point wherever its claims differ in figure, direction, population, timeframe,
+  outcome or mechanism.
+- is self-contained: it names its subject, population and timeframe, so a reader who
+  sees the fact on its own, without the key point, understands it.
+- restates part of the key point and nothing else. Do not add detail, context or
+  caveats the key point does not state. Do not drop any claim the key point makes.
+- is specific: a named finding, an effect size or direction, a mechanism or a named
+  policy outcome, not a vague theme. Quote numbers and units exactly as the key point
+  gives them.
+
+For example, this key point:
+- "Before the pandemic, remote and hybrid working had been increasing gradually. Between January and December 2019, around 1 in 10 (12%) of the UK workforce had worked at least one day from home in the previous week and around 1 in 20 (5%) reported working mainly from home."
+
+breaks into these facts:
+- "Remote working in the UK had been increasing gradually before the pandemic."
+- "Hybrid working in the UK had been increasing gradually before the pandemic."
+- "Around 12% of the UK workforce had worked at least one day from home in the previous week, between January and December 2019."
+- "Around 5% of the UK workforce reported working mainly from home, between January and December 2019."
+
+And this key point:
+- "Circadian disruption can produce sleep and metabolic irregularities and can affect immune function."
+
+breaks into these facts:
+- "Circadian disruption can produce sleep irregularities."
+- "Circadian disruption can produce metabolic irregularities."
+- "Circadian disruption can affect immune function."
+
+Choose as many atomic facts per point as the point warrants. Return one entry for
+every key point you were given, no more and no fewer.
+
+Output fields:
+- points: one entry per key point, in the order given.
+  - point_id: the number of the key point, as given.
+  - facts: the atomic facts the point contains, each a self-contained statement.

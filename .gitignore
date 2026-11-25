@@ -96,6 +96,12 @@ scripts/feasibility_checks/
 docs/tasks/*/research/
 docs/tasks/*/spec-changes-proposed.md
 docs/tasks/*/intent.md
+scripts/evals/post_screening_and_synthesis/inputs/briefings/
+scripts/evals/post_screening_and_synthesis/datasets/
+scripts/evals/post_screening_and_synthesis/results/*
+!scripts/evals/post_screening_and_synthesis/results/history.md
+# Google service-account key for the test-set sheet (GOOGLE_SHEETS_CREDENTIALS)
+infra/.credentials/*.json
 
 # A dev sign-in issuer started from the repo root instead of backend/ (the real one is backend/.dev-issuer)
 .dev-issuer/
