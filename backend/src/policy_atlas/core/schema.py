@@ -129,8 +129,16 @@ app_user = Table(
     Column("first_signed_in_at", DateTime(timezone=True), nullable=True),
     # Set by deactivate, cleared by reactivate (task 066).
     Column("deactivated_at", DateTime(timezone=True), nullable=True),
+    # Product-update opt-out. Only the person sets or clears it, through the
+    # unsubscribe link that carries their token; the ops login cannot write either.
+    Column("updates_unsubscribed_at", DateTime(timezone=True), nullable=True),
+    Column(
+        "unsubscribe_token", UUID(as_uuid=True), nullable=False,
+        server_default=text("gen_random_uuid()"),
+    ),
     CheckConstraint("task_quota_per_year >= 0", name="ck_app_user_task_quota_nonneg"),
     CheckConstraint("runs_per_user >= 0", name="ck_app_user_runs_nonneg"),
+    UniqueConstraint("unsubscribe_token", name="uq_app_user_unsubscribe_token"),
 )
 
 # Durable audit records for writes made through the isolated ops service.
@@ -192,6 +200,57 @@ cohort_member = Table(
     ),
     Column("added_at", DateTime(timezone=True), nullable=False),
     Index("ix_cohort_member_user_id", "user_id"),
+)
+
+# One email text an operator sent to account holders from the ops pages.
+announcement = Table(
+    "announcement",
+    metadata,
+    Column("announcement_id", UUID(as_uuid=True), primary_key=True),
+    Column("kind", Text, nullable=False),
+    Column("subject", Text, nullable=False),
+    Column("body", Text, nullable=False),
+    Column("button_label", Text, nullable=True),
+    Column("button_url", Text, nullable=True),
+    Column("image_url", Text, nullable=True),
+    Column("image_alt", Text, nullable=True),
+    # The operator's choice: everyone, or cohort, organisation and user ids.
+    Column("audience", JSONB, nullable=False),
+    Column("audience_summary", Text, nullable=False),
+    Column("sent_by", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "kind IN ('product_update', 'service_notice')", name="ck_announcement_kind"
+    ),
+    CheckConstraint(
+        "(button_label IS NULL) = (button_url IS NULL)", name="ck_announcement_button_pair"
+    ),
+    CheckConstraint(
+        "(image_url IS NULL) = (image_alt IS NULL)", name="ck_announcement_image_pair"
+    ),
+)
+
+# One person on one announcement, with the address used and the send status.
+announcement_recipient = Table(
+    "announcement_recipient",
+    metadata,
+    Column(
+        "announcement_id", UUID(as_uuid=True),
+        ForeignKey("announcement.announcement_id"), primary_key=True,
+    ),
+    Column("user_id", Text, ForeignKey("app_user.user_id"), primary_key=True),
+    Column("email", Text, nullable=True),
+    Column("status", Text, nullable=False),
+    Column("reason", Text, nullable=True),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "status IN ('pending', 'sending', 'sent', 'failed', 'left_out')",
+        name="ck_announcement_recipient_status",
+    ),
+    CheckConstraint(
+        "reason IS NULL OR status IN ('failed', 'left_out')",
+        name="ck_announcement_recipient_reason",
+    ),
 )
 
 # Splash-page Request-access intake. No FK to app_user — ops enrolment is the
