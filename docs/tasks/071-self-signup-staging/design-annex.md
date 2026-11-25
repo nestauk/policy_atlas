@@ -3,7 +3,7 @@
 The states and words for the surfaces of [contract.md](contract.md). Terms: contract § Terms.
 
 > **Version:** 2 · Mock: https://claude.ai/artifact/GqkMxEqCd6W6EfkB6EdS2g (private, six scenes) ·
-> Frozen: _pending the owner_ · Polish rounds: _log below_
+> Frozen: 2026-11-25 (owner: all approved) · Polish rounds: _log below_
 
 ## Rules for this slice
 
@@ -121,10 +121,10 @@ dialog, (3) the created link, (4) a file with two errors, (5) a file run with on
 
 ## Owner rulings
 
-- 2026-11-25: scope of the task (contract § Owner rulings). The words are not yet approved.
+- 2026-11-25: scope of the task (contract § Owner rulings). The words were approved later the same day.
 - 2026-11-25: several domains for each link; the email sentence names no product; a mock
   round.
 
 ## Polish log
 
-- Mock round 1 (2026-11-25): six scenes published; waits for the owner.
+- Mock round 1 (2026-11-25): six scenes published; the owner approved them with no change.

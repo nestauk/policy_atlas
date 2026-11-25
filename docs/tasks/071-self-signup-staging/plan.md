@@ -1,8 +1,8 @@
 # Plan: 071-self-signup-staging
 
 > **Status:** drafted 2026-11-25; Codex plan review folded in the same day (ten findings,
-> all adopted; the list is in the contract's § Contract review); not yet confirmed by the
-> owner. Ids (A1, B2, D5.4, I3) are
+> all adopted; the list is in the contract's § Contract review); confirmed by the owner
+> on 2026-11-25. Ids (A1, B2, D5.4, I3) are
 > those of [contract.md](contract.md); words are in [design-annex.md](design-annex.md); terms
 > are in contract § Terms. The build runs in a fresh conversation with `task-cycle-build`.
 
@@ -91,7 +91,7 @@ the same commit (a phase that changes a route or a body is not green without it)
 
 | # | Phase | Contract | Executor | Check |
 |---|---|---|---|---|
-| 0 | Baseline. Rebase on `dev`; find the newest migration (`alembic heads`); run the full check before any edit. Write the ADR 0046 amendment once both approvals are given. | — | lead | V |
+| 0 | Baseline. Rebase on `dev`; find the newest migration (`alembic heads`); run the full check before any edit. The ADR 0046 amendment is already written (design phase). | — | lead | V |
 | 1 | Schema: `core/schema.py`, one migration (two tables, two columns, a partial index on `waitlist_entry.invite_code` and on `waitlist_entry.invite_link_id`, the `pa_ops` grants), the migration round-trip test, the grant-list test. | D1, I8 | deep-reasoner | V |
 | 2 | `cohort_ids` on create person and approve, by the cohort sequence of seam 2: contract models, routes, tests of the exact audit rows. | B1–B6, I6 | deep-reasoner | F + D |
 | 3 | Import check: `validate_person_fields`, the route, tests. | C1, C2, I7 | deep-reasoner | F + D |
@@ -142,8 +142,4 @@ prompt.
 
 ## Open items for the owner before the build
 
-1. Approve the contract (the gate table in it).
-2. Approve the words in the annex, or change them.
-3. The mock: say "direction settled", or name the changes.
-
-Settled on 2026-11-25: the email sentence (yes, no product name); the mock round (made).
+None. Settled on 2026-11-25: the contract, the words, the mock and this plan (approved); the email sentence (yes, no product name); the mock round (made).

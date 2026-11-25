@@ -1,10 +1,10 @@
 # Task contract: 071-self-signup-staging
 
 > **Status:** drafted 2026-11-25; Codex contract review folded in the same day (§ Contract
-> review). Scope agreed by the owner in chat (2026-11-25, § Owner rulings). Contract approved (before planning): _pending_ · Plan approved (before
-> implementation): _pending_ · ADR: an amendment to
+> review). Scope agreed by the owner in chat (2026-11-25, § Owner rulings). Contract approved: 2026-11-25 (owner, in chat) · Plan approved: 2026-11-25 (owner, in
+> chat) · ADR: the 2026-11-25 amendment to
 > [ADR 0046](../../adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md),
-> written when both approvals are given. Branch `task/071-self-signup-staging`. Tier 4
+> Branch `task/071-self-signup-staging`. Tier 4
 > (a migration, a database grant, a change to a public route, a staging config change).
 > Background: [notes.md](notes.md). Where the notes differ, this contract is right.
 
@@ -74,6 +74,7 @@ its live checks recorded in `verification.md`. Production self-signup stays off.
 12. The invitation email gets one sentence about the authenticator app, with no product
     name (A3).
 13. A mock of the ops pages is made before the build (§ Design annex).
+14. The contract, the words of the annex, the mock and the plan are approved.
 
 ## Part A — words on the public page
 
@@ -449,7 +450,7 @@ Tests use made-up addresses.
 ## Design annex
 
 [design-annex.md](design-annex.md) version 2. Mock: a private page with six scenes
-(https://claude.ai/artifact/GqkMxEqCd6W6EfkB6EdS2g), waiting for the owner's "direction settled". Polish round
+(https://claude.ai/artifact/GqkMxEqCd6W6EfkB6EdS2g), direction settled by the owner on 2026-11-25. Polish round
 budget: one round at the end of build and one at the end of review.
 
 ## Model route
