@@ -1,12 +1,12 @@
 import { ExternalNoticeLink, LegalList, LegalPage, LegalSection } from "./LegalPage";
 
 const AWS_PRIVACY = "https://aws.amazon.com/privacy/";
-const OPENAI_PRIVACY = "https://openai.com/policies/privacy-policy";
+const POSTHOG_PRIVACY = "https://posthog.com/privacy";
 
 /** Privacy notice at `/privacy`. Copy is owner-supplied. */
 export function PrivacyView() {
   return (
-    <LegalPage title="Privacy notice">
+    <LegalPage title="Privacy notice" updated="25/11/2026">
       <LegalSection title="1. Introduction">
         <p>
           This website belongs to Nesta - you can find our full details below. This privacy notice
@@ -46,40 +46,63 @@ export function PrivacyView() {
       <LegalSection title="3. What personal data will we collect?">
         <p>
           Policy Atlas is committed to maintaining user privacy and strictly minimising data
-          retention. We collect only the following data points:
+          retention. We collect the following data:
         </p>
         <p>
-          <strong>Email Address:</strong> This is the only user-specific identifier we store. It
-          serves the essential purpose of linking your search activity to your account, allowing you
-          to reliably retrieve your saved search results.
+          <strong>Account details:</strong> We store your email address, your name and, if you
+          belong to one, your organisation. They serve the essential purpose of linking your search
+          activity to your account, allowing you to reliably retrieve your saved search results.
         </p>
         <p>
           <strong>Search Queries &amp; Results:</strong> We store the text of the queries you input
-          and the results generated to populate your evidence blueprints.
+          and the results generated, and any files you upload.
         </p>
         <p>
-          <strong>Access requests:</strong> If you ask for access to Policy Atlas through the
-          &quot;Request access&quot; form, we collect your name, your email address, your
+          <strong>Access requests:</strong> If you ask for access to Policy Atlas through
+          the &quot;Request access&quot; form, we add you to our waitlist. We collect your name, your
+          email address, your
           organisation (if you give it), and what you tell us about how you would use the tool. We
           use this information only to review your request and to contact you about access to the
-          beta. We keep it until the private beta ends, or until you ask us to remove it (contact
-          the DPO at the address above). We do not share it outside Nesta. The lawful basis is our
+          beta. We keep it until you ask us to remove it (contact the DPO at the address
+          above). We do not share it outside Nesta. The lawful basis is our
           legitimate interest in responding to your request.
+        </p>
+        <p>
+          <strong>Usage data:</strong> We use PostHog, a product analytics service, to understand
+          how people use Policy Atlas and to improve it. PostHog records how you interact with the
+          app: the Policy Atlas pages you open and the actions you select. We do not send
+          the content of your work to PostHog: not the text of your queries, the files you upload
+          or the generated results. PostHog also records basic details of your browser and device,
+          and an identifier: your email address if you are signed in, or a random one if you are
+          not. PostHog does not store your IP address. PostHog stores this data in the European
+          Union. We do not use it for advertising.
         </p>
       </LegalSection>
 
-      <LegalSection title="4. What we do not collect">
+      <LegalSection title="4. Technical data, cookies and browser storage">
         <p>
-          To protect your privacy, we have explicitly excluded the collection of metadata often
-          tracked by web applications. For the avoidance of doubt, we do not collect, process, or
-          store IP addresses and device information.
+          To protect the site from abuse, our firewall and our sign-in service record the IP address
+          and basic browser details of requests to the site.
+        </p>
+        <p>
+          We use cookies and browser storage that are necessary to sign you in and to protect the
+          site. Product analytics (see section 3) does not use cookies or browser storage. We do
+          not use cookies for advertising, and we do not sell your personal data.
         </p>
       </LegalSection>
 
       <LegalSection title="5. What do we do with information we collect and what is our legal basis for this?">
         <p>
           The purpose for which we are processing your personal data is to provide you with access to
-          the Policy Atlas website and platform.
+          the Policy Atlas website and platform, to keep it secure, to understand how it is used so
+          that we can improve it, and to keep you informed about it.
+        </p>
+        <p>
+          <strong>Emails:</strong> We use your email address to send you messages about your account
+          and the service: for example invitations, password resets, security notices and changes
+          to the service or to this notice. We may also send you occasional product updates, such as
+          news of a release. Every product update has an unsubscribe link, and you can opt out at
+          any time.
         </p>
         <p>
           <strong>Legal basis.</strong> Data protection law requires us to have a specific legal
@@ -95,7 +118,7 @@ export function PrivacyView() {
 
       <LegalSection title="6. Who has access to your information?">
         <p>
-          Your information will be accessed by a limited number of advisors in our team working on
+          Your information will be accessed by a limited number of administrators in our team working on
           this task.
         </p>
         <p>
@@ -121,35 +144,47 @@ export function PrivacyView() {
           identities and logins. Policy Atlas does not directly view or store your password. For further information, see <ExternalNoticeLink href={AWS_PRIVACY}>Amazon Web Services privacy policy</ExternalNoticeLink>.
         </p>
         <p>
-          For data storage &amp; security, your user email, search queries, and search results are
-          stored in Amazon Aurora PostgreSQL, hosted in Nesta&apos;s AWS environment.
+          For data storage &amp; security, your account details, search queries and results are
+          stored in Amazon Aurora PostgreSQL, and the files you upload are stored in Amazon S3. Both
+          are hosted in Nesta&apos;s AWS environment.
         </p>
         <p>In relation to AI &amp; Third-Party Processors, we use the following services to operate the tool:</p>
         <LegalList>
           <li>
-            <strong>Amazon Bedrock:</strong> Processes anonymised search queries to generate summaries,
+            <strong>Amazon Bedrock:</strong> Processes your search queries and uploaded files to generate summaries,
             using OpenAI models via the AWS Bedrock API. Bedrock inputs and outputs are not shared
             with model providers and are not used to train base models.
-          </li>
-          <li>
-            <strong>OpenAI:</strong> Processes anonymised search queries to generate summaries. OpenAI
-            does not use data submitted via their API to train their models. See{" "}
-            <ExternalNoticeLink href={OPENAI_PRIVACY}>OpenAI&apos;s privacy notice</ExternalNoticeLink>
-            .
           </li>
           <li>
             <strong>Overton &amp; OpenAlex:</strong> These are our data sources; search keywords are
             sent to these APIs to retrieve relevant documents, but no personal data is shared with
             them.
           </li>
+          <li>
+            <strong>Amazon Simple Email Service (SES):</strong> Sends our emails to your email
+            address, from Nesta&apos;s AWS environment.
+          </li>
+          <li>
+            <strong>PostHog:</strong> Provides product analytics (see section 3) and stores the data
+            in the European Union. See{" "}
+            <ExternalNoticeLink href={POSTHOG_PRIVACY}>PostHog&apos;s privacy notice</ExternalNoticeLink>
+            .
+          </li>
         </LegalList>
+        <p>
+          Some of these providers may process data outside the UK. Where they do, the transfer is
+          covered by safeguards that UK data protection law recognises. You can ask the DPO for
+          details of these safeguards.
+        </p>
       </LegalSection>
 
       <LegalSection title="7. Data retention">
         <p>
-          We retain your email and search history only for as long as user testing is active to allow
-          you to use the tool. Upon the conclusion of the pilot (or upon your request), your personal
-          data will be permanently deleted from our Amazon Aurora PostgreSQL database.
+          We retain your account details, your search queries and results, and the files you upload
+          for as long as your account remains active. Upon your request, your account will be
+          deactivated and personal data will be permanently deleted from our systems and from
+          PostHog. Copies in our database
+          backups are deleted automatically within 35 days. We keep firewall logs for one month.
         </p>
       </LegalSection>
 

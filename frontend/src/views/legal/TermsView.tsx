@@ -3,7 +3,7 @@ import { LegalList, LegalPage, LegalSection } from "./LegalPage";
 /** Terms of use at `/terms`. Copy is owner-supplied. */
 export function TermsView() {
   return (
-    <LegalPage title="Terms of use" updated="18/08/2026">
+    <LegalPage title="Terms of use" updated="25/11/2026">
       <LegalSection title="1. Introduction">
         <p>
           These Terms of Use (&quot;Terms&quot;) govern your access to and use of Policy Atlas (the
@@ -31,7 +31,7 @@ export function TermsView() {
         <p>
           <strong>No Reliance:</strong> The content provided by Policy Atlas is for informational and
           research purposes only. It does not constitute policy advice. You must verify all
-          summaries, citations, and &quot;blueprints&quot; against the original source documents
+          summaries, citations, and other outputs against the original source documents
           before using them in official policy decisions.
         </p>
         <p>
@@ -56,7 +56,7 @@ export function TermsView() {
             policy design.
           </li>
           <li>
-            Not use the Tool to input personal data, confidential and/or classified government
+            Not use the Tool to input or upload personal data, confidential and/or classified government
             information (Official-Sensitive or above).
           </li>
         </LegalList>
@@ -76,8 +76,9 @@ export function TermsView() {
           respective authors/publishers.
         </p>
         <p>
-          <strong>Your Inputs:</strong> You retain rights to the queries you input. You grant us a
-          license to use these inputs to operate the Tool and improve our search algorithms.
+          <strong>Your Inputs:</strong> You retain rights to the queries you input and the files
+          you upload. You grant us a license to use these inputs to operate the Tool and improve our
+          search algorithms.
         </p>
       </LegalSection>
 
@@ -87,9 +88,11 @@ export function TermsView() {
         </p>
         <LegalList>
           <li>Amazon Bedrock: For text generation and summarisation.</li>
-          <li>OpenAI: For text generation and summarisation.</li>
           <li>Amazon Cognito: For user authentication.</li>
           <li>Amazon Aurora PostgreSQL: For database management.</li>
+          <li>Amazon S3: For storage of uploaded files.</li>
+          <li>Amazon Simple Email Service: For sending email.</li>
+          <li>PostHog: For product analytics.</li>
           <li>OpenAlex and Overton: For data sourcing.</li>
         </LegalList>
       </LegalSection>
