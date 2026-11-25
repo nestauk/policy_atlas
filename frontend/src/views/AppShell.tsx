@@ -12,6 +12,8 @@ import { StatusMark } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
+import { TASK_LOCK_ROOT_CLASS, TASK_LOCK_SHELL_CLASS } from "./taskLock";
+import { SkipLink, useFocusPaneOnNavigate } from "../ui/brand/SkipLink";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, tabOfPath, withChat, withSourcesLanding } from "./lifecycle";
 import { PlanPanelProvider, usePlanPanel } from "./planPanel";
@@ -211,6 +213,7 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
         <div
           ref={menuRef}
           role="menu"
+          tabIndex={-1}
           aria-label="Account"
           aria-orientation="vertical"
           className="border-t border-line py-1"
@@ -377,13 +380,15 @@ export function AppShell() {
     if (tab === null || location.hash !== "" || scrollPane.current === null) return;
     scrollPane.current.scrollTop = 0;
   }, [tab, location.hash]);
+  useFocusPaneOnNavigate(scrollPane);
 
   // Task views lock to the viewport so the app/lifecycle chrome stays put
   // and only the panes below scroll. List pages keep normal document scroll.
+  // So does a task view in a short viewport (`TASK_LOCK`).
   useLayoutEffect(() => {
     if (base === null) return undefined;
-    document.documentElement.classList.add("overflow-hidden");
-    return () => document.documentElement.classList.remove("overflow-hidden");
+    document.documentElement.classList.add(TASK_LOCK_ROOT_CLASS);
+    return () => document.documentElement.classList.remove(TASK_LOCK_ROOT_CLASS);
   }, [base]);
 
   // One tab list, two placements: in the task NavBar from `md` up,
@@ -414,9 +419,10 @@ export function AppShell() {
     <div
       className={cn(
         "flex w-full min-w-0 max-w-full flex-col",
-        base === null ? "min-h-svh" : "h-svh overflow-hidden",
+        base === null ? "min-h-svh" : TASK_LOCK_SHELL_CLASS,
       )}
     >
+      <SkipLink pane={scrollPane} />
       {/* Its own View Transition layer, held still above the page, so a
           longlist regroup never draws over it. */}
       <NavBar aria-label="App" className="shrink-0 [view-transition-name:app-nav] [view-transition-class:shell-chrome]">
@@ -510,9 +516,11 @@ export function AppShell() {
           {liveShell && <RunStatusBar />}
           <div
             ref={scrollPane}
+            // The skip link's target, and where focus goes after a route change.
+            tabIndex={-1}
             data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
             className={cn(
-              "min-h-0 min-w-0 flex-1",
+              "min-h-0 min-w-0 flex-1 outline-hidden",
               inWorkspace ? "overflow-hidden" : "overflow-y-auto [scrollbar-gutter:stable]",
               // The pane is a flex column only to pin the footer with
               // `mt-auto`; children must never flex-shrink, or a view

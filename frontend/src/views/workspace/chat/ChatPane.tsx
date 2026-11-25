@@ -5,6 +5,7 @@ import { useChatConversation } from "../../../store";
 import { cn } from "../../../ui/brand/cn";
 import { LIFECYCLE_PAGE_CLASS } from "../../listPageChrome";
 import { ChatComposer } from "./ChatComposer";
+import { DoneAnnouncer } from "../../../ui/feedback/DoneAnnouncer";
 import { ChatEmptyState, starterQuestions } from "./ChatEmptyState";
 import { ChatMessages } from "./ChatMessages";
 import { ContextBar } from "./ContextBar";
@@ -100,6 +101,7 @@ export function ChatPane({
   const column = wide ? LIFECYCLE_PAGE_CLASS : "px-4";
   return (
     <section aria-label="Chat" className="flex h-full min-h-0 flex-col">
+      <DoneAnnouncer busy={chat.isStreaming} words="The Agent replied" />
       {/* `relative` for the jump-to-end pill, which floats over the region's bottom edge. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
       <div

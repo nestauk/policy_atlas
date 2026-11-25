@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { blobUrl } from "../../lib/blobUrl";
 import { PaperclipIcon } from "../../ui/brand/icons";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 // The user's own theory-of-change diagram: the paperclip that picks it, and its preview.
 
@@ -46,8 +47,8 @@ export function UploadPreview({ blob, pdf, className, imageClassName }: { blob: 
   return blob.type === "application/pdf" ? (
     pdf(url)
   ) : (
-    <a href={url} target="_blank" rel="noreferrer" title="Open full size" className={className}>
+    <ExternalLink href={url} title="Open full size" className={className}>
       <img src={url} alt="Your theory of change, as uploaded" className={imageClassName} />
-    </a>
+    </ExternalLink>
   );
 }

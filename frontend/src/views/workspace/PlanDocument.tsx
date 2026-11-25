@@ -60,6 +60,7 @@ import {
 } from "./planVocabulary";
 import { RiskAppetiteSelect } from "../longlist/ShortlistView";
 import { UploadPreview } from "../toc/uploads";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
 type PlanDraft = components["schemas"]["PlanDraft"];
@@ -74,7 +75,7 @@ const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
   "cursor-pointer border border-white/25 px-3 py-1.5 text-body font-semibold text-white hover:bg-white/10";
 const panelFieldClass =
-  "w-full border border-white/25 bg-navy-deep px-3 py-2.5 text-lead text-white";
+  "w-full border border-on-navy-muted bg-navy-deep px-3 py-2.5 text-lead text-white";
 const panelValueClass = "mt-0.5 text-lead text-white";
 const panelHintClass = "text-body text-on-navy-soft";
 
@@ -1045,9 +1046,9 @@ function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }
             blob={file.data}
             imageClassName="max-h-80 w-full border border-line object-contain"
             pdf={(url) => (
-              <a href={url} target="_blank" rel="noreferrer" className={cn(panelValueClass, "font-semibold underline decoration-on-navy-muted underline-offset-[3px] transition-colors duration-150 hover:decoration-white")}>
+              <ExternalLink href={url} className={cn(panelValueClass, "font-semibold underline decoration-on-navy-muted underline-offset-[3px] transition-colors duration-150 hover:decoration-white")}>
                 Open your original (PDF)
-              </a>
+              </ExternalLink>
             )}
           />
         )}
@@ -1277,11 +1278,14 @@ export function PlanDocument({
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [onClose]);
 
-  // Focus goes back to the control that opened the plan when it closes,
-  // unless the reader has put it somewhere else (pressed another control).
+  // Focus moves into the plan as it opens, so a keyboard or screen reader
+  // user is in the dialog and not on the control behind it. It goes back to
+  // the control that opened the plan when it closes, unless the reader has
+  // put it somewhere else (pressed another control).
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const plan = planRef.current;
+    plan?.focus({ preventScroll: true });
     return () => {
       const focused = document.activeElement;
       const lost = focused === null || focused === document.body || (plan !== null && plan.contains(focused));
@@ -1373,10 +1377,19 @@ export function PlanDocument({
       ref={planRef}
       role="dialog"
       aria-modal={placement === "center"}
+      tabIndex={-1}
+      // The plan is not modal: the page behind it stays in the tab order.
+      // Keyboard focus that leaves the plan closes it, as a press outside
+      // does, so focus is never on a control the plan covers.
+      onBlur={(event) => {
+        if (pressedOutside(event.relatedTarget, planRef.current)) onClose();
+      }}
       aria-label={scopingPlan ? "Scoping plan" : "Search plan"}
       data-state={closing ? "closed" : "open"}
       className={cn(
-        "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
+        "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white outline-hidden",
+        // The house ring is Electric Blue, 1.7:1 on Navy: controls here ring in white.
+        "[&_:focus-visible]:outline-white",
         // It arrives: docked, from the edge it docks to; centred,
         // rising in place. It leaves the way it came, faster, as a sheet
         // does. A cut under reduced motion.

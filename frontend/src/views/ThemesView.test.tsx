@@ -254,10 +254,10 @@ describe("ThemesView — an options-scoping task's themes (round 13)", () => {
     // The theme's documents beside its name, each option's own count in its row.
     expect(within(section).getByText("9 documents")).toBeInTheDocument();
     const links = within(within(section).getByRole("list")).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["Careers advice in schools1 document", "Youth guarantee12 documents"]);
+    expect(links.map((link) => link.textContent)).toEqual(["Careers advice in schools (excluded)1 document", "Youth guarantee12 documents"]);
     expect(links[1]).toHaveAttribute("href", `/tasks/${TASK_ID}/options/o1`);
-    // An excluded option reads in Grey, as the longlist sets it.
-    expect(within(links[0]).getByText("Careers advice in schools")).toHaveClass("text-grey");
+    // An excluded option reads in Grey, as the longlist sets it, and says so in words.
+    expect(within(links[0]).getByText("Careers advice in schools (excluded)")).toHaveClass("text-grey");
     expect(screen.queryByRole("region", { name: "Empty theme" })).toBeNull();
     // Round 14: the theme's name opens All sources filtered to it.
     expect(within(section).getByRole("link", { name: "Earlier support" })).toHaveAttribute(

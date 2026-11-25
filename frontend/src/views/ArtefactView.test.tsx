@@ -217,8 +217,11 @@ describe("LiveArtefactBody", () => {
     const placeholders = screen.getAllByTestId("placeholder-lines");
     expect(placeholders).toHaveLength(3);
     for (const lines of placeholders) {
-      expect(lines.children.length).toBeGreaterThanOrEqual(2);
-      expect(lines.children.length).toBeLessThanOrEqual(3);
+      const bars = lines.querySelectorAll('[aria-hidden="true"]');
+      expect(bars.length).toBeGreaterThanOrEqual(2);
+      expect(bars.length).toBeLessThanOrEqual(3);
+      // The bars are silent; a screen reader gets the words.
+      expect(lines).toHaveTextContent("Not written yet.");
     }
     expect(screen.getByText("Written last, after the sections are checked.")).toBeInTheDocument();
     // No pills, no old status copy.

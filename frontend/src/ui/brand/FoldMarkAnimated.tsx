@@ -23,6 +23,9 @@ function prefersReducedMotion(): boolean {
  * @param size - Width and height in CSS pixels.
  * @param foldSpeed - Playback speed multiplier (prototype default 0.4).
  * @param reducedMotion - When true, freeze on the static shut diamond.
+ * @param stopAfterMs - Hold the last frame after this long. For a mark that
+ *   is decoration (the splash header); a mark that shows work in progress
+ *   runs for as long as the work does.
  * @param onDark - When true (default) shut-diamond frames render white,
  *   for use on dark (navy) backgrounds. Pass false for light backgrounds
  *   (white/paper nav), which renders them in Nesta blue instead.
@@ -31,11 +34,13 @@ export function FoldMarkAnimated({
   size = BRAND_MARK_SIZE,
   foldSpeed = 0.4,
   reducedMotion,
+  stopAfterMs,
   onDark = true,
 }: {
   size?: number;
   foldSpeed?: number;
   reducedMotion?: boolean;
+  stopAfterMs?: number;
   onDark?: boolean;
 }) {
   const shutColour = onDark ? "#ffffff" : BLUE;
@@ -67,11 +72,11 @@ export function FoldMarkAnimated({
       const clock = ((now - t0) / 1000) * foldSpeed;
       const result = splashPathsAt(clock, frames, shutColour);
       setLiveFrame({ paths: result.paths, degrees: result.degrees });
-      raf = requestAnimationFrame(loop);
+      if (stopAfterMs === undefined || now - t0 < stopAfterMs) raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [foldSpeed, frames, reduced, shutColour]);
+  }, [foldSpeed, frames, reduced, shutColour, stopAfterMs]);
 
   const { paths, degrees } = reduced ? staticFrame : liveFrame;
 

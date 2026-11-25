@@ -28,11 +28,11 @@ export function CriticalIcon() {
 /** Each verdict's dash on the canvas; a solid line has none. */
 const DASH: Record<Verdict, string | undefined> = {
   supported: undefined,
-  not_sure_mixed: undefined,
+  not_sure_mixed: "12 5 2 5",
   not_sure_insufficient: "6 5",
   against: "2 5",
   leaning_supports: "12 5",
-  leaning_against: "12 5",
+  leaning_against: "12 5 2 5 2 5",
 };
 
 /** A short line sample for each verdict, drawn as on the canvas. */

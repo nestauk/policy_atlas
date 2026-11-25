@@ -4,6 +4,11 @@ export const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
 /** How long an arrival or a block making room takes. */
 export const ARRIVE_MS = 300;
 
+/** How long motion that marks nothing may run before it holds still: the
+ *  splash page's fold marks. Movement that starts by itself beside other
+ *  content must stop within five seconds or have a pause control (WCAG 2.2.2). */
+export const DECORATIVE_MOTION_MS = 5000;
+
 /** Whether the reader asked for reduced motion. False outside a browser. */
 export function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;

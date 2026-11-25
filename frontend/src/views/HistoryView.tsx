@@ -130,7 +130,7 @@ export function HistoryView() {
       )}
 
       {editError !== null && (
-        <p role="alert" className="mb-2 text-body text-red">
+        <p role="alert" className="mb-2 text-body text-red-deep">
           {editError}
         </p>
       )}
@@ -303,7 +303,7 @@ function RunRow({ run }: { run: HistoryRun }) {
  */
 function HistorySkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading the history">
+    <div role="status" aria-busy="true" aria-label="Loading the history">
       <div aria-hidden="true" className="flex h-[2.3125rem] items-center">
         <span className="placeholder-bar h-2.5 w-28" />
       </div>

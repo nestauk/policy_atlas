@@ -138,7 +138,12 @@ describe("LandscapeView — finished", () => {
     expect(
       await within(region).findByRole("img", { name: "Where sources were published" }, { timeout: 15_000 }),
     ).toBeInTheDocument();
-    expect(within(region).queryByRole("table", { name: "Where sources were published" })).toBeNull();
+    expect(within(region).getByRole("button", { name: "Map" })).toHaveAttribute("aria-pressed", "true");
+    // The map is one image to a screen reader: its countries and counts are
+    // also a table, the map's text alternative.
+    const alternative = within(region).getByRole("table", { name: "Where sources were published" });
+    expect(within(alternative).getByRole("columnheader", { name: "Country" })).toBeInTheDocument();
+    expect(within(alternative).getAllByRole("rowheader").length).toBeGreaterThan(0);
   });
 
   it("puts no population line at the top (round 11); a heading counts only what differs", () => {

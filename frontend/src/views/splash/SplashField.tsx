@@ -7,6 +7,7 @@ import {
   splashPathsAt,
   type FoldPath,
 } from "../../ui/brand/foldMark";
+import { DECORATIVE_MOTION_MS } from "../../ui/motion/motion";
 
 interface PlacedSheet {
   x: string;
@@ -30,7 +31,8 @@ function prefersReducedMotion(): boolean {
  * Full-bleed animated fold-mark constellation behind the splash hero copy.
  *
  * Placement clears overlapping seeds and the live copy box, matching the
- * design prototype. Freezes under `prefers-reduced-motion`.
+ * design prototype. Freezes under `prefers-reduced-motion`; otherwise folds
+ * for `DECORATIVE_MOTION_MS` and then holds its last frame.
  */
 export function SplashField({
   foldSpeed = 0.4,
@@ -151,15 +153,18 @@ export function SplashField({
   };
 
   useEffect(() => {
+    // The fold clock of the last frame drawn, so a re-placement (a resize,
+    // the fonts landing) keeps the fold where it is, moving or held.
+    let clock = 0;
     const onResize = () => {
-      if (measure()) setSheets(place(0));
+      if (measure()) setSheets(place(clock));
     };
     window.addEventListener("resize", onResize);
     const t = window.setTimeout(() => {
-      if (measure()) setSheets(place(0));
+      if (measure()) setSheets(place(clock));
     }, 120);
     void document.fonts?.ready.then(() => {
-      if (measure()) setSheets(place(0));
+      if (measure()) setSheets(place(clock));
     });
 
     // Initial placement happens on the first animation frame (before paint),
@@ -168,8 +173,9 @@ export function SplashField({
     const start = performance.now();
     const tick = (now: number) => {
       measure();
-      setSheets(place(((now - start) / 1000) * foldSpeed));
-      if (!reduced) raf = requestAnimationFrame(tick);
+      clock = ((now - start) / 1000) * foldSpeed;
+      setSheets(place(clock));
+      if (!reduced && now - start < DECORATIVE_MOTION_MS) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
 

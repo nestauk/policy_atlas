@@ -20,7 +20,7 @@ import {
 
 /** The reason and add-option inputs share one look. */
 export const REASON_INPUT_CLASS =
-  "min-w-0 flex-1 border border-line-2 bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey/80";
+  "min-w-0 flex-1 border border-navy bg-paper px-3 py-1.5 text-body text-ink placeholder:text-grey";
 
 /** A refused action's notice, next to the control it came from;
  *  `optionId` null is the list's add row. */

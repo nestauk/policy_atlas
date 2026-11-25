@@ -205,6 +205,25 @@ export default function PublisherMap({
           </span>
         )}
       </div>
+      {/* The map is one image to a screen reader, and its counts show only
+          under a mouse: the same countries and counts as a table. */}
+      <table className="sr-only">
+        <caption>{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Country</th>
+            <th scope="col">Sources</th>
+          </tr>
+        </thead>
+        <tbody>
+          {countries.map((entry) => (
+            <tr key={entry.country}>
+              <th scope="row">{scrub(entry.country)}</th>
+              <td>{entry.count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <div className="publisher-map__legend" aria-hidden="true">
         <span className="tabular-nums">1</span>
         {MAP_STEPS.map((_, step) => (

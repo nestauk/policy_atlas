@@ -40,8 +40,9 @@ export const buttonVariants = cva(
           "disabled:text-line-2 disabled:hover:text-line-2",
         // The one action that starts a run: the cut shape in green, the
         // only green fill in the system (DESIGN.md § Buttons, Start run).
+        // Green Pressed, not Green: white on Green is 3.12:1.
         start:
-          `cutout bg-green font-bold text-white hover:bg-green-pressed ${CUT_FOCUS_RING} ` +
+          `cutout bg-green-pressed font-bold text-white hover:bg-green-deep ${CUT_FOCUS_RING} ` +
           "disabled:bg-line-2 disabled:text-white",
       },
       size: {

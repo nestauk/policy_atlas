@@ -198,6 +198,8 @@ describe("SectionDisclosure", () => {
       "location",
     );
     expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
+    // Focus follows the scroll: the next Tab starts in the section.
+    expect(screen.getByRole("button", { name: headingName, expanded: true }).closest("h2, h3")).toHaveFocus();
     history.replaceState(null, "", window.location.pathname);
   });
 

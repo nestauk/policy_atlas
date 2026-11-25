@@ -17,11 +17,11 @@ describe("Privacy notice", () => {
       "href",
       "mailto:dpo@nesta.org.uk",
     );
-    expect(screen.getByRole("link", { name: "Amazon Web Services privacy policy" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^Amazon Web Services privacy policy\s*\(opens in new tab\)$/ })).toHaveAttribute(
       "href",
       "https://aws.amazon.com/privacy/",
     );
-    expect(screen.getByRole("link", { name: "OpenAI's privacy notice" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^OpenAI's privacy notice\s*\(opens in new tab\)$/ })).toHaveAttribute(
       "href",
       "https://openai.com/policies/privacy-policy",
     );

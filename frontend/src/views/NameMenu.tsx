@@ -96,6 +96,7 @@ export function NameRenameField({
   };
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the group handles Escape for the field and buttons inside it
     <span
       role="group"
       aria-label={`${label}: rename`}
@@ -125,7 +126,7 @@ export function NameRenameField({
         aria-invalid={failed || undefined}
         aria-describedby={failed ? errorId : undefined}
         className={cn(
-          "min-w-0 flex-1 basis-56 border border-line-2 bg-paper px-2 py-0.5 md:max-w-[36rem]",
+          "min-w-0 flex-1 basis-56 border border-navy bg-paper px-2 py-0.5 md:max-w-[36rem]",
           titleClassName,
         )}
       />
@@ -255,7 +256,7 @@ export function NameActionsMenu({
           </div>
         ) : confirming ? (
           <div role="group" aria-labelledby={confirmId} className="p-4">
-            <p id={confirmId} ref={sentence} tabIndex={-1} className="text-body text-ink focus-visible:outline-none">
+            <p id={confirmId} ref={sentence} tabIndex={-1} className="text-body text-ink focus-visible:outline-hidden">
               {archiveSentence}
             </p>
             {failed && (
@@ -299,6 +300,7 @@ export function NameActionsMenu({
           <div
             ref={menu}
             role="menu"
+            tabIndex={-1}
             aria-label={label}
             aria-orientation="vertical"
             className="py-1"

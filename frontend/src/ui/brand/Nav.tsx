@@ -50,6 +50,7 @@ export function NavHomeLink() {
       <Tooltip
         content={<p className="text-body text-navy">{BETA_CHIP_HINT}</p>}
       >
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focusable so its tooltip opens from the keyboard */}
         <span tabIndex={0} className="inline-flex">
           <Chip tone="blue">BETA</Chip>
         </span>
@@ -91,19 +92,25 @@ export function NavItem({
   children: ReactNode;
 }) {
   const { pathname } = useLocation();
+  const className = (active: boolean) =>
+    cn(
+      "inline-block border-b-[3px] border-transparent pb-1 text-lead font-semibold text-navy no-underline",
+      GROWING_RULE_CLASS,
+      active && cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold"),
+    );
+  // An item with its own match marks a section, which the router's NavLink
+  // cannot say: it is the current page at its own address and the current
+  // section (`true`) on a page under it.
+  if (match !== undefined) {
+    const active = match(pathname);
+    return (
+      <Link to={to} aria-current={!active ? undefined : pathname === to ? "page" : "true"} className={className(active)}>
+        {children}
+      </Link>
+    );
+  }
   return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) => {
-        const active = match ? match(pathname) : isActive;
-        return cn(
-          "inline-block border-b-[3px] border-transparent pb-1 text-lead font-semibold text-navy no-underline",
-          GROWING_RULE_CLASS,
-          active && cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold"),
-        );
-      }}
-    >
+    <NavLink to={to} end={end} className={({ isActive }) => className(isActive)}>
       {children}
     </NavLink>
   );

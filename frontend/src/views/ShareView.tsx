@@ -172,6 +172,7 @@ function PublicLinkSection({
       }
     >
       {confirming && !isPublic && (
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the group handles Escape for the buttons inside it
         <div
           role="group"
           aria-labelledby={confirmId}
@@ -211,7 +212,7 @@ function PublicLinkSection({
             value={url}
             aria-label={SHARE_COPY.linkField}
             onFocus={(event) => event.currentTarget.select()}
-            className="h-10 min-w-0 flex-1 basis-64 border border-line-2 bg-paper px-3 text-body text-ink"
+            className="h-10 min-w-0 flex-1 basis-64 border border-navy bg-paper px-3 text-body text-ink"
           />
           <button ref={copyButton} type="button" className={OUTLINE_CONTROL_CLASS} onClick={copyLink}>
             {SHARE_COPY.copyLink}

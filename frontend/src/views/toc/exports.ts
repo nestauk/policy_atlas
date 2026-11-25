@@ -49,9 +49,9 @@ export function referencesCsv(graph: TocGraph): string {
 const DRAWIO_DASH: Record<Verdict, string> = {
   supported: "",
   leaning_supports: "dashed=1;dashPattern=12 5;",
-  not_sure_mixed: "",
+  not_sure_mixed: "dashed=1;dashPattern=12 5 2 5;",
   not_sure_insufficient: "dashed=1;dashPattern=6 5;",
-  leaning_against: "dashed=1;dashPattern=12 5;",
+  leaning_against: "dashed=1;dashPattern=12 5 2 5 2 5;",
   against: "dashed=1;dashPattern=2 5;",
 };
 const drawioEdge = (verdict: Verdict) => `strokeColor=${VERDICT_HEX[verdict]};${DRAWIO_DASH[verdict]}`;

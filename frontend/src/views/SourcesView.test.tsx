@@ -797,13 +797,13 @@ describe("SourceDossierBody, one type scale (round 12)", () => {
       </TooltipProvider>,
     );
     const reference = screen.getByTestId("dossier-reference");
-    expect(reference.textContent).toMatch(/^Sampleton A, Mockford C \(2022\)\. BMJ Open\. doi\.org\/10\.1000\/example\.1$/);
+    expect(reference.textContent).toMatch(/^Sampleton A, Mockford C \(2022\)\. BMJ Open\. doi\.org\/10\.1000\/example\.1\s*\(opens in new tab\)$/);
     const facts = document.querySelector('dl[aria-label="About this source"]') as HTMLElement;
     expect(facts).not.toBeNull();
     const labels = within(facts).getAllByRole("term").map((term) => term.textContent);
     expect(labels).toEqual(["Evidence type", "Why this type", "Strength", "Status", "Year", "Origin"]);
     // The actions at the foot.
-    const open = screen.getByRole("link", { name: "Open original" });
+    const open = screen.getByRole("link", { name: /^Open original\s*\(opens in new tab\)$/ });
     expect(open.closest("footer")).not.toBeNull();
     expect(open).toHaveAttribute("rel", "noopener noreferrer");
   });

@@ -46,7 +46,7 @@ export function useRecordedToast() {
 
 /** A field's control: Paper, a Line 2 hairline, square, 40 px, Body words. */
 export const INPUT_CLASS =
-  "h-10 w-full min-w-0 border border-line-2 bg-paper px-3 text-body text-ink placeholder:text-grey " +
+  "h-10 w-full min-w-0 border border-navy bg-paper px-3 text-body text-ink placeholder:text-grey " +
   "aria-[invalid=true]:border-red";
 
 /** The filters row's search: filters the loaded list as you type. */
@@ -218,7 +218,7 @@ export function SearchSelect({
           className={cn(
             "relative inline-flex h-10 w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-body text-ink",
             "transition-colors duration-150",
-            open ? "border-navy" : invalid ? "border-red" : "border-line-2",
+            invalid && !open ? "border-red" : "border-navy",
             className,
           )}
         >
@@ -248,7 +248,7 @@ export function SearchSelect({
             create?.clearError();
           }}
           onKeyDown={onFilterKeyDown}
-          className="mb-1 h-10 w-full border border-line-2 bg-paper px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue"
+          className="mb-1 h-10 w-full border border-navy bg-paper px-3 text-body text-ink placeholder:text-grey focus-visible:outline-2 focus-visible:outline-blue"
         />
         <ul
           ref={listRef}
@@ -572,7 +572,7 @@ export function Dialog({
           }}
           className={cn(
             "anim-centre-in fixed left-1/2 top-[12vh] z-50 flex max-h-[76vh] w-[min(34rem,calc(100vw-32px))] -translate-x-1/2 flex-col",
-            "border border-line-2 bg-paper shadow-overlay focus-visible:outline-none",
+            "border border-line-2 bg-paper shadow-overlay focus-visible:outline-hidden",
           )}
         >
           <DialogPrimitive.Title className="px-6 pt-5 font-sans text-lead font-bold text-navy">
@@ -665,6 +665,7 @@ export function RowMenu({ id, label, items }: { id?: string; label: string; item
         <div
           ref={menuRef}
           role="menu"
+          tabIndex={-1}
           aria-label={label}
           className="py-1"
           onKeyDown={(event) => moveMenuFocus(event, menuRef.current)}

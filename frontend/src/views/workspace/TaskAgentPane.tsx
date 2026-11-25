@@ -46,6 +46,7 @@ import { BASELINE_GATE_KIND } from "./checkInPresentation";
 import type { components } from "../../api/gen/types";
 import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
 import { ActionLine } from "./ActionLine";
+import { DoneAnnouncer } from "../../ui/feedback/DoneAnnouncer";
 import { GrowBox } from "./GrowBox";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
@@ -57,6 +58,7 @@ import { useNow } from "../../lib/freshness";
 import { TocCodeText } from "../toc/codeLinks";
 import { CitationMarker } from "../toc/Documents";
 import { AttachFileButton, UploadPreview } from "../toc/uploads";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 /** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
@@ -295,7 +297,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] disabled:bg-ground disabled:text-grey"
+          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-navy bg-paper px-3 py-2.5 text-lead [field-sizing:content] disabled:bg-ground disabled:text-grey"
         />
         {onAttach !== undefined && (
           <AttachFileButton
@@ -361,10 +363,10 @@ function UploadThumb({ text }: { text: string }) {
       className="mb-2 block w-fit"
       imageClassName="max-h-40 max-w-[16rem] border border-line bg-paper object-contain"
       pdf={(url) => (
-        <a href={url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
+        <ExternalLink href={url} className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
           <PaperclipIcon aria-hidden="true" />
           {name}
-        </a>
+        </ExternalLink>
       )}
     />
   );
@@ -442,9 +444,9 @@ function TaskAgentBubble({
                 <li key={source.n}>
                   <span className="mr-1 text-grey">[{source.n}]</span>
                   {source.url ? (
-                    <a href={source.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                    <ExternalLink href={source.url} className="text-blue underline underline-offset-[3px]">
                       {scrub(source.title)}
-                    </a>
+                    </ExternalLink>
                   ) : (
                     scrub(source.title)
                   )}
@@ -1127,6 +1129,7 @@ export function TaskAgentPane({
           bar's reconnecting line, at the top of this column so it starts
           after the rail. In the sidebar the page's own bar carries it. */}
       {!compact && <ReconnectingBanner connectionStatus={stream.connectionStatus} />}
+      <DoneAnnouncer busy={transcript.isSubmitting} words="The Task Agent replied" />
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

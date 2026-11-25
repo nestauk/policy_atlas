@@ -1136,6 +1136,7 @@ function ClaimSpan({
           button. A real <button> around the words would be an atomic inline
           block that could never wrap mid-line. */}
       <Tooltip content={tip}>
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a pointer shortcut; the marker button after the words is the keyboard and screen reader control */}
         <span
           onClick={() => onOpen(claim)}
           className={
@@ -1619,12 +1620,14 @@ export function PlaceholderLines({
   const widths = PLACEHOLDER_WIDTHS[index % PLACEHOLDER_WIDTHS.length];
   return (
     <div
-      aria-hidden="true"
+      aria-hidden={leaving ? true : undefined}
       data-testid={leaving ? "placeholder-lines-leaving" : "placeholder-lines"}
       className={`flex max-w-prose-measure flex-col gap-4 py-2 max-md:gap-3.5 ${still ? "" : "anim-breathe"} ${className}`}
     >
+      {/* The bars say nothing to a screen reader; these words do. */}
+      {!leaving && <span className="sr-only">Not written yet.</span>}
       {widths.map((width, line) => (
-        <span key={line} className="block h-2.5 bg-line" style={{ width: `${width}%` }} />
+        <span key={line} aria-hidden="true" className="block h-2.5 bg-line" style={{ width: `${width}%` }} />
       ))}
     </div>
   );
@@ -3412,6 +3415,7 @@ function ScopingResult({ taskId, building }: { taskId: string; building: boolean
         )
       ) : longlist.isPending ? (
         <main aria-busy="true" aria-label="Loading the longlist" className={`${LIFECYCLE_PAGE_CLASS} py-8`}>
+          <p role="status" className="sr-only">Loading the longlist…</p>
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="mb-4 h-16 anim-breathe border border-line bg-paper-2" />
           ))}
@@ -3679,6 +3683,7 @@ function ArtefactReport() {
   if (artefact.isPending) {
     return (
       <main aria-busy="true" aria-label="Loading the report" className={`${LIFECYCLE_PAGE_CLASS} py-8`}>
+        <p role="status" className="sr-only">Loading the report…</p>
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="mb-4 h-24 anim-breathe border border-line bg-paper-2" />
         ))}
@@ -3867,7 +3872,7 @@ function ArtefactReport() {
             <h1
               ref={baseline && !swap.swapped ? baselineTitle : undefined}
               tabIndex={baseline ? -1 : undefined}
-              className={cn(REPORT_TITLE_CLASS, baseline && "outline-none")}
+              className={cn(REPORT_TITLE_CLASS, baseline && "outline-hidden")}
             >
               {scrub(baseline ? data.title : (question ?? data.title))}
             </h1>

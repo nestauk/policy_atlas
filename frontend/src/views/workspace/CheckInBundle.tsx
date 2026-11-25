@@ -208,7 +208,7 @@ export function CheckInBundle({
                         value={renameText}
                         onChange={(event) => setRenameText(event.target.value)}
                         aria-label={`New name for ${theme.name}`}
-                        className="flex-1 border border-line-2 px-1.5 py-0.5 text-body"
+                        className="flex-1 border border-navy px-1.5 py-0.5 text-body"
                       />
                       <Button
                         size="sm"
@@ -300,14 +300,14 @@ export function CheckInBundle({
                       maxLength={200}
                       onChange={(event) => setRowTitle(event.target.value)}
                       aria-label="Section title"
-                      className="border border-line-2 px-1.5 py-0.5 text-body"
+                      className="border border-navy px-1.5 py-0.5 text-body"
                     />
                     <input
                       value={rowFocus}
                       maxLength={200}
                       onChange={(event) => setRowFocus(event.target.value)}
                       aria-label="What it covers"
-                      className="border border-line-2 px-1.5 py-0.5 text-body"
+                      className="border border-navy px-1.5 py-0.5 text-body"
                     />
                     <span className="flex gap-1.5">
                       <Button
@@ -373,7 +373,7 @@ export function CheckInBundle({
                 onChange={(event) => setRowTitle(event.target.value)}
                 aria-label="New section title"
                 placeholder="Section title"
-                className="border border-line-2 px-1.5 py-0.5 text-body"
+                className="border border-navy px-1.5 py-0.5 text-body"
               />
               <input
                 value={rowFocus}
@@ -381,7 +381,7 @@ export function CheckInBundle({
                 onChange={(event) => setRowFocus(event.target.value)}
                 aria-label="What the new section covers"
                 placeholder="What it covers"
-                className="border border-line-2 px-1.5 py-0.5 text-body"
+                className="border border-navy px-1.5 py-0.5 text-body"
               />
               <span className="flex gap-1.5">
                 <Button

@@ -166,7 +166,7 @@ export function LonglistGrid({
       </div>
       )}
       <div className="-mx-6 overflow-x-auto px-6">
-        <table className="w-full min-w-[640px] table-fixed border-collapse text-left">
+        <table aria-label="Longlist options" className="w-full min-w-[640px] table-fixed border-collapse text-left">
           <thead>
             <tr>
               <th scope="col" className={cn(HEADER_CELL_CLASS, "w-44 pl-0")}>
@@ -281,6 +281,7 @@ function ExcludedMark({ line }: { line: string }) {
     <WithTooltip note={line || undefined}>
       <span
         role="img"
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focusable so its tooltip, the exclusion line, opens from the keyboard
         tabIndex={0}
         aria-label={line || "Excluded"}
         data-testid="tile-excluded"

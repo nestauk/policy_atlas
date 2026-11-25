@@ -268,14 +268,14 @@ Nesta's core palette at tool density: one hero, a structural navy, warm-neutral 
 - **Green** (#18a48c): complete. As a solid fill only on the "go" action that starts a run; otherwise as **Green Tint** (#e7f5f2) with deep green text (#0c6b5a).
 - **Yellow** (#fdb633): pending, and the middle tone square (Moderate and Limited strength, Abstract only). **Yellow Tint** (#fff6e3) chips with brown text (#8a5a00). Yellow does not mark a live run: live work is the blue mark (see Status mark).
 - **Orange** (#ff6e47): paused or interrupted, the one "waiting on you" colour. The paused status mark, the check-in's rule and glow, and the interrupted-run banner border.
-- **Red** (#eb003b): failed, error, and the sensitive-information banner (solid red, white text). Status mark, error text and **Red Tint** (#fde8ed) surfaces.
+- **Red** (#eb003b): failed, error, and the sensitive-information banner (solid red, white text). Status mark, error text and **Red Tint** (#fde8ed) surfaces. **Red Deep** (#b8002e) is small red text on Red Tint or on the Ground, where Red is under 4.5:1.
 - **Purple** (#9a1bbe), **Violet** (#a59bee), **Pink** (#f6a4b7), **Sand** (#d2c9c0): Nesta secondaries defined as tokens but unused in the built UI. The evidence-distribution charts use Navy bars on Line grid lines, Electric Blue only on the bar under the pointer. The animated fold mark uses its own pastels (sand #ECC77F, teal #6FBFA7, salmon #F09B80, pink #E8B9C8), which are not theme tokens.
 
 ### Neutral
 - **Ink** (#1c1c1e): body text.
-- **Grey** (#646363): secondary text, pane headings, meta and caption copy, disabled ghost labels. AAA on white.
+- **Grey** (#646363): secondary text, pane headings, meta and caption copy, disabled ghost labels. 5.99:1 on white (AA).
 - **Line** (#e4e4e7): dividers, nav and footer borders, tab rails, table frames.
-- **Line 2** (#d3d3d8): card and control borders, disabled fills, locked lifecycle tabs, placeholder bars.
+- **Line 2** (#d3d3d8): card, chip and button borders (never the border of a field, which is Navy), disabled fills, locked lifecycle tabs, placeholder bars.
 - **Ground** (#f4f4f5): the app background and the task-level nav bar.
 - **Paper** (#ffffff): every surface that holds content. **Paper 2** (#fafafa) for a barely-lower sheet and a table row under the pointer.
 
@@ -307,7 +307,7 @@ Both faces are licensed. Their binaries are never committed to the public reposi
 - **Caption** (400 to 600, 12px, 1.4): eyebrows, fine print, tooltip text, citation markers, user email in the account menu.
 - **Label** (700 or 800, 14px, uppercase, tracking 0.06em, Grey): pane headings (Extrabold), plan-step and check-in eyebrows (Bold; the check-in eyebrow is Electric Blue), report outline headings. The conversation list, table headers and the settled scope card's group labels use the same treatment at Caption size.
 - **Chip** (600, 11.5px): a deliberate off-scale token. Chips sit below caption text (owner ruling).
-- **Hero** (`text-hero`, clamp 40 to 68px, 1.02) and **Hero 2** (`text-hero-2`, clamp 28 to 40px, 1.1): the splash page's two responsive headlines, named tokens because the splash persuades rather than operates. Splash prose is Lead.
+- **Hero** (`text-hero`, clamp 2.5 to 4.25rem, 1.02) and **Hero 2** (`text-hero-2`, clamp 1.75 to 2.5rem, 1.1), in rem so they grow with browser zoom: the splash page's two responsive headlines, named tokens because the splash persuades rather than operates. Splash prose is Lead.
 
 ### Named Rules
 **The Sixteen Floor Rule.** Body prose never renders below 16px. Meta and caption sizes are for labels, cells and markers, never for sentences a reader must read.
@@ -362,7 +362,7 @@ The signature form is the Nesta cut corner: a 45° clip removing 10px from the t
 
 Borders are 1px hairlines. Active and selected states are expressed as a 3px bottom rule in Electric Blue (nav, lifecycle tabs, Sources subtabs) or a 2px rule (the Mine / Organisation switcher), never as a filled pill.
 
-**The Focus Rule.** Focus is a 2px Electric Blue outline offset 2px, set once in `index.css` for every focusable element, so no control falls back to the browser's ring. A control that cannot show an outside ring draws it inside: the cut-corner buttons carry a 2px white ring inset 4px, because their clip-path clips anything outside the box; a row flush against its frame insets the blue ring 2px; the white splash button insets a Navy ring; controls on the navy splash hero ring in Aqua.
+**The Focus Rule.** Focus is a 2px Electric Blue outline offset 2px, set once in `index.css` for every focusable element, so no control falls back to the browser's ring. A control that cannot show an outside ring draws it inside: the cut-corner buttons carry a 2px white ring inset 4px, because their clip-path clips anything outside the box; a row flush against its frame insets the blue ring 2px; the white splash button insets a Navy ring; controls on the navy splash hero ring in Aqua. Controls on the navy plan panel ring in white (blue on Navy is 1.7:1). A focus ring is never removed with `outline-none`, which draws nothing in Windows High Contrast: an element that takes focus from code and needs no ring uses `outline-hidden`. Every `hover:` style also applies on keyboard focus (one custom variant in `index.css`), so a control looks the same under the keyboard as under the mouse. A new cut-corner element must carry its own inset ring; `ui/brand/cutoutFocus.test.ts` fails without it.
 
 **The fold mark** is the one piece of geometry with personality: a 17px diamond, a square sheet whose four corners have folded to the centre. It sits before the wordmark in the nav, marks each chat in the conversation rail, and forms the animated constellation on the splash page. It is also the live mark: while a run is live it turns through 36 frames of folding and rotating in its own pastels, snapping shut to solid blue between sheets, in the trace's top line, the run status bar and the section being written (14px in text lines), and the working line (what the agent is doing now) carries it too. It turns only while the stream is open and the run is live, and holds still when the connection is down or motion is reduced. The nav wordmark's mark and the rail's mark never turn; a running task's list row takes the breathing blue square, so every row's mark is one size.
 
@@ -403,7 +403,7 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 - **Shape:** square with a 10px top-right cut on primary (8px on small). Secondary and ghost have no cut.
 - **Primary:** Electric Blue fill, white Averta Bold at Meta size, 18px horizontal and 11px vertical padding. Hover deepens to #0000d6. Disabled is Line 2 fill with white text, present but inert. One per view.
 - **Entry size:** the list pages' primary, the New Task submit and Start run use the same cut shape at Body size: 52px tall, at least 144px wide, 24px side padding, the label centred and never wrapped.
-- **Start run:** the one action that starts a search is the entry-size cut shape in Green (#18a48c), hover #147a6c. It is the only green fill in the system and the only non-blue cut corner.
+- **Start run:** the one action that starts a search is the entry-size cut shape in Green Pressed (#147a6c), hover Green Deep (#0c6b5a): white on Green itself is 3.12:1. It is the only green fill in the system and the only non-blue cut corner.
 - **Secondary:** transparent, Navy Semibold, 14px horizontal padding, hover fills #f0f0f3.
 - **Outline:** the secondary with a 1px Line 2 border on Paper. Pagination, Show more, Download, and the bordered actions inside a check-in or plan card.
 - **Outline switch:** joined outline buttons, the chosen one with a Navy border and Navy words, the others Grey; never a fill, which belongs to the one primary. Used for the screening choice, Group by, View as and List / Map.
@@ -436,11 +436,11 @@ Precise and unadorned. Hard edges, hairline borders, no decoration. The cut corn
 - **The fold** eases height and opacity over 200ms. **Print** opens everything and prints no disclosure words.
 
 ### Inputs / Fields
-- **Style:** Paper fill, 1px Line 2 border, 12px by 10px padding, Lead size, square. The composer textarea grows with content (`field-sizing: content`) between 56px and 240px.
-- **Focus:** 2px Electric Blue outline. Splash fields instead turn their border blue.
+- **Style:** Paper fill, 1px Navy border, 12px by 10px padding, Lead size, square. The border is the only thing that shows where a field is, so it must reach 3:1 against the page (WCAG 1.4.11): Line 2 is 1.49:1. The same holds for an unchecked checkbox or radio. The composer textarea grows with content (`field-sizing: content`) between 56px and 240px.
+- **Focus:** 2px Electric Blue outline.
 - **Error / Disabled:** error border Red with a red Body-size message beneath; disabled is Ground fill with Grey text.
 - **Bare variant:** the New Task question field has no border or fill. It is Lead text on the paper card, its box holding the question alone.
-- **Dropdown:** the one select in the app, styled, never the browser default (owner ruling); no native `<select>` outside the Sources filter bar's own listboxes. The trigger is the field with the chevron, a Navy border while open, at 40px with Body words or 32px with Meta words in a card or panel. The list is the popover, 40px Meta rows, Blue Wash on hover and on the chosen one. A select-only combobox: Enter, Space or an arrow opens it; arrows, Home, End and a first letter move; Enter picks; Escape or a press outside closes and returns focus. On a phone it opens as the popover does, never the platform's picker.
+- **Dropdown:** the one select in the app, styled, never the browser default (owner ruling); no native `<select>` outside the Sources filter bar's own listboxes. The trigger is the field with the chevron and its Navy border, at 40px with Body words or 32px with Meta words in a card or panel. The list is the popover, 40px Meta rows, Blue Wash on hover and on the chosen one. A select-only combobox: Enter, Space or an arrow opens it; arrows, Home, End and a first letter move; Enter picks; Escape or a press outside closes and returns focus. On a phone it opens as the popover does, never the platform's picker.
 
 ### Navigation
 - **Top nav:** 64px, Paper, hairline bottom border. Wordmark left (fold mark, "Policy" Navy, "Atlas" Electric Blue) with a blue BETA chip carrying a tooltip. Links right at Lead Semibold Navy.

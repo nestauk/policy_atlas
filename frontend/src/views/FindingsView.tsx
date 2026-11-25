@@ -457,7 +457,7 @@ export function FindingsView() {
       )}
 
       {findings.isPending && (
-        <div aria-busy="true" aria-label="Loading findings" className="mt-5 space-y-2">
+        <div role="status" aria-busy="true" aria-label="Loading findings" className="mt-5 space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-16 anim-breathe border border-line bg-paper-2" />
           ))}
@@ -478,14 +478,14 @@ export function FindingsView() {
             {profile !== undefined || group !== undefined ? " match the filters" : ""}
           </p>
           <div className="mt-2 overflow-x-auto bg-paper shadow-paper ring-1 ring-line">
-            <table className="w-full text-left">
+            <table aria-label="Findings" className="w-full text-left">
               <thead className={`border-b border-line bg-paper-2 ${TABLE_HEADER_TEXT_CLASS}`}>
                 <tr>
-                  <th className="w-8 px-3 py-2.5">
+                  <th scope="col" className="w-8 px-3 py-2.5">
                     <span className="sr-only">Expand</span>
                   </th>
                   {showKind && (
-                    <th className="px-3 py-2.5">
+                    <th scope="col" className="px-3 py-2.5">
                       Kind
                     </th>
                   )}
@@ -493,6 +493,7 @@ export function FindingsView() {
                     (heading) => (
                       <th
                         key={heading}
+                        scope="col"
                         className="px-3 py-2.5"
                       >
                         {heading}

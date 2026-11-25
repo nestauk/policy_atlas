@@ -7,6 +7,7 @@ import { useLonglist, useOptions, usePlan, useTask } from "../../api/queries";
 import { actionFailedNotice } from "../../lib/errors";
 import { Figures } from "../../lib/figures";
 import { scrub } from "../../lib/scrub";
+import { useDocumentTitle } from "../../lib/title";
 import { countOf } from "../../lib/vocabulary";
 import { Button } from "../../ui/brand/Button";
 import { StatusMark } from "../../ui/brand/Card";
@@ -433,6 +434,7 @@ type GroupAction = { label: string; include: boolean; tooltip?: string; disabled
 export function Longlist({ taskId, longlist: finished }: { taskId: string; longlist?: LonglistOut }) {
   const building = finished === undefined;
   const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, "Longlist");
   // The public link reads the list; it adds nothing. The plan is
   // an owner-only read: asking for it without a sign-in sends the reader to
   // sign in, so the public link never asks.
@@ -669,7 +671,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       {/* The first screen is the title, the question, one count line and the
           options. */}
       <header className="mb-4">
-        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none")}>
+        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-hidden")}>
           Longlist
         </h1>
         {question !== "Longlist" && (

@@ -34,4 +34,18 @@ describe("ChatComposer", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Send" }));
     expect(onSend).not.toHaveBeenCalled();
   });
+
+  it("gives the field focus back when a reply has finished streaming", async () => {
+    const props = { conversationId: "c1", onSend: vi.fn(), onStop: vi.fn() };
+    const view = render(<ChatComposer {...props} isStreaming={false} />);
+    await userEvent.setup().click(screen.getByLabelText("Message the Agent"));
+
+    // The field leaves while the reply streams, and focus falls to the page.
+    view.rerender(<ChatComposer {...props} isStreaming />);
+    expect(screen.queryByLabelText("Message the Agent")).not.toBeInTheDocument();
+    expect(document.body).toHaveFocus();
+
+    view.rerender(<ChatComposer {...props} isStreaming={false} />);
+    expect(screen.getByLabelText("Message the Agent")).toHaveFocus();
+  });
 });

@@ -19,6 +19,7 @@ import { CriticalIcon } from "./ReadingGuide";
 import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
 import type { PanelWidth } from "../workspace/usePanelWidth";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
+import { ExternalLink } from "../../ui/brand/ExternalLink";
 
 export type Selection = { kind: "box" | "link"; id: string };
 
@@ -180,9 +181,9 @@ function BoxDetail({
                   {scrub(sourceLine(study.source_type, study.authors, study.year))}
                   {" · "}
                   {study.url !== null ? (
-                    <a href={study.url} target="_blank" rel="noreferrer" className={SOURCE_TITLE_LINK_CLASS}>
+                    <ExternalLink href={study.url} className={SOURCE_TITLE_LINK_CLASS}>
                       {scrub(study.title)}
-                    </a>
+                    </ExternalLink>
                   ) : (
                     scrub(study.title)
                   )}
@@ -241,6 +242,7 @@ function LinkDetail({
         )}
         {link.critical ? (
           <Tooltip content={CRITICAL_DEFINITION} className="max-w-sm text-body text-ink">
+            {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focusable so its tooltip, the definition, opens from the keyboard */}
             <span tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-2">
               Critical connection
             </span>

@@ -969,3 +969,37 @@ describe("AppShell — round 14 (owner)", () => {
     expect(screen.getByTestId("task-scroll-pane").scrollTop).toBe(0);
   });
 });
+
+describe("AppShell — finding the page from the keyboard", () => {
+  beforeEach(() => {
+    taskState.isOwner = true;
+    taskState.capability = "evidence_search";
+  });
+
+  it("offers a skip link first, which moves focus to the page's pane", async () => {
+    const user = userEvent.setup();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    await user.tab();
+    const skip = screen.getByRole("link", { name: "Skip to main content" });
+    expect(skip).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("task-scroll-pane")).toHaveFocus();
+  });
+
+  it("moves focus to the page's pane after a route change", async () => {
+    const user = userEvent.setup();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const nav = screen.getByRole("navigation", { name: TASK.one });
+    await user.click(within(nav).getByRole("link", { name: /^Share/ }));
+    expect(screen.getByTestId("task-scroll-pane")).toHaveFocus();
+  });
+
+  it("marks Tasks as the current section on a task page and the current page on the list", () => {
+    const { unmount } = renderShell(`/tasks/${TASK_ID}/sources`);
+    const tasks = () => within(screen.getByRole("navigation", { name: "App" })).getByRole("link", { name: TASK.many });
+    expect(tasks()).toHaveAttribute("aria-current", "true");
+    unmount();
+    renderShell("/");
+    expect(tasks()).toHaveAttribute("aria-current", "page");
+  });
+});

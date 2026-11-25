@@ -68,6 +68,7 @@ import "./sources.css";
 import { formatCount } from "../lib/format";
 import { LIST_CONTROL_CLASS, ListEmpty, ListError } from "../ui/brand/list/ListStates";
 import { ListFootRow, Pagination } from "../ui/brand/list/ListFoot";
+import { ExternalLink } from "../ui/brand/ExternalLink";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -495,7 +496,7 @@ export function SourcesView() {
           <ArrivalProvider settled={firstPaintDone} scopeKey={`${taskId}?${viewKey}`}>
           <Arrival arrivalId="sources-table">
             <div className="sources-frame">
-              <table role="table" className="sources-table">
+              <table role="table" aria-label="Sources" className="sources-table">
                 <SourcesColumns />
                 {header}
                 <tbody role="rowgroup">
@@ -1060,7 +1061,7 @@ function YearFilter({
   onChange: (from: number | undefined, to: number | undefined) => void;
 }) {
   const range = yearRangeLabel(from, to);
-  const field = "mt-1 h-10 w-full border border-line-2 bg-paper px-3 text-meta font-normal text-navy";
+  const field = "mt-1 h-10 w-full border border-navy bg-paper px-3 text-meta font-normal text-navy placeholder:text-grey";
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -1539,9 +1540,9 @@ export function SourceDossierBody({
       )}
       {href && (
         <footer className="border-t border-line pt-4">
-          <a href={href} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <ExternalLink href={href} className={buttonVariants({ variant: "outline", size: "sm" })}>
             Open original
-          </a>
+          </ExternalLink>
         </footer>
       )}
     </div>

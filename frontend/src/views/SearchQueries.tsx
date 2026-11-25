@@ -241,7 +241,7 @@ function QueriesTable({
   className?: string;
 }) {
   return (
-    <table className={cn("w-full table-fixed border-line text-left text-meta", className)}>
+    <table aria-label="Search queries" className={cn("w-full table-fixed border-line text-left text-meta", className)}>
       <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
         <tr>
           <th scope="col" className="py-2 pr-4">

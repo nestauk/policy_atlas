@@ -121,10 +121,27 @@ function nearestScrollRoot(start: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/** Scroll the report pane — not the window — so the section sits at the top. */
-function scrollSectionIntoView(id: string): void {
+/** Move focus to a section's heading, so the next Tab starts in the section
+ *  and a screen reader reads from it. */
+function focusSection(target: HTMLElement): void {
+  const heading = target.matches("h1,h2,h3,h4") ? target : (target.querySelector<HTMLElement>("h1,h2,h3,h4") ?? target);
+  if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+  heading.focus({ preventScroll: true });
+}
+
+/**
+ * Scroll the report pane — not the window — so the section sits at the top.
+ *
+ * Args:
+ *   id: The section's element id.
+ *   focus: Also move focus to the section's heading. For a reader's own
+ *     press on a contents link; a hash read as the page opens leaves focus
+ *     where it is.
+ */
+function scrollSectionIntoView(id: string, focus = false): void {
   const target = document.getElementById(id);
   if (target == null) return;
+  if (focus) focusSection(target);
   const root = nearestScrollRoot(target);
   if (root == null) {
     target.scrollIntoView({ block: "start" });
@@ -294,13 +311,18 @@ export function FullReportExpandAllButton() {
  *  then scroll — even if the section was already open. */
 export function useOpenWhenNavigated(id: string, setOpen: (open: boolean) => void): void {
   const [navTick, setNavTick] = useState(0);
+  // True for a reader's own press on a contents link, which moves focus to
+  // the section too; a hash read as the page opens does not.
+  const pressed = useRef(false);
   useEffect(() => {
     const go = () => {
       setOpen(true);
       setNavTick((tick) => tick + 1);
     };
     const onSidebar = (event: Event) => {
-      if ((event as CustomEvent<string>).detail === id) go();
+      if ((event as CustomEvent<string>).detail !== id) return;
+      pressed.current = true;
+      go();
     };
     const onHash = () => {
       if (hashTargets(id)) go();
@@ -316,7 +338,8 @@ export function useOpenWhenNavigated(id: string, setOpen: (open: boolean) => voi
 
   useLayoutEffect(() => {
     if (navTick === 0) return;
-    scrollSectionIntoView(id);
+    scrollSectionIntoView(id, pressed.current);
+    pressed.current = false;
   }, [navTick, id]);
 }
 
@@ -351,7 +374,7 @@ function requestScrollToSection(id: string): void {
   if (window.location.hash !== next) {
     history.replaceState(null, "", `${window.location.pathname}${window.location.search}${next}`);
   }
-  scrollSectionIntoView(id);
+  scrollSectionIntoView(id, true);
 }
 
 /**
@@ -842,7 +865,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
               sources' tables it introduces. */}
           <p className="max-w-prose-measure text-body text-grey">
             The rest of this section covers only the cited sources;{" "}
-            <Link to={`/tasks/${taskId}/sources/landscape`} className={LINK_CLASS}>
+            <Link to={`/tasks/${taskId}/sources/landscape`} className={cn(LINK_CLASS, "underline")}>
               the Landscape tab
             </Link>{" "}
             shows the whole search.

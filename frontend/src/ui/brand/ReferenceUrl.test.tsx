@@ -6,7 +6,7 @@ import { ReferenceUrl } from "./ReferenceUrl";
 describe("ReferenceUrl", () => {
   it("shows the address without its scheme and opens it in a new tab", () => {
     render(<ReferenceUrl url="https://doi.org/10.1000/x/" />);
-    const link = screen.getByRole("link", { name: "doi.org/10.1000/x" });
+    const link = screen.getByRole("link", { name: /^doi\.org\/10\.1000\/x\s*\(opens in new tab\)$/ });
     expect(link).toHaveAttribute("href", "https://doi.org/10.1000/x/");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
