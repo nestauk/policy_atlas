@@ -1,7 +1,7 @@
 # Task contract: 071-self-signup-staging
 
-> **Status:** drafted 2026-11-25. Scope agreed by the owner in chat (2026-11-25, § Owner
-> rulings). Contract approved (before planning): _pending_ · Plan approved (before
+> **Status:** drafted 2026-11-25; Codex contract review folded in the same day (§ Contract
+> review). Scope agreed by the owner in chat (2026-11-25, § Owner rulings). Contract approved (before planning): _pending_ · Plan approved (before
 > implementation): _pending_ · ADR: an amendment to
 > [ADR 0046](../../adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md),
 > written when both approvals are given. Branch `task/071-self-signup-staging`. Tier 4
@@ -89,13 +89,17 @@ an optional `cohort_ids` list (default empty, at most 10, no repeats).
 the ordinary 404 and changes nothing.
 
 **B3.** The enrolment and the cohort memberships are one database transaction. If a cohort
-insert fails, nothing is committed.
+insert fails, no database change is committed. Cognito is called before the commit, as today
+(ADR 0046, accepted limits): an account that Cognito already made stays, and the same call
+can be sent again safely, because the second call finds the account and sends no second
+invitation.
 
 **B4.** A person who already has the account, or is already in a cohort, is not an error:
 the membership is added where it is missing (`add_to_cohort` already behaves so).
 
-**B5.** Each membership writes one `cohort.add` audit row with the target form the People
-list uses (`<user_id>/cohort/<cohort_id>`).
+**B5.** Each **new** membership writes one `cohort.add` audit row with the target form the
+People list uses (`<user_id>/cohort/<cohort_id>`). A membership that already existed writes
+no row.
 
 **B6.** The refusals of today do not change (another organisation, deactivated on Approve,
 Cognito refusal). A refused call adds no cohort.
@@ -105,18 +109,28 @@ Cognito refusal). A refused call adds no cohort.
 
 ## Part C — add many people from a file
 
-**C1. The file.** CSV (comma-separated values) text in UTF-8; a byte-order mark at the
-start is accepted (Excel writes one). The first line is a header. The columns `email` and
-`name` are required, in any order and any letter case. Any other column is an error. At
-most 500 people and 200,000 characters.
+**C1. The file.** CSV (comma-separated values) text. The browser decodes the file as UTF-8
+and sends the text; a byte-order mark at the start is accepted (Excel writes one). The rules:
+
+- The first line is a header. The columns `email` and `name` are required, in any order and
+  any letter case. Any other column, or the same column twice, is an error.
+- A blank line is skipped.
+- A value may be in double quotes (a name with a comma). A value that holds a line break is
+  an error.
+- Quoting that does not follow the CSV rules is an error (the reader runs in strict mode).
+- Text that holds the Unicode replacement character (U+FFFD) is an error: the file was not
+  saved as UTF-8.
+- Two lines with the same email, compared in lower case, are an error.
+- At most 500 people and 200,000 characters.
+- A line number in an answer is the line of the file where the record starts, counting the
+  header as line 1.
 
 **C2. Check route.** `POST /api/v1/ops/people/import-check`, body `{csv}`. It reads the text
 with Python's standard `csv` module and answers `{rows, errors}`:
 
 - `rows`: `{line, email, display_name}` for each good line, with the email in lower case.
-- `errors`: `{line, message}` for each fault. The faults are: no header or a wrong column; an
-  email that fails the Add person rule; an empty name; a name over the Add person limit; an
-  email that is in the file twice; too many people; a file that is too large.
+- `errors`: `{line, message}` for each fault: each rule of C1, an email that fails the Add
+  person rule, an empty name, a name over the Add person limit.
 
 The route writes nothing, calls nothing outside the database, and makes no audit row. It uses
 the same email and name rules as `PersonCreate`, from one place.
@@ -133,7 +147,9 @@ outcome.
 organisation and optional cohorts for the whole file. The page shows the check result. Create
 is disabled while the file has any error. During the run the page shows how many are done.
 At the end it shows the count for each outcome and lists the people who were not added, with
-the reason, and offers Try again for those that failed. States and words: annex § Add many.
+the reason. Try again covers only a failure that a retry can help: no answer, or a server
+error. A refusal (another organisation, an address Cognito refuses) is final and is not
+retried. States and words: annex § Add many.
 
 **C5.** Running the same file again is safe: a person who already has the account in that
 organisation gets no second invitation (the existing rule of `ensure_account_enrolled`).
@@ -144,12 +160,17 @@ organisation gets no second invitation (the existing rule of `ensure_account_enr
 
 **D1. Schema** (one migration after the newest migration on `dev` at build time):
 
-- `invite_link`: `invite_link_id` (key), `code` (unique), `label`, `org_id` (to
-  `organisation`), `allowed_domain` (required, lower case), `max_uses` (above 0),
-  `expires_at`, `revoked_at` (null until revoked), `created_at`, `created_by` (the
-  operator's user id).
-- `invite_link_cohort`: `invite_link_id`, `cohort_id`. A deleted cohort or link removes the
-  row.
+- `invite_link`: `invite_link_id` (uuid, key); `code` (text, unique, a check that it is 12
+  characters of the code alphabet); `label` (text, 1 to 200 characters); `org_id` (to
+  `organisation`, required); `allowed_domain` (text, required, a check that it is lower
+  case); `max_uses` (integer, a check that it is above 0); `expires_at` (timestamp with time
+  zone, required); `revoked_at` (timestamp with time zone, null until revoked); `created_at`
+  (timestamp with time zone); `created_by` (text, the operator's user id, as
+  `ops_action.actor_user_id`).
+- `invite_link_cohort`: `invite_link_id`, `cohort_id`; the pair is the key. A deleted cohort
+  removes its rows.
+- A link is never deleted. There is no delete route and `pa_ops` gets no delete right, so
+  the uses and the reasons on Requests keep their source.
 - `waitlist_entry.invite_code` (text, null): the code a request arrived with.
 - `waitlist_entry.invite_link_id` (to `invite_link`, null): the link the sweep redeemed.
 - One partial index on each of the two new `waitlist_entry` columns (rows where it is set).
@@ -165,19 +186,28 @@ be able to copy the link again later.
 
 **D3. Public route.** `POST /api/v1/waitlist` accepts an optional `invite_code`.
 
-1. The server normalises it: upper case, hyphens and spaces removed. If the result is not 12
+1. The field is text of at most 64 characters, with no pattern. A longer value gets the
+   ordinary 422 of an oversize field, which says nothing about any code. The server
+   normalises the value: upper case, hyphens and spaces removed. If the result is not 12
    characters of the code alphabet, the request is stored with no code. The route never
-   answers 422 for the code and never reads `invite_link`.
-2. The answer is the same as today for every request: a good code, a bad code, no code.
+   reads `invite_link`.
+2. The answer has the same status, the same fields and the same headers for a good code, an
+   unknown code, a malformed code and no code. The values are those of today: the email sent,
+   a new id, the time.
 3. A new email address: the request is stored with the code.
 4. An email address that already has a **waiting** request: the stored request takes the new
-   code. Nothing else on it changes.
+   well-formed code, and replaces an older code. Nothing else on it changes. A request with
+   no code or a malformed code changes nothing. (Why replace: a person whose first link
+   expired can use a new one. The cost is in D11.)
 5. An email address whose request is **stamped** or **rejected**: nothing changes.
 6. The honeypot rule does not change.
 
-**D4. Public form.** The form reads `invite` from the page address
-(`https://<site>/?invite=XXXX-XXXX-XXXX#access`) and sends it as `invite_code`. There is no
-visible code field. The form works as today without it.
+**D4. Public form.** An invite link is `https://<site>/#invite=XXXX-XXXX-XXXX`. The code is
+in the fragment (the part after `#`), which a browser never sends to a server, so it is in
+no CDN or load-balancer log and no referrer. The page reads the code, keeps it in memory,
+removes it from the address bar (`history.replaceState`), scrolls to the form, and sends it
+as `invite_code` with the request. There is no visible code field. The form works as today
+without a code.
 
 **D5. Redemption (the sweep).**
 
@@ -185,17 +215,27 @@ visible code field. The form works as today without it.
    revoked, is before `expires_at`, has uses left, and whose `allowed_domain` equals the
    request's email domain (the same exact, lower-case match as a listed domain).
 2. **Uses** of a link = the number of requests whose `invite_link_id` is that link.
-3. The sweep takes redeemable requests and listed-domain requests together, oldest first. A
-   request that is both is redeemed through the link.
+3. The sweep takes redeemable requests and listed-domain requests together, oldest first.
+   **Precedence:** a redeemable request is redeemed through the link, also when its domain
+   is listed. A request whose code is not redeemable is handled as if it had no code: if
+   its domain is listed it gets the listed-domain account (no link cohorts, no use counted);
+   if not, it waits. So a code can never hold back a listed-domain request.
+   The sweep also runs when no domain is listed.
 4. Redeeming, in one transaction: lock the link row; check rule 1 again; run the existing
    `approve_request` with the link's organisation; add the person to each of the link's
    cohorts; set `invite_link_id`; write the sweep's audit row as today.
+   *Accepted limit:* Cognito is called before the commit. If the database write fails after
+   Cognito made the account, the request stays waiting and the next tick completes it (the
+   account exists, so no second invitation). If the link became full, expired or revoked in
+   between, the request stays on Requests with its reason (D8) and an operator approves it
+   by hand. No new mechanism is built for this rare case.
 5. Two redemptions at the same moment cannot pass `max_uses` (the lock in rule 4).
 6. A person who already has an account in the link's organisation gets no email; the cohorts
    are added and the use is counted.
 7. The terminal outcomes of today do not change: another organisation, deactivated, refused.
    The request shows as Check and no use is counted.
-8. A request whose code is **not** redeemable stays waiting. The sweep writes no audit row
+8. A request whose code is **not** redeemable, in a domain that is not listed, stays
+   waiting. The sweep writes no audit row
    for it and makes no Cognito call. Any number of such requests does not delay a
    redeemable or listed-domain request (the choice is made in the database query, before
    the per-tick limit of 200).
@@ -205,6 +245,15 @@ visible code field. The form works as today without it.
     together, as counted today.
 11. Manual Approve of a request that carries a code works as today. It uses the organisation
     and cohorts the operator picks and does not count as a use.
+12. **One tick at a time.** A tick takes one database lock for its whole run, from the cap
+    read to the last request. A second tick that starts in that time does nothing. Two ops
+    tasks that overlap during a deploy therefore cannot pass `max_per_hour` or `max_uses`.
+13. **A failed request waits before the next try.** Today a request that fails for a passing
+    reason (a Cognito throttle, an outage) is tried again every tick, and every try spends
+    the hourly cap. One such request can spend 60 of the 100. New rule, for listed-domain and
+    link requests alike: a request whose last sweep attempt failed is not tried again for 15
+    minutes. This is read from the audit rows the sweep already writes; there is no new
+    column. This changes the behaviour built in task 065.
 
 **D6. Ops routes** (all behind `require_ops`, each write with an audit row):
 
@@ -213,15 +262,20 @@ visible code field. The form works as today without it.
 - `POST /api/v1/ops/invite-links` — create: `label`, `org_id`, `cohort_ids`, `allowed_domain`,
   `max_uses`, `expires_at`. Audit `invite_link.create`.
 - `POST /api/v1/ops/invite-links/{id}` — change `label`, `max_uses`, `expires_at` only.
-  Audit `invite_link.update`.
+  `max_uses` below the link's current uses is refused, checked under the link row lock. A
+  revoked link cannot be changed. Audit `invite_link.update`.
 - `POST /api/v1/ops/invite-links/{id}/revoke` — set `revoked_at`. Accounts already made
   stay. Audit `invite_link.revoke`.
 - **State** is one of `active`, `expired`, `full`, `revoked`, worked out when read.
 - The web address is built from a new ops-service setting, `PUBLIC_APP_ORIGIN`, which the
   infrastructure code sets from the environment's `domain_name`. It is not a secret.
+- `expires_at` is a full date and time with its zone (RFC 3339). The page offers a date and
+  sends the end of that day in the operator's own time zone.
 - Limits: `max_uses` 1 to 1,000; `expires_at` in the future and at most 90 days ahead;
   `allowed_domain` follows the listed-domain rule (`_normalise_domain`).
-- The code never appears in a log line or an audit row. The audit target is the link's id.
+- The code never appears in a log line of the backend or in an audit row. The audit target
+  is the link's id. The list answer carries the code inside the web address, for ops users
+  only.
 
 **D7. Ops pages.** A new section "Invite links" (list, create, edit, copy the link, revoke
 with a confirmation). States and words: annex § Invite links.
@@ -246,9 +300,17 @@ address ever, at most `max_uses` for each link, at most `max_per_hour` each hour
 that domain, and the public form's puzzle and rate rule. A guessed code gives no answer to
 test against (D3 rule 2) and is useless without a mailbox in the link's domain.
 
+A link holder can also put the link's code on another person's **waiting** request, if the
+holder knows that person's address (D3 rule 4). The result is the same as a new request for
+that address: an invitation to the mailbox owner, in the link's domain only. It cannot stop
+or delay an account (D5 rule 3). A holder of two links for one domain can move a waiting
+person from one link to the other; this is accepted.
+
 ## Part E — staging switch-on
 
-**E1. Before.** Parts A to D are deployed to staging. The Nesta organisation exists with the
+**E1. Before.** Parts A to D are deployed to staging in the order of ADR 0046: build the ops
+pages, update the infrastructure, stop both services, migrate and sync the ops login, start
+the API, then the ops service. The Nesta organisation exists with the
 `nesta.org.uk` domain (`make org-domain-add`). The owner has cleared old `nesta.org.uk`
 requests on the Requests page.
 
@@ -264,15 +326,25 @@ its own small pull request, and a deploy. The production block does not change.
 4. Add person with two cohorts → both cohorts show on People.
 5. A file of three people (one already has an account) → two invitations, three people in
    the organisation and the cohort.
-6. An invite link for a test organisation, a test cohort and the `nesta.org.uk` domain with
-   `max_uses` 1: the first request through the link gets an account in the test organisation
-   and cohort; the second waits on Requests and shows "full".
-7. A revoked link: a request through it waits and shows "revoked".
+6. An invite link for a test organisation and a test cohort, for a domain that is **not**
+   listed and where the owner has two mailboxes, with `max_uses` 1: the first request
+   through the link gets an account in the test organisation and cohort; the second waits
+   on Requests and shows "full". After a revoke, a third request shows "revoked".
+7. Precedence: a link for `nesta.org.uk` (a listed domain) and a test organisation, then
+   revoked: a new Nesta address that requests through it gets an account in Nesta, not in
+   the test organisation.
 
-**E4. Rollback.** Set `self_signup.enabled` to false and deploy: the sweep stops, and both
-listed domains and invite links stop making accounts. Requests keep arriving and wait. The
-schema is removed by `alembic downgrade` to the revision before this task, after both
-services are stopped (the public API writes `invite_code`).
+**E4. Rollback.** The normal rollback is the switch: set `self_signup.enabled` to false and
+deploy. The sweep stops, and both listed domains and invite links stop making accounts.
+Requests keep arriving and wait. One link is stopped by Revoke.
+
+Removing the schema is a last resort and **destroys data**: every link, every stored code
+and the record of which link made which account. It needs the owner's word. The steps: stop
+both services; `alembic downgrade` to the named parent revision of this task's migration
+(recorded in `verification.md`; later migrations must be downgraded first); start an image
+from before this task. An older image also runs safely on the new schema, because the new
+columns are nullable and old code does not name them, so a code rollback alone needs no
+downgrade.
 
 ## Scope / Out of scope
 
@@ -319,16 +391,40 @@ change only through `make openapi-sync`.
 
 | Id | Invariant |
 |---|---|
-| I1 | The answer of `POST /api/v1/waitlist` is the same for every accepted body, whatever the code, the domain or the state of the address. |
+| I1 | The answer of `POST /api/v1/waitlist` has the same status, fields and headers for every accepted body, whatever the code, the domain or the state of the address. Its values are the email sent, a new id and the time. Equal timing is not promised; no code or link lookup runs in the request. |
 | I2 | The public API never reads `invite_link` and never calls Cognito. |
 | I3 | No account is made through a link whose state is not `active`, or for an address outside the link's domain. |
-| I4 | A link never has more uses than `max_uses`. |
-| I5 | A request that cannot be redeemed never delays one that can. |
+| I4 | A link never has more uses than `max_uses`, after a redemption or after an edit. |
+| I5 | A request that cannot be redeemed, or that keeps failing, never stops one that can be redeemed, and a code never holds back a listed-domain request. |
 | I6 | A refused or failed Add person or Approve leaves no cohort membership. |
 | I7 | The import check writes nothing. |
 | I8 | `pa_ops` gains only the grants in D1. |
 | I9 | A rejected request and a deactivated person get no account through a link. |
-| I10 | The invite code is in no log line and no audit row. |
+| I10 | The invite code is in no backend log line, no audit row, and no web address that reaches a server (it travels in the fragment and in the request body only). |
+| I11 | At most one sweep tick runs at a time. |
+
+## Contract review (Codex, read-only, 2026-11-25)
+
+Twelve findings on the contract and ten on the plan. All were adopted. The ones that changed
+this contract:
+
+1. **Critical:** link and listed-domain precedence contradicted itself → D5 rule 3, E3.6, E3.7.
+2. **Critical (plan):** the sweep stopped early with no listed domain → D5 rule 3.
+3. **High:** the code was in the query string, which servers log → D4 (fragment), I10.
+4. **High:** a stranger could change another person's waiting request → D3 rule 4 and D11
+   now state the rule and its ceiling; D5 rule 3 removes the way to hold a request back.
+5. **High:** a request that keeps failing could spend the hourly cap → D5 rule 13.
+6. **High:** an edit could put `max_uses` below the uses → D6, I4.
+7. **High:** "one transaction" hid the Cognito call → B3, D5 rule 4 (accepted limit).
+8. **High:** the rollback was destructive and had no order → E1, E4.
+9. **High (plan):** two overlapping ticks could pass the hourly cap → D5 rule 12, I11.
+10. **Medium:** CSV rules, schema types, the wording of I1, missing rubric rows, retry
+    classes, the audit row for an existing membership, the code's length bound → C1, C4, D1,
+    D3 rule 1, D6, I1, B5 and the rubric.
+
+**Reopened for the owner** (material changes since the scope was agreed): D5 rule 13 changes
+how the existing sweep retries; D3 rule 4 lets a new code replace an old one; D4 fixes the
+form of the link.
 
 ## Public / private boundary
 

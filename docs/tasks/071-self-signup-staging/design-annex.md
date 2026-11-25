@@ -26,7 +26,8 @@ The states and words for the surfaces of [contract.md](contract.md). Terms: cont
 - **Intro:** "Tell us a little about yourself. If your organisation already has access, we
   email your sign-in details in a few minutes. If not, we review your request and get in
   touch."
-- **With an invite code in the address**, one line above the first field: "You are using an
+- **With an invite code in the address** (`/#invite=…`): the page scrolls to the form and
+  removes the code from the address bar. One line above the first field: "You are using an
   invite link."
 - **Success:** "Thanks. Check your email in a few minutes. If nothing arrives, we are
   reviewing your request and will get in touch. Already have an account? Use Sign in."
@@ -60,7 +61,8 @@ A switch at the top of Add person: "One person" · "Many from a file".
 - **Checking:** "Checking the file…"
 - **Check failed (errors):** "This file has <n> problems. Correct the file and choose it
   again." Then a list: "Line 7: this is not an email address." · "Line 12: this email is
-  already on line 3." · "The file needs the columns email and name." · "A file can hold at
+  already on line 3." · "This file is not saved as UTF-8. Save it as CSV UTF-8 and choose it
+  again." · "Line 9: a name cannot hold a line break." · "The file needs the columns email and name." · "A file can hold at
   most 500 people." Create is disabled.
 - **Check passed:** "<n> people are ready to add to <organisation>." A table of the first 10
   rows (email, name) and "and <n> more". Button: "Create <n> accounts and send invitations".
@@ -68,7 +70,8 @@ A switch at the top of Add person: "One person" · "Many from a file".
   page open until it finishes."
 - **Finished:** "<a> invited · <b> added, no email · <c> already in another organisation ·
   <d> failed." Then a table of the people who were not added, with the reason. "Try again"
-  (only when some failed) runs the failed people again. "Done" goes to People.
+  (only when a call got no answer or a server error) runs those people again. A person
+  who is in another organisation, or whose address was refused, is listed and not retried. "Done" goes to People.
 - **Leaving during a run:** the browser asks for confirmation.
 - **Never:** a second invitation to a person who has an account; a stored copy of the file.
 
@@ -88,18 +91,21 @@ and get an account without approval, until the link is full, expires or is revok
   get an account. Share it only with the group."
 - **Edit dialog:** "Label", "Maximum uses", "Expires on". The organisation, cohorts and
   domain are shown and cannot be changed, with: "To change these, revoke this link and
-  create a new one."
-- **Revoke dialog:** "Revoke <label>? People who use the link after this wait for approval
-  on Requests. The <n> accounts already made stay." Button "Revoke link".
+  create a new one." A revoked link has no "Edit…".
+- **Revoke dialog:** "Revoke <label>? People who use the link after this get no account
+  through it. The <n> accounts already made stay." Button "Revoke link".
 - **Refusals:** "Enter a domain such as dhsc.gov.uk, with no @." · "Maximum uses must be
-  from 1 to 1,000." · "Choose a date in the next 90 days."
+  from 1 to 1,000." · "Choose a date in the next 90 days." · "This link already has <n>
+  uses. The maximum cannot be lower." · "A revoked link cannot be changed."
+- **Expires on:** a date. The link works to the end of that day in the operator's time zone.
 - **Never:** the code in a toast, a log or an audit row.
 
 ### Ops: Requests (contract D8)
 
 - A waiting request that carries a code shows a second line under the organisation they
   typed: "Invite link: <label> — <reason>". Reasons: "expired" · "full" · "revoked" ·
-  "wrong email domain" · "waiting for the next run". An unknown code shows "Invite link:
+  "wrong email domain" · "waiting for the next run" · "last try failed, next try in a few
+  minutes". An unknown code shows "Invite link:
   code not recognised".
 
 ### Ops: Organisations (contract D9)
