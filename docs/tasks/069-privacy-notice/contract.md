@@ -53,10 +53,11 @@ only if the build matches them:
 
 1. **PostHog host.** The notice says the data is stored in the EU. Production must use
    `https://eu.i.posthog.com`.
-2. **Cookie consent.** PostHog keeps an identifier in a cookie and in browser storage. Under
-   PECR this needs consent or a valid exemption. Decide in PR #144: a consent banner, an
-   opt-out control, or PostHog with no cookie (`persistence: "memory"`). If PostHog runs with
-   no cookie, remove the cookie sentence in section 4.
+2. **PostHog runs with no cookie (owner ruling, 2026-11-25).** The notice says that
+   product analytics does not use cookies or browser storage, so the site needs no cookie
+   banner. PR #144 must set `persistence: "memory"` in `frontend/src/lib/analytics.ts`; its
+   default today is a cookie plus local storage. The cost: a visitor who is not signed in
+   counts as a new person on each page load, and feature flags load again each time.
 3. **PostHog must match the owner ruling (2026-11-25).** PostHog identifies a signed-in
    person by email address, and records only how people use the app, never their content.
    PR #144 does not do this yet. It must: identify by email (it uses the token `sub` today);

@@ -87,9 +87,8 @@ export function PrivacyView() {
         </p>
         <p>
           We use cookies and browser storage that are necessary to sign you in and to protect the
-          site. Product analytics (see section 3) also keeps an identifier in a cookie and in your
-          browser&apos;s storage. We do not use cookies for advertising, and we do not sell your
-          personal data.
+          site. Product analytics (see section 3) does not use cookies or browser storage. We do
+          not use cookies for advertising, and we do not sell your personal data.
         </p>
       </LegalSection>
 
