@@ -56,10 +56,10 @@ export function PrivacyView() {
         </p>
         <p>
           <strong>Search Queries &amp; Results:</strong> We store the text of the queries you input
-          and the results generated to populate your evidence blueprints, and any files you upload.
+          and the results generated, and any files you upload.
         </p>
         <p>
-          <strong>Access requests (waitlist):</strong> If you ask for access to Policy Atlas through
+          <strong>Access requests:</strong> If you ask for access to Policy Atlas through
           the &quot;Request access&quot; form, we add you to our waitlist. We collect your name, your
           email address, your
           organisation (if you give it), and what you tell us about how you would use the tool. We
@@ -71,7 +71,7 @@ export function PrivacyView() {
         <p>
           <strong>Usage data:</strong> We use PostHog, a product analytics service, to understand
           how people use Policy Atlas and to improve it. PostHog records how you interact with the
-          app: the pages you open, the controls you select and the actions you take. We do not send
+          app: the Policy Atlas pages you open and the actions you select. We do not send
           the content of your work to PostHog: not the text of your queries, the files you upload
           or the generated results. PostHog also records basic details of your browser and device,
           and an identifier: your email address if you are signed in, or a random one if you are
@@ -120,7 +120,7 @@ export function PrivacyView() {
 
       <LegalSection title="6. Who has access to your information?">
         <p>
-          Your information will be accessed by a limited number of advisors in our team working on
+          Your information will be accessed by a limited number of administrators in our team working on
           this task.
         </p>
         <p>
@@ -146,8 +146,9 @@ export function PrivacyView() {
           identities and logins. Policy Atlas does not directly view or store your password. For further information, see <ExternalNoticeLink href={AWS_PRIVACY}>Amazon Web Services privacy policy</ExternalNoticeLink>.
         </p>
         <p>
-          For data storage &amp; security, your user email, search queries, and search results are
-          stored in Amazon Aurora PostgreSQL, hosted in Nesta&apos;s AWS environment.
+          For data storage &amp; security, your account details, search queries and results are
+          stored in Amazon Aurora PostgreSQL, and the files you upload are stored in Amazon S3. Both
+          are hosted in Nesta&apos;s AWS environment.
         </p>
         <p>In relation to AI &amp; Third-Party Processors, we use the following services to operate the tool:</p>
         <LegalList>
@@ -187,9 +188,10 @@ export function PrivacyView() {
 
       <LegalSection title="7. Data retention">
         <p>
-          We retain your email and search history only for as long as user testing is active to allow
-          you to use the tool. Upon the conclusion of the pilot (or upon your request), your personal
-          data will be permanently deleted from our systems and from PostHog. Copies in our database
+          We retain your account details, your search queries and results, and the files you upload
+          for as long as your account remains active. Upon your request, your account will be
+          deactivated and personal data will be permanently deleted from our systems and from
+          PostHog. Copies in our database
           backups are deleted automatically within 35 days. We keep firewall logs for one month.
         </p>
       </LegalSection>

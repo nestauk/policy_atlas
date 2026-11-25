@@ -68,7 +68,7 @@ only if the build matches them:
    project before go-live. Check two things then: that location (country, city) is not
    kept either, and that events from the API carry no IP address.
 4. **Deletion.** The notice promises to delete personal data "from our systems and from
-   PostHog" when the pilot ends or on request. No command does this today. Someone must
+   PostHog" on request (owner wording, 2026-11-25: data is kept while the account is active). No command does this today. Someone must
    delete by hand in each place: the database, the upload storage, Cognito (the sign-in
    service), Langfuse (the tool that records model calls) and PostHog.
 5. **Product updates.** The notice promises an unsubscribe link on each product update.
