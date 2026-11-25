@@ -1,13 +1,14 @@
 # Task contract: 068-ops-announcements
 
-> **Status:** drafted 2026-11-25, revision 2 (the contract-stage adversarial review is
+> **Status:** approved 2026-11-25 for part 068a, revision 3 (the contract-stage adversarial review is
 > folded in: § Folded findings). The owner approved the feature, its gates and
 > the design choices in chat on 2026-11-24 and 2026-11-25 (§ Facts settled), and approved
 > writing the contract, the plan and the adversarial reviews in one session. The owner
 > confirms this text and the six points in § For the owner to confirm at the gate.
 > Plan: [plan.md](plan.md) draft 2, with its own adversarial review folded in.
-> Contract approved (before planning): _pending_ · Plan approved (before implementation):
-> _pending_ · ADR: 0051 (to write at the plan gate).
+> Contract approved: 2026-11-25 (owner, in chat, part 068a) · Plan approved: 2026-11-25
+> (owner, in chat, part 068a) · ADR:
+> [0051](../../adr/0051-announcement-email-from-the-ops-server.md). Part 068b: not approved.
 > Branch `task/068-ops-announcements`. Tier 4.
 > Background and research: [notes.md](notes.md). Screens and copy:
 > [design-annex.md](design-annex.md).

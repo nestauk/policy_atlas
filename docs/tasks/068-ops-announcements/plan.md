@@ -1,10 +1,11 @@
 # Implementation plan: 068-ops-announcements
 
-> Status: **draft 2, 2026-11-25.** The plan-stage adversarial review (Codex, read-only,
-> 15 findings: 1 blocker, 11 material, 3 minor) is folded in (§ Folded findings). Awaits
-> the owner's approval. Contract: [contract.md](contract.md) revision 2.
+> Status: **approved by the owner 2026-11-25 for part 068a** (draft 2 plus the split,
+> the not-signed-in rule and the reply address). The plan-stage adversarial review (Codex, read-only,
+> 15 findings: 1 blocker, 11 material, 3 minor) is folded in (§ Folded findings).
+> Contract: [contract.md](contract.md) revision 3.
 > Rubric: [rubric.md](rubric.md), 30 items. Annex: [design-annex.md](design-annex.md)
-> version 1. ADR 0051: written when the owner approves this plan.
+> version 3. ADR: [0051](../../adr/0051-announcement-email-from-the-ops-server.md).
 > Terms, items (A1 to E6), invariants (I1 to I3) and the ten live checks are the
 > contract's and are not restated. The build runs in a fresh conversation with
 > task-cycle-build, opening on Phase 0.
