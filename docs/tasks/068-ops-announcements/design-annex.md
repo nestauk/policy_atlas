@@ -4,9 +4,9 @@ The script for the Announcements pages on the ops site and the unsubscribe page 
 public site. The contract cites this file by version. Looks live here and in the mock, not
 in the contract.
 
-> **Version:** 1 · Mock: https://claude.ai/artifact/9eoXRJFp9XeTTKM9tATZmq (private to the
+> **Version:** 2 · Mock: https://claude.ai/artifact/9eoXRJFp9XeTTKM9tATZmq (private to the
 > owner) · Frozen: 2026-11-25 (owner approved the journey; picture field and the cuts below
-> added the same day) · Polish rounds: log below
+> added the same day; version 2: the not-signed-in rule) · Polish rounds: log below
 
 ## Rules for this slice
 
@@ -31,6 +31,7 @@ Every scene and every test uses this one example.
 - Left out: 2 unsubscribed from product updates, 1 deactivated. **79 get the email.**
 - Result: 77 sent, 2 failed.
 - As a **Service notice** the same choice gives 81 (only the deactivated person is left out).
+- All 82 people have signed in at least once.
 
 ## Surfaces and states
 
@@ -54,7 +55,7 @@ Three numbered groups and a preview.
 
 1. **Kind.** Two choices, Product update first and chosen at the start.
    - Product update: "New features and news. The email has an unsubscribe link. People who
-     unsubscribed do not get it."
+     unsubscribed or have not signed in yet do not get it."
    - Service notice: "Things people must know to use their account: downtime, security,
      changes to terms. No unsubscribe link."
 2. **Who gets it.** "Everyone with an account" or "Chosen cohorts, organisations and
@@ -63,7 +64,7 @@ Three numbered groups and a preview.
    - Below: "**N** people get this email", then "M chosen. K left out: …" with the reasons
      and counts, then "A person in two groups gets one email." and a link "See the list".
    - The counts come from the server each time the kind or the choice changes.
-   - Reasons, in these words: "unsubscribed from product updates" · "deactivated" ·
+   - Reasons, in these words: "unsubscribed from product updates" · "has not signed in yet" · "deactivated" ·
      "no email address" · "the address bounced before" · "marked our email as spam".
 3. **Message.** Subject · Message (plain text; help line: "Plain text. Leave an empty line
    between paragraphs. Start a line with "- " to make a list.") · Picture (optional) ·
@@ -149,7 +150,8 @@ No sign-in. The link alone changes nothing, because mail scanners open links.
 - 2026-11-25 (3, lead's simplification, for the owner to confirm at the contract gate):
   no drafts on the server; the browser keeps unsent text. This replaces the mock's first
   "Draft" row and "Save as draft".
-- 2026-11-25 (4, same): no "Leave out people who have not signed in yet" box.
+- 2026-11-25 (4): the owner wants product updates to leave out people who have not signed
+  in yet. It is a fixed rule, with no box on the page. A service notice still reaches them.
 
 ## Polish log
 

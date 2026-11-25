@@ -43,7 +43,7 @@ address, and the result page shows each person's result.
 | **Kind** | `product_update` or `service_notice`. A product update has an unsubscribe link and skips people who unsubscribed. A service notice has no link and goes to everyone chosen. |
 | **Audience** | The operator's choice: everyone, or a set of cohort ids, organisation ids and user ids. Stored on the announcement. |
 | **Recipient** | One person on one announcement, with a status. Table `announcement_recipient`. |
-| **Left out** | A recipient the server did not send to, with a reason: `deactivated`, `no_email`, `suppressed_bounce`, `suppressed_complaint`, `unsubscribed`. |
+| **Left out** | A recipient the server did not send to, with a reason: `deactivated`, `no_email`, `suppressed_bounce`, `suppressed_complaint`, `not_signed_in`, `unsubscribed`. |
 | **SES** | Amazon Simple Email Service. It sends Cognito's invitation and sign-in email today. |
 | **Suppression list** | The list SES keeps, for each AWS account, of addresses that bounced or whose owner marked our email as spam. SES does not send to an address on it. |
 | **Bounce** | An email that the receiving mail server returns because it cannot deliver it. |
@@ -115,7 +115,10 @@ by hand and stays so.
 - One person appears once.
 - A person is left out for the first reason that applies, in this order: `deactivated` ·
   `no_email` · `suppressed_bounce` or `suppressed_complaint` (the address is on the
-  suppression list) · `unsubscribed` (product update only).
+  suppression list) · `not_signed_in` (product update only: `first_signed_in_at` is
+  empty) · `unsubscribed` (product update only).
+- A service notice still reaches a person who has not signed in, so a reminder to
+  invited people stays possible.
 
 **A3. Mailer seam:**
 - `send(to, subject, html, text, headers)` and `suppressed()` (address → reason and date).
@@ -224,7 +227,7 @@ send). Only the person can set or clear it: no ops route and no `pa_ops` grant w
 
 ### Step D — the ops pages
 
-Built to [design-annex.md](design-annex.md) version 1.
+Built to [design-annex.md](design-annex.md) version 2.
 
 - **D1.** The Announcements section and the list.
 - **D2.** Compose: kind, audience, message, picture, preview, test. The browser makes a
@@ -346,7 +349,7 @@ review records stay in the gitignored `research/` folder.
 
 ## Design annex
 
-[design-annex.md](design-annex.md) version 1 (mock:
+[design-annex.md](design-annex.md) version 2 (mock:
 https://claude.ai/artifact/9eoXRJFp9XeTTKM9tATZmq). This contract pins behaviours, states,
 interfaces and invariants; looks and copy live in the annex. Polish round budget: 2 rounds
 at the end of build and 2 at the end of review.
@@ -448,11 +451,19 @@ one-click POST (check 2).
 - Invariant I1's "Not confirmed" row: accepted.
 - Point 5 below: the owner states that the Data Protection Officer has signed off. The
   build still records the approval and the final wording in `verification.md` (rubric 23).
+- Points 1, 3 and 7 below: agreed.
+- Point 6 below (the `boto3-stubs` development dependency): approved.
+- Point 2 below: **not agreed.** A product update leaves out people who have not signed
+  in yet. The lead made it a fixed rule (A2, reason `not_signed_in`), not a box on the
+  page: one rule less to choose and to test. This change came after the adversarial
+  review. It is minor (one more left-out reason, no new column, no new route), so the
+  review was not run again.
 
 ## For the owner to confirm at the gate
 
 1. **No drafts on the server.** The browser keeps unsent text. (A lead simplification.)
-2. **No "leave out people who have not signed in yet" box.** (A lead simplification.)
+2. ~~No "leave out people who have not signed in yet" box.~~ Replaced by a fixed rule:
+   see the rulings above.
 3. **Staging sends for real**, to staging accounts only. Without this the send path cannot
    be checked before production. This replaces the earlier proposal "tests only on staging".
 4. **"Test before send" is a rule of the page**, not of the server: it guards against a

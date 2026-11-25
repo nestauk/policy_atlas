@@ -57,8 +57,8 @@ Slice-specific (each is a test unless it says "live"):
         confirmed".
 20. [ ] **I2.** Each mailer call has one recipient. The audit rows and log lines of a send
         hold no email address and no message text.
-21. [ ] **I3, C1.** A product update leaves out a person who unsubscribed; a service notice
-        does not. `POST` unsubscribe and resubscribe set and clear the mark and are safe to
+21. [ ] **I3, C1.** A product update leaves out a person who unsubscribed and a person who
+        has not signed in yet; a service notice leaves out neither. `POST` unsubscribe and resubscribe set and clear the mark and are safe to
         repeat; an unknown token answers 404; a GET on either address changes nothing; a
         form POST with no cookie and no `Origin` answers 204 with no redirect; the request
         log line for these routes holds no token. No ops route writes the mark.
