@@ -10,25 +10,33 @@ The task is **done only if every box holds**. Item ids (A1 to A3) are the contra
        come from `make openapi-sync`, and `make drift-check` passes.
 5. [ ] No test deleted, skipped or weakened.
 6. [ ] Verification evidence recorded in [verification.md](verification.md).
-7. [ ] Known gaps listed; the `api/app.py` body-size entry in
-       [docs/deferred.md](../../deferred.md) is removed, because A1 closes it.
+7. [ ] Known gaps listed in [docs/deferred.md](../../deferred.md): the `api/app.py`
+       body-size entry is removed, and the two gaps in the plan are added.
 8. [ ] Review stack for Tier 3 ran (contract verifier, code review, security review,
        adversarial review), with findings in [verification.md](verification.md).
 
 Slice-specific:
 
-9. [ ] **A1:** a request with a `Content-Length` above the limit gets HTTP 413 before the
-       body is read and before sign-in. A request with no `Content-Length` that streams
-       more than the limit also gets 413.
-10. [ ] **A1:** a theory of change upload of the largest allowed file (10 MB before
-        encoding) still returns 201.
-11. [ ] **A1:** each text field in the plan's table refuses a value above its limit with
+9. [ ] **A1:** a request with a `Content-Length` above the limit gets HTTP 413 with no
+       sign-in, the app behind the limiter is not called, and the reply carries the CORS
+       header for the app's origin.
+10. [ ] **A1:** a request with no `Content-Length` that streams more than the limit gets
+        413. A normal small request passes.
+11. [ ] **A1:** a theory of change upload of the largest allowed file (10 MB before
+        encoding) still returns 201. A path that only looks like the upload path gets the
+        default limit.
+12. [ ] **A1:** the ops app refuses a body above the default limit.
+13. [ ] **A1:** each text field in the plan's table refuses a value above its limit with
         HTTP 422, and accepts a value at the limit.
-12. [ ] **A2:** every document request the fetcher sends carries
-        `Accept-Encoding: gzip, deflate`, and no request offers zstd.
-13. [ ] **A3:** when a batch and both of its halves fail with an outage error, the
+14. [ ] **A2:** a document request and a Europe PMC request each carry
+        `Accept-Encoding: gzip, deflate`.
+15. [ ] **A3:** when a batch and both of its halves fail with an outage error, the
         provider is called 3 times for that batch, and every text is reported as failed.
-        This holds for the OpenAI backend and for the Bedrock backend.
-14. [ ] **A3:** when one bad text fails a batch with an input error, the other texts are
-        still embedded (the existing isolation test stays green, unchanged).
-15. [ ] **A3:** throttling is still never split (the existing test stays green, unchanged).
+        This holds for OpenAI error types, for Bedrock error types and for a malformed
+        reply.
+16. [ ] **A3:** when a batch fails with an outage error and one half then works, that
+        half's vectors are kept.
+17. [ ] **A3:** a Bedrock `ValidationException` and a missing-credentials error are not
+        treated as outages.
+18. [ ] **A3:** the existing isolation test (one bad text, the others are embedded) and
+        the existing throttling test stay green, unchanged.
