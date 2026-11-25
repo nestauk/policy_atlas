@@ -222,6 +222,10 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   boilerplate. Condition: content-quality evals show boilerplate ingest.
 - `evidence_search/sourcing/acquire.py`: Overton records with several PDFs: ingest reads the primary
   `pdf_url` only (`grouped_pdf_ids_in_result` is kept). Condition: none recorded.
+- `fetch_live.py`: The fetcher asks hosts for gzip or deflate only, but the HTTP library still
+  expands each network chunk before the 25 MB check. gzip expands at most about 1,000 times, so one
+  64 KB chunk can become about 66 MB in memory. Condition: a later security slice; then the fetcher
+  reads raw bytes and expands them itself with an output limit.
 - `fetch_live.py`: `getaddrinfo` runs outside the 30-second request timeout. Condition: telemetry
   shows DNS (domain name system) resolver stalls tying up fetch workers.
 - `fetch_live.py`: the SSRF (server-side request forgery) guard allows any port on a public address.
@@ -234,6 +238,10 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - `evidence_search/sourcing/ingest_full_text.py`: `set_forkserver_preload` acts only before the
   forkserver starts. Ingest is the only forkserver user in `backend/src`. Condition: a second,
   earlier forkserver user.
+- `core/embeddings.py`: The batch split (`_embed_units_with_isolation`) catches a configuration
+  error (a missing credential, region or profile) and reports it as failed texts; it does not raise
+  it. The knowledge note `isolation-belts-reraise-config-errors` says such errors must be raised.
+  Condition: the next change to the embedding pass.
 - `core/embeddings.py`: Embedding batch slices share one database connection, so they run in
   sequence. Condition: embedding wall time sets the ingest stage time.
 - `evidence_search/sourcing/ingest_upload.py`: `ingest_upload` runs its embed pass outside any trace
@@ -1060,10 +1068,11 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - `api/contract/check_ins.py`: `CheckInOut.bundle` is an open `dict`, so the generated client has no
   shape and `CheckInBundle.tsx` parses by hand. Condition: the bundle grammar settles; then a
   discriminated union per point.
-- `api/app.py`: The API has no request body size limit. The firewall cannot
-  add one: a web ACL on a load balancer reads only the first 8 KB of a body, and bodies over 8 KB
-  are normal here (chat, plan edits, theory of change imports). Condition: a later security slice;
-  then a limit in the server or a middleware.
+- `api/contract/`: Four free-text fields have no maximum length: the task question, the project
+  description, the chat title and the free-text answer at a check-in. The request size limit
+  (`api/body_limit.py`, 1,000,000 bytes) bounds them. Proposed limits were 10,000, 4,000, 200 and
+  10,000 characters. Condition: a check of the longest stored values in production, and a decision
+  on a limit in the input boxes.
 - `api/routers/runs.py`: `create_run` drops its launch reservation after the 10-second wait for the
   run row, whether or not the worker has written it, so a slow insert can let a later start pass
   both capacity counts. Condition: none recorded; the fix keeps the reservation until the row shows

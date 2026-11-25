@@ -26,6 +26,7 @@ from starlette.staticfiles import StaticFiles
 
 from policy_atlas.api import continuation
 from policy_atlas.api.auth import JwtAuthenticator
+from policy_atlas.api.body_limit import BodyLimitMiddleware
 from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
 from policy_atlas.api.deps import Identity
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
@@ -206,6 +207,10 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         dependencies=[Depends(bind_route_template)],
     )
     app.state.settings = app_settings
+    # Added first, so it runs inside every middleware added after it (Starlette puts
+    # a later middleware outside an earlier one): its 413 then carries the CORS and
+    # security headers, and a browser can read it. Both service roles get it.
+    app.add_middleware(BodyLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[app_settings.app_origin],
