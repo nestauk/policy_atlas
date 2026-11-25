@@ -33,6 +33,8 @@ from sqlalchemy.engine import Dialect
 from sqlalchemy.sql.elements import BindParameter
 from sqlalchemy.types import UserDefinedType
 
+from policy_atlas.core import invite_code
+
 metadata = MetaData()
 
 
@@ -194,6 +196,46 @@ cohort_member = Table(
     Index("ix_cohort_member_user_id", "user_id"),
 )
 
+# Invite links: a code that lets a request from a listed email domain become an
+# account in one organisation without an operator. A link is never deleted.
+invite_link = Table(
+    "invite_link",
+    metadata,
+    Column("invite_link_id", UUID(as_uuid=True), primary_key=True),
+    Column("code", Text, nullable=False),
+    Column("label", Text, nullable=False),
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=False),
+    Column("allowed_domains", ARRAY(Text), nullable=False),
+    Column("max_uses", Integer, nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("created_by", Text, nullable=False),  # the operator, as ops_action.actor_user_id
+    UniqueConstraint("code", name="uq_invite_link_code"),
+    CheckConstraint(
+        f"code ~ '^[{invite_code.ALPHABET}]{{{invite_code.CODE_LENGTH}}}$'",
+        name="ck_invite_link_code_format",
+    ),
+    CheckConstraint("char_length(label) BETWEEN 1 AND 200", name="ck_invite_link_label_length"),
+    CheckConstraint(
+        "cardinality(allowed_domains) BETWEEN 1 AND 10", name="ck_invite_link_domain_count"
+    ),
+    CheckConstraint("max_uses > 0", name="ck_invite_link_max_uses_positive"),
+)
+
+invite_link_cohort = Table(
+    "invite_link_cohort",
+    metadata,
+    Column(
+        "invite_link_id", UUID(as_uuid=True), ForeignKey("invite_link.invite_link_id"),
+        primary_key=True,
+    ),
+    Column(
+        "cohort_id", UUID(as_uuid=True), ForeignKey("cohort.cohort_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
+
 # Splash-page Request-access intake. No FK to app_user — ops enrolment is the
 # Cognito on-ramp; this table is a queue for humans, not an identity store.
 waitlist_entry = Table(
@@ -208,7 +250,20 @@ waitlist_entry = Table(
     Column("account_user_id", Text, nullable=True),
     Column("account_created_at", DateTime(timezone=True), nullable=True),
     Column("rejected_at", DateTime(timezone=True), nullable=True),
+    Column("invite_code", Text, nullable=True),  # the code the request arrived with
+    Column(  # the link the sweep redeemed
+        "invite_link_id", UUID(as_uuid=True), ForeignKey("invite_link.invite_link_id"),
+        nullable=True,
+    ),
     UniqueConstraint("email", name="uq_waitlist_entry_email"),
+    Index(
+        "ix_waitlist_entry_invite_code", "invite_code",
+        postgresql_where=text("invite_code IS NOT NULL"),
+    ),
+    Index(
+        "ix_waitlist_entry_invite_link_id", "invite_link_id",
+        postgresql_where=text("invite_link_id IS NOT NULL"),
+    ),
 )
 
 project = Table(

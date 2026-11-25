@@ -34,7 +34,7 @@ request after this one merges.
 These signatures are part of the briefs. The agents implement them; they do not redesign them.
 
 1. `policy_atlas/core/invite_code.py` (no import of `ops`, so the public API can use it):
-   - `ALPHABET: str` (32 characters), `CODE_LENGTH = 12`.
+   - `ALPHABET: str` (31 characters), `CODE_LENGTH = 12`.
    - `normalise(value: str | None) -> str | None` — upper case, remove hyphens and spaces;
      `None` unless exactly 12 alphabet characters.
    - `new_code() -> str` — the stored form (no hyphens).

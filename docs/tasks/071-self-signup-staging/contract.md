@@ -187,7 +187,7 @@ organisation gets no second invitation (the existing rule of `ensure_account_enr
   Nothing else. The test that pins the grant list is updated to match.
 - The downgrade removes all of it.
 
-**D2. The code.** The server makes it with the `secrets` module: 12 characters from 32
+**D2. The code.** The server makes it with the `secrets` module: 12 characters from 31
 letters and digits with no look-alikes (no `0 O 1 I L`), shown in three groups of four with
 hyphens. An operator cannot choose it. It is stored as plain text, because the operator must
 be able to copy the link again later.

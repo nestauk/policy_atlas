@@ -365,6 +365,8 @@ _EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
     "project_membership": {"SELECT", "DELETE"},
     "cohort": {"SELECT", "INSERT", "DELETE"},
     "cohort_member": {"SELECT", "INSERT", "DELETE"},
+    "invite_link": {"SELECT", "INSERT"},
+    "invite_link_cohort": {"SELECT", "INSERT"},
 }
 _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
     "app_user": {
@@ -372,13 +374,14 @@ _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
         "task_quota_per_year", "runs_per_user", "deactivated_at",
     },
     "organisation": {"name", "task_quota_per_year", "runs_per_user"},
-    "waitlist_entry": {"account_user_id", "account_created_at", "rejected_at"},
+    "waitlist_entry": {"account_user_id", "account_created_at", "rejected_at", "invite_link_id"},
     "task": {"org_id", "visibility", "is_public"},
     "project": {"org_id", "visibility"},
     "cohort": {
         "name", "description", "starts_on", "ends_on", "links", "task_quota_per_year",
         "runs_per_user",
     },
+    "invite_link": {"label", "max_uses", "expires_at", "revoked_at"},
 }
 
 
