@@ -3,6 +3,9 @@
 The task is **done only if every box holds**. Ids (A1 to E6, I1 to I3) and terms are the
 contract's ([contract.md](contract.md) § Terms, § The work).
 
+> **Two parts:** row 29 belongs to part 068b and is not checked in 068a. In the other
+> rows, leave out what concerns incoming email (contract § Two parts).
+
 1. [ ] Implementation satisfies [contract.md](contract.md), items A1 to E6.
 2. [ ] `make verify` passes; `make openapi-sync` and `make drift-check` are clean; the infra
        synth tests pass; the ten staging live checks pass and are recorded.

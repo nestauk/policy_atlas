@@ -194,7 +194,7 @@ For staging first, then production after the merge:
 2. Deploy the code and the migration with both switches off (stop both services, migrate,
    start, as today).
 3. Set `email.announcements` true and deploy. Run live checks 1 to 4, 6 and 7.
-4. Set `email.inbound` true and deploy. Run live checks 5 and 8.
+4. *(Part 068b only.)* Set `email.inbound` true and deploy. Run live checks 5 and 8.
 5. Run live check 9, then each rollback (check 10), then deploy forward again.
 
 ## Phases
@@ -257,6 +257,7 @@ environments at first), the ops environment, the synth tests, the pin tests in
 `test_service_wiring.py`. Done: rubric 25 to 28.
 
 ### Phase 9 — Infra: incoming email (E5) (`deep-reasoner`)
+**Part 068b: not built in 068a** (contract § Two parts). A draft until 068b's own gate.
 The MX record, bucket, rule set, activation, forwarder and its tests; `email.inbound`
 false in both environments at first. Done: rubric 29.
 

@@ -12,6 +12,24 @@
 > Background and research: [notes.md](notes.md). Screens and copy:
 > [design-annex.md](design-annex.md).
 
+## Two parts (owner ruling, 2026-11-25)
+
+The owner split this task. This section wins where the text below says otherwise.
+
+| Part | What | Items | State |
+|---|---|---|---|
+| **068a: send** | Announcements from the ops pages, unsubscribe, pictures, DMARC | A, B, C, D, E1 to E4, E6 · rubric rows 1 to 28 and 30 · plan phases 0 to 8 and 10 to 12 · live checks 1 to 4, 6, 7, 9, and 10 for sending only | Built first, on this branch and PR #154 |
+| **068b: receive** | Email to `updates@` and `support@` reaches the team | E5 · rubric row 29 · plan phase 9 · live checks 5 and 8, and 10 for incoming email | **Not approved. Not built in 068a.** The design below is a draft. 068b gets its own gate, branch and PR |
+
+What changes in 068a because 068b comes later:
+
+- Part 068a builds no MX record, no receipt rule, no bucket for incoming email, no
+  forwarder and no `email.inbound` switch.
+- The privacy text (C3) and the documents (E6) say nothing about incoming email.
+- Until 068b is live, no address at the product domain can receive email. A reply to an
+  announcement comes back to its sender as undeliverable. **Open, for the owner:** where
+  replies go in 068a (§ Owner rulings at the gate).
+
 ## Goal
 
 An operator writes one email on the ops pages and sends it to people who have an account:
@@ -458,6 +476,10 @@ one-click POST (check 2).
   page: one rule less to choose and to test. This change came after the adversarial
   review. It is minor (one more left-out reason, no new column, no new route), so the
   review was not run again.
+- The task is split into 068a (send) and 068b (receive): § Two parts.
+- **Open: replies in 068a.** The choices: (1) the email names an existing inbox as
+  Reply-To, and the footer names it; every recipient sees that address; (2) no Reply-To,
+  and no announcement goes to production accounts before 068b is live.
 
 ## For the owner to confirm at the gate
 
