@@ -1,7 +1,8 @@
 # Task 071 — self-signup test on staging: plan for discussion
 
-> **Status:** a plan to discuss, not a contract. Nothing is built or deployed. After the owner
-> answers the questions in the last section, this becomes one `contract.md` with numbered steps.
+> **Status:** background only. The owner answered the questions on 2026-11-25.
+> [contract.md](contract.md) is the authority: where these notes differ (the timer stays at
+> 60 seconds; bulk add and invite links are in scope), the contract is right.
 
 ## What you asked
 
