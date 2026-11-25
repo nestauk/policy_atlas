@@ -57,9 +57,12 @@ only if the build matches them:
    PECR this needs consent or a valid exemption. Decide in PR #144: a consent banner, an
    opt-out control, or PostHog with no cookie (`persistence: "memory"`). If PostHog runs with
    no cookie, remove the cookie sentence in section 4.
-3. **Query text in PostHog.** PR #144 sends model prompts and answers to PostHog
-   (`privacy_mode=False`), and click text. The notice says usage data "can include the text
-   of your queries". If PR #144 turns this off, that sentence can go.
+3. **PostHog must match the owner ruling (2026-11-25).** PostHog identifies a signed-in
+   person by email address, and records only how people use the app, never their content.
+   PR #144 does not do this yet. It must: identify by email (it uses the token `sub` today);
+   stop sending model prompts and answers (`privacy_mode=False` today); and hide click text
+   (`mask_all_text: true`), because a click can carry a task name. Page addresses must not
+   carry content either.
 4. **Deletion.** The notice promises to delete personal data "from our systems and from
    PostHog" when the pilot ends or on request. No command does this today. Someone must
    delete by hand in each place: the database, the upload storage, Cognito (the sign-in
@@ -93,6 +96,10 @@ small:
 5. PostHog gives a random identifier to a visitor who is not signed in; the notice said
    "account identifier".
 6. "We collect only the following" contradicted section 4; "only" is removed.
+
+The owner ruling in open point 3 came after the review and replaces findings 1 and 5:
+the notice now says that no content goes to PostHog and that the identifier is the email
+address.
 
 The reviewer was not sure if the analytics-cookie exemption in the Data (Use and Access)
 Act 2025 is in force. Open point 2 stays open.

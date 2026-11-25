@@ -70,12 +70,13 @@ export function PrivacyView() {
         </p>
         <p>
           <strong>Usage data:</strong> We use PostHog, a product analytics service, to understand
-          how people use Policy Atlas and to improve it. PostHog records the pages you open, the
-          controls you select and the actions you take. This can include the text of your queries,
-          the content of files you upload, and the generated results. It also records your IP
-          address, basic details of your browser and device, and an identifier (a random one, or
-          your account ID if you are signed in; never your name or email address). PostHog stores
-          this data in the European Union. We do not use it for advertising.
+          how people use Policy Atlas and to improve it. PostHog records how you interact with the
+          app: the pages you open, the controls you select and the actions you take. We do not send
+          the content of your work to PostHog: not the text of your queries, the files you upload
+          or the generated results. PostHog also records your IP address, basic details of your
+          browser and device, and an identifier: your email address if you are signed in, or a
+          random one if you are not. PostHog stores this data in the European Union. We do not use
+          it for advertising.
         </p>
       </LegalSection>
 
