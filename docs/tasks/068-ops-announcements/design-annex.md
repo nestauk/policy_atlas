@@ -10,6 +10,9 @@ in the contract.
 
 ## Rules for this slice
 
+- Every surface in this annex and every screen of the mock belongs to part 068a (send).
+  Part 068b (receive) has no screen. The explainer page marks each section 068a or 068b.
+
 - The pages use the ops pages' existing parts (`frontend/src/ops/ui.tsx`): page header,
   table, dialog, field, row menu, toast. No new look.
 - One primary button on each page.

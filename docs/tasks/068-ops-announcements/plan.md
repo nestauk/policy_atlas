@@ -218,7 +218,8 @@ regenerated, and the production image is unchanged (the group is not installed t
 Tests at the public functions:
 `render_announcement` (escaping, lists, button rule, footers, headers by kind, plain-text
 part), `SesMailer.send` against a stubbed client (raw content, one recipient), the
-header line-break refusal. Done: rubric 11 (the API-mode half), 12, 20 (one recipient).
+header line-break refusal, the `Reply-To` header from the mailer's reply address (the ops
+setting `email.reply_to`, Phase 8). Done: rubric 11 (the API-mode half), 12, 20 (one recipient).
 
 ### Phase 3 — Rules, send, retry (A2, B4, B5, B7, I1 to I3) (`deep-reasoner`)
 `ops/announcements.py`. Tests with `MemoryMailer` and the annex's example data: the
@@ -248,19 +249,17 @@ five scenes. Then the two polish
 rounds of task-cycle-build § Step 5b. Done: rubric 24.
 
 ### Phase 7 — Unsubscribe page and privacy text (C2, C3) (`frontend-designer`; copy is `lead`)
-The page and its four states. The lead drafts the privacy text; the owner takes it to the
+The page and its four states; its "link does not work" text names the reply address (a
+constant in the page). The lead drafts the privacy text; the owner takes it to the
 Data Protection Officer. The sign-off is a merge gate, not a build gate. Done: rubric 22;
 rubric 23 at the merge.
 
 ### Phase 8 — Infra: send, settings, pictures, DMARC (E1 to E4) (`deep-reasoner`)
 `components/email.py`, `pa_config.json` (`email.announcements` false in both
-environments at first), the ops environment, the synth tests, the pin tests in
+environments at first; `email.reply_to`, passed to the ops container), the ops environment, the synth tests, the pin tests in
 `test_service_wiring.py`. Done: rubric 25 to 28.
 
 ### Phase 9 — Infra: incoming email (E5) (`deep-reasoner`)
-**Reply address (068a):** the mailer adds `Reply-To` from the ops setting `email.reply_to`;
-the unsubscribe page holds the same address as a constant.
-
 **Part 068b: not built in 068a** (contract § Two parts). A draft until 068b's own gate.
 The MX record, bucket, rule set, activation, forwarder and its tests; `email.inbound`
 false in both environments at first. Done: rubric 29.
