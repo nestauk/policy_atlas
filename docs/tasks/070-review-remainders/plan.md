@@ -1,9 +1,10 @@
 # Plan: 070-review-remainders
 
 > **Status:** drafted 2026-11-25, revised the same day after the adversarial review (see
-> the last section). Not approved. Item ids (A1 to A3) are the contract's.
+> the last section) and after the owner removed the text limits. The owner accepted the
+> two gaps of findings 2 and 3. Not approved. Item ids (A1 to A3) are the contract's.
 
-**Tier 3.** A1 changes the public interface and A2 changes a header the running product
+**Tier 3.** A1 adds one reply to the public interface (HTTP 413) and A2 changes a header the running product
 sends to outside servers. Both are hard gates, so the tier cannot be lower. No ADR: no
 design decision changes. Rollback is a revert of the pull request; nothing is stored.
 
@@ -69,7 +70,7 @@ Three phases, one commit each. The phases do not depend on each other.
 - **Executor:** deep-reasoner (logic with a machine-checkable result). **Gate:**
   `make verify` (full), because the file is ingest code.
 
-## Phase 3: A1, the request size limit and the text limits
+## Phase 3: A1, the request size limit
 
 ### 3a. Body limit
 
@@ -106,35 +107,26 @@ Three phases, one commit each. The phases do not depend on each other.
   `Content-Length` is over the limit. In `test_toc_uploads.py`: an upload of the largest
   allowed size returns 201.
 
-### 3b. Text limits (the owner approves these numbers)
+### 3b. Close-out of the phase
 
-| Field | Model | Proposed limit | Reason |
-|---|---|---|---|
-| `question` | `TaskCreate`, `TaskUpdate` (`contract/tasks.py`) | 10,000 | Same as a chat message (`CHAT_MESSAGE_MAX`). |
-| `description` | project create and update (`contract/projects.py`) | 4,000 | A few paragraphs. |
-| `title` | chat create (`contract/chat.py`) | 200 | Same as a task name (`TASK_NAME_MAX`). |
-| `text` | `FreeTextResponse` (`contract/check_ins.py`) | 10,000 | Same as a message to the task agent (`TASK_AGENT_MESSAGE_MAX`). |
-
-- `OptionResponse.params` is an open dictionary. It gets no field limit; the 1 MB body
-  limit bounds it.
-- Other request models in `contract/task_agent.py` with unbounded strings are bounded by
-  the 1 MB body limit only. This task does not add a limit to each one.
-- **Existing rows are safe:** the limits apply to new requests only. A stored question
-  longer than 10,000 characters still reads; it fails only when someone edits it.
-- **Frontend:** the forms get no change. A user who goes over a limit sees the existing
-  general error message for a refused request, not a message next to the field. The
-  review found no caller, fixture or mock in the repository that sends a longer value.
-- **Generated files:** `make openapi-sync`, then `make drift-check`.
-- **Docs:** replace the `api/app.py` body-size entry in `docs/deferred.md` with the two
-  gaps this task leaves (see below).
-- **Tests:** one parametrised test for the table: at the limit passes, one over gets 422.
-- **Executor:** deep-reasoner for 3a (ASGI streaming is easy to get wrong); lead for 3b.
-  **Gate:** `make verify` (full). This is also the step-6 exit.
+- **Text limits:** not in this task (owner ruling 2026-11-25). The four fields the review
+  named (`question`, `description`, chat `title`, free-text `text`) stay without a
+  maximum length. The 1 MB body limit bounds them.
+- **Generated files:** none change. `make drift-check` confirms it.
+- **Docs:** replace the `api/app.py` body-size entry in `docs/deferred.md` with the gaps
+  this task leaves (see below).
+- **Executor:** deep-reasoner for 3a (ASGI streaming is easy to get wrong); lead for the
+  docs. **Gate:** `make verify` (full). This is also the step-6 exit.
 
 ## Gaps this task leaves (go to `docs/deferred.md`)
 
 - **gzip expansion in the fetcher (rest of M-05).** Closing it needs the fetcher to read
   raw bytes and expand them itself with an output limit. Condition: a later security slice.
+- **Maximum lengths on text fields (rest of H-02).** Task question, project description,
+  chat title and the free-text answer at a check-in have no maximum length. The 1 MB body
+  limit bounds them. Proposed numbers were 10,000 / 4,000 / 200 / 10,000 characters.
+  Condition: a check of the longest stored values in production, and a decision on a
+  limit in the input boxes.
 - **Configuration errors in the embedding split.** A missing credential or region is
   caught by the split and reported as failed texts, not raised. The knowledge note
   `isolation-belts-reraise-config-errors` says such errors must be raised. This task does
@@ -170,7 +162,7 @@ because the slice is three small changes. Eight findings; adjudication by the le
 | 4 | A malformed provider reply is not a bad text. | Accepted. `ProviderProtocolError` joins the outage list. |
 | 5 | The limiter's place, its reply headers, the mid-stream case, the exact route match and the ops app were not defined. | Accepted. Phase 3a defines each. |
 | 6 | Rubric items 9 and 13 did not prove what they claimed. | Accepted. The rubric is revised. |
-| 7 | No other request above 1,000,000 bytes; the four text limits break no caller. | Noted. |
+| 7 | No other request above 1,000,000 bytes; the four text limits break no caller. | Noted. The owner later removed the text limits from this task. |
 | 8 | The three-call rule is well defined for small batches and for throttling. | Noted. |
 
 The review did not look for simpler alternatives.
