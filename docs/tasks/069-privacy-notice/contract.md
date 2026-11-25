@@ -107,7 +107,8 @@ the notice now says that no content goes to PostHog and that the identifier is t
 address.
 
 The reviewer was not sure if the analytics-cookie exemption in the Data (Use and Access)
-Act 2025 is in force. Open point 2 stays open.
+Act 2025 is in force. The question no longer matters: PostHog runs with no cookie (open
+point 2).
 
 ## Verification
 
