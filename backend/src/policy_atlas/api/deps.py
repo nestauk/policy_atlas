@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import structlog
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.auth import get_current_user, get_optional_user
@@ -28,6 +28,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     OpenAIGroundingJudgeBackend,
     StubGroundingJudgeBackend,
 )
+from policy_atlas.ops.mail import Mailer
 from policy_atlas.runtime.agent import live_task_agent_and_backends
 from policy_atlas.runtime.agent_backend import (
     AgentBackend,
@@ -124,6 +125,23 @@ def get_identity(request: Request) -> Identity:
     """
     return cast(Identity, request.app.state.identity)
 
+
+def get_mailer(request: Request) -> Mailer:
+    """Return the mailer the operations lifespan built.
+
+    Args:
+        request: Incoming request whose application may own a mailer.
+
+    Returns:
+        The mailer.
+
+    Raises:
+        HTTPException: 503 when the sender settings are absent, so no mailer exists.
+    """
+    mailer = getattr(request.app.state, "mailer", None)
+    if mailer is None:
+        raise HTTPException(503, "email sending is not configured")
+    return cast(Mailer, mailer)
 
 
 def get_engine(request: Request) -> Engine:

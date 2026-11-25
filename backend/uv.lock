@@ -215,6 +215,9 @@ bedrock-runtime = [
 cognito-idp = [
     { name = "mypy-boto3-cognito-idp" },
 ]
+sesv2 = [
+    { name = "mypy-boto3-sesv2" },
+]
 
 [[package]]
 name = "botocore"
@@ -1378,6 +1381,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mypy-boto3-sesv2"
+version = "1.44.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/50/a3eebec0c4be5d8d6e87b79fa76796a5741538454e70ac6beea1e40cac1c/mypy_boto3_sesv2-1.44.6.tar.gz", hash = "sha256:f9314d1c80866006155fe7384810800d6d974f7bcf3427059ea028fb96214bb3", size = 50082 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/22/4b/9743cc6691ef9bb149ee1b63e5518844b197d4d394f6c0cfd0243b49e45a/mypy_boto3_sesv2-1.44.6-py3-none-any.whl", hash = "sha256:c382293e8e04c3ceb731becfe70632fd3ddeadeca288957768a1096ac333a220", size = 56081 },
+]
+
+[[package]]
 name = "mypy-extensions"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1851,7 +1863,7 @@ dev = [
     { name = "types-psycopg2" },
 ]
 ops = [
-    { name = "boto3-stubs", extra = ["bedrock-runtime", "cognito-idp"] },
+    { name = "boto3-stubs", extra = ["bedrock-runtime", "cognito-idp", "sesv2"] },
 ]
 
 [package.metadata]
@@ -1890,7 +1902,7 @@ dev = [
     { name = "ruff", specifier = ">=0.4" },
     { name = "types-psycopg2" },
 ]
-ops = [{ name = "boto3-stubs", extras = ["cognito-idp", "bedrock-runtime"], specifier = ">=1.44.6,<2" }]
+ops = [{ name = "boto3-stubs", extras = ["cognito-idp", "bedrock-runtime", "sesv2"], specifier = ">=1.44.6,<2" }]
 
 [[package]]
 name = "prompt-toolkit"

@@ -55,6 +55,18 @@ class Settings:
             it). None sends no such policy.
         ops_csp_enforced: Whether the browser blocks what ``ops_csp`` forbids
             (``OPS_CSP_MODE=enforce``) or only reports it in its console.
+        announcement_from_address: The sender of announcement email, for example
+            ``Policy Atlas <updates@example.org>`` (``ANNOUNCEMENT_FROM_ADDRESS``).
+            The operations service sends no email without it.
+        announcement_reply_to: Where a reply to an announcement goes
+            (``ANNOUNCEMENT_REPLY_TO``).
+        public_site_url: The public site's address, no trailing slash
+            (``PUBLIC_SITE_URL``). Not ``app_origin``: on the operations service
+            that is the operations site.
+        public_api_url: The public API's address, no trailing slash
+            (``PUBLIC_API_URL``); the one-click unsubscribe header points there.
+        announcement_image_bucket: The storage bucket (Amazon S3) that holds
+            announcement pictures (``ANNOUNCEMENT_IMAGE_BUCKET``).
     """
 
     oidc_issuer: str
@@ -80,6 +92,11 @@ class Settings:
     ops_ui_dir: Path | None = Path("/app/ops-ui")
     ops_csp: str | None = None
     ops_csp_enforced: bool = False
+    announcement_from_address: str | None = None
+    announcement_reply_to: str | None = None
+    public_site_url: str | None = None
+    public_api_url: str | None = None
+    announcement_image_bucket: str | None = None
 
 
 def load_settings() -> Settings:
@@ -142,6 +159,11 @@ def load_settings() -> Settings:
         ops_ui_dir=Path(_optional("OPS_UI_DIR") or "/app/ops-ui"),
         ops_csp=_optional("OPS_CONTENT_SECURITY_POLICY"),
         ops_csp_enforced=_optional("OPS_CSP_MODE") == "enforce",
+        announcement_from_address=_optional("ANNOUNCEMENT_FROM_ADDRESS"),
+        announcement_reply_to=_optional("ANNOUNCEMENT_REPLY_TO"),
+        public_site_url=_url("PUBLIC_SITE_URL"),
+        public_api_url=_url("PUBLIC_API_URL"),
+        announcement_image_bucket=_optional("ANNOUNCEMENT_IMAGE_BUCKET"),
     )
 
 
@@ -215,6 +237,12 @@ def _optional(name: str) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _url(name: str) -> str | None:
+    """Return an optional address with any trailing slash removed."""
+    value = _optional(name)
+    return value.rstrip("/") if value is not None else None
 
 
 def _positive_int(name: str, *, default: int) -> int:
