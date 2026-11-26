@@ -3,7 +3,8 @@
 Evidence for the build of part 068a. Part 068b (receive) is not built. Contract:
 [contract.md](contract.md) revision 3 with the picture-switch ruling. Plan: [plan.md](plan.md).
 
-> **State:** build in progress. Sections marked *(open)* are filled at the step-6 exit.
+> **State:** build complete except the owner's polish pass and the staging live checks
+> (§ Known unverified items).
 
 ## Commands run
 
@@ -15,7 +16,8 @@ Evidence for the build of part 068a. Part 068b (receive) is not built. Contract:
 | `make openapi-sync`, `make drift-check` | pass | After Phases 4 and 5 and after the field-name change. |
 | `make -C infra test` after Phase 8 | pass | 178 tests. |
 | `make frontend-verify-fast` after Phase 6 | pass | 151 files, 2,041 tests. |
-| `make verify` at the step-6 exit | *(open)* | |
+| `make verify` on the simplified code | pass | 5,086 backend tests, typecheck, lint, 178 infra tests, guards, drift check, 2,052 frontend tests and the build. No load failure this time. |
+| `make verify` at the step-6 exit, after the Codex fixes (`6b53bdc1`) | pass | Exit 0. 5,112 backend tests, typecheck, lint, 178 infra tests, guards, drift check, 2,053 frontend tests and the build. Another checkout ran its suite at the same time; no load failure. |
 
 Every backend run used its own test database (`TEST_DATABASE_URL=…/policy_atlas_068_test`
 or `…_068v_test`), because other checkouts ran tests on the default one.
@@ -24,13 +26,42 @@ or `…_068v_test`), because other checkouts ran tests on the default one.
 
 - **Deterministic tests:** listed by rubric row in § Rubric status. No AI eval applies.
 - **Manual / browser:** the ops pages against the mock, screenshots at 1280 and 400 wide
-  (build and polish rounds). *(open: the unsubscribe page)*
+  (build and polish rounds). The unsubscribe page, signed out, against intercepted
+  answers: every state at 1280 and 400 wide; the token left the address bar and each POST
+  went out with no `Referer` header.
 - **Live checks on staging (contract § Acceptance checks):** **not run in the build.**
   They need a deploy, which is the owner's. See § Known unverified items.
 
 ## End-to-end command
 
-*(open)*
+The contract pins the live end-to-end thread to staging (ten checks, about 45 minutes).
+That needs a deploy and is **not run** in the build. What ran locally, at the widest
+scope that needs no AWS account:
+
+```bash
+# Backend: a send through the route, the sender after the commit, start-up resume,
+# and the public unsubscribe routes (in-memory mailer, real database).
+cd backend && DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_068_test \
+  uv run pytest \
+  "tests/api/test_ops_announcements_router.py::test_a_send_records_everything_and_the_sender_runs_after_the_commit" \
+  "tests/api/test_ops_announcements_router.py::test_ops_start_up_with_a_mailer_finishes_pending_rows" \
+  tests/api/test_email_preferences.py -q -p no:xdist
+# 21 passed
+
+# Frontend: the annex's five scenes against the mock, and the unsubscribe page.
+cd frontend && pnpm vitest run src/ops/views/announcements.journey.test.tsx src/views/unsubscribe
+# 2 files, 11 tests passed
+```
+
+To look at the pages by hand:
+
+```bash
+cd frontend && VITE_MOCK=1 pnpm exec vite --config vite.ops.config.ts --port 5288 --strictPort
+# http://localhost:5288/announcements            (the ops pages against the mock)
+# http://localhost:5288/announcements?mock=list-changes   (the "list changed" dialog)
+cd frontend && pnpm exec vite --port 5377 --strictPort
+# http://localhost:5377/unsubscribe?token=x      (arrive state; the buttons need the API)
+```
 
 ## Diff summary
 
@@ -44,7 +75,7 @@ What exists after the build, by contract step:
 - **B. Ops routes.** `api/routers/ops_announcements.py`, seven routes; the mailer is
   built in the ops lifespan only.
 - **C. Public unsubscribe.** `api/routers/email_preferences.py`; the access-log filter.
-  *(open: the page)*
+  `frontend/src/views/unsubscribe/UnsubscribeView.tsx`, routed outside the sign-in guard.
 - **D. Ops pages.** `frontend/src/ops/views/Announcement*.tsx`, the mock handlers.
 - **E. AWS setup.** `infra/infra/components/email.py`; three switches in `pa_config.json`.
 
@@ -92,16 +123,119 @@ What exists after the build, by contract step:
 
 ## Simplification (build step 5c)
 
-*(open)*
+Four read-only reviewers (reuse, simplification, efficiency, layering) read
+`git diff dev...HEAD` for the product code. Two agents applied the fixes. No route,
+status code, JSON shape, schema, IAM statement or user-facing word changed; the generated
+OpenAPI files show no change. Checks after it: `make verify-fast` (5,048 passed) and
+`make frontend-verify-fast` (2,052 passed), both builds.
+
+**Applied, backend** (commit `e73664f0`):
+
+- `create_announcement` and `retry_failed` return the audit row's id and the counts they
+  already hold. The route no longer looks the id up again or counts the rows again.
+- `failure_code` is public in `ops/mail.py`. `queue_log` and `audit` are public in
+  `routers/ops.py`; the test and picture routes use `audit`.
+- `in_background` moved to `core/background.py` with the log event name as an argument.
+  A sender that crashes now logs `announcement.sender_crashed` (the one new event name).
+- The access-log filter moved to `core/logging.py`; `configure_logging()` installs it.
+  It still matches only the two unsubscribe paths.
+- `get_optional_mailer` in `api/deps.py`: one way to reach the mailer.
+- The detail route reads the suppression list only when at least one row is `sent`.
+- The picture store is built once at start-up, not for each upload.
+- `build_recipients` returns the audience summary on the list; one query fewer.
+- The six message fields are named once (`dataclasses.fields(Message)`).
+- `html.escape` is called directly; `AnnouncementKind` is `mail.Kind`.
+
+**Applied, frontend** (commit `b23c6bf8`):
+
+- `ChoiceRow` moved to `ui/brand/ChoiceRow.tsx`; the ops pages no longer import from the
+  public app's workspace view.
+- `LIVE_MS` moved to `announcementParts.tsx`.
+- One `serverSentence` helper and one `DraftInput` component on the compose page. The
+  rendered markup was compared before and after: identical.
+- The audience lists and the result table's sort are memoised; one collator.
+- Mock: one constant and one helper for values that appeared twice; the 409 uses `apiError`.
+
+**Found, not applied:**
+
+- *The fingerprint sorts lines that are already in order.* Not applied: the sort is by
+  the whole line, not by user id, so removing it changes the value for some ids.
+- *Validate the message before the suppression list is read.* Not applied: a send with a
+  bad field and an unreadable list would answer 422 where it now answers 503.
+- *Reuse `rememberedChoice` for the unsent text.* Not applied: it has no "remove".
+- *Reuse `NameList` in the "See the list" dialog.* Not applied: its container differs,
+  so the look would change.
+- *One store factory in `core/uploads.py` for the task bucket and the picture bucket.*
+  Structural; on the deferred list.
+- *Write the unsent text after a short pause, not on each key press.* Small; on the
+  deferred list.
+- *Render the email once for an announcement, not once for each person.* Under one
+  millisecond for each email against the 0.2 second pause.
+- *A rest-destructure in the mock's list route.* The lint rule refuses it.
 
 ## Review findings
 
-Added after the review stack (step 7). The owner approved running the first Codex review
-in the build session; its findings are recorded here. *(open)*
+The full review stack runs in a fresh conversation (step 7). The owner approved one
+Codex adversarial review in the build session (2026-11-26, read-only, on the simplified
+code at `b23c6bf8`). It gave four findings. The lead checked each against the code; all
+four are real and are fixed in the build. The fresh conversation should still judge the
+fixes: their author is this session.
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Blocker | A send error after SES may have accepted the email (a read timeout, a closed connection, a 5xx answer) was written as `failed`, so a retry could send a second copy (I1). The SDK's automatic retries could do the same inside one call. The existing test raised a `BaseException`, which never reached the handler. | Automatic retries off for the SES client. A row becomes `failed` only when the email provably did not go (it could not be built, no connection was made, or SES refused it with a 4xx answer). Any other error leaves the row `sending` ("Not confirmed") and the sender goes on. |
+| 2 | Material | The limit of 5 emails a second held for each sender thread, not for the ops process. | One lock for the process around "send, then pause". |
+| 3 | Material | When a sender thread stopped, rows still waiting had no action on the page. | The result page offers "Send to the N still waiting" when rows wait and the send is not live. New words: annex § Deferred polish, for the owner's pass. |
+| 4 | Minor | The access-log filter missed odd forms of the two addresses (a double slash, upper case), so a token could be logged for a request that answers 404. | The filter matches the normalised path. |
+
+Hardening idea, not taken: parse the button link and the picture address as URLs, not by
+prefix. The input is the operator's own, the text is escaped, and the picture prefix is
+the site's own origin.
+
+Codex found these areas clean: the opt-out lock order (I3), no address or text in a log
+(I2), the public routes, the picture path, the "test before send" rule and the
+fingerprint after a 409, and the IAM statements.
+
+Open for step 7: contract verifier · `/code-review` · security lane · design lane ·
+human deep review.
 
 ## Rubric status
 
-*(open: filled at the step-6 exit)*
+State at the end of the build. "Test" names the main test; "live" needs staging.
+
+| Row | State | Evidence |
+|---|---|---|
+| 1 Contract A1 to E6 | Built, except what the rows below mark | § Diff summary |
+| 2 `make verify`, drift check, infra tests, live checks | Local part holds; **live checks not run** | § Commands run |
+| 3 No unapproved gated change | Holds | One new config key, `email.pictures`, by owner ruling. One new 422 code and one 502 mapping on the ops API (deviations 6 and 7) |
+| 4 No generated file or secret edited by hand | Holds | Generated files only through `make openapi-sync`; § Public safety |
+| 5 No test deleted, skipped or weakened | Holds | Two existing tests changed: the ops gate sweep skips the announcement routes (pinned by their own test); five environment tests clear recipient rows first |
+| 6 Verification recorded | This file | |
+| 7 Gaps and deferred seams listed | Listed here; `docs/deferred.md` at step 8 | § Review handoff |
+| 8 Review stack | **Open** (fresh conversation). First Codex review ran: § Review findings | |
+| 9 A1 | Holds | `test_upgrade_gives_each_existing_person_a_distinct_token`; `test_pa_ops_grants_are_exactly_the_contract_list`; `test_pa_ops_refuses_ungranted_statements`. Update grant by column (deviation 1) |
+| 10 A2 | Holds | `test_example_audience_gives_82_chosen_79_for_an_update_and_81_for_a_notice`; `test_a_person_is_left_out_for_the_first_reason_that_applies` |
+| 11 A3 | Holds | `test_api_mode_builds_no_mailer_even_with_the_sender_settings`; `test_without_a_mailer_the_sending_routes_answer_503` |
+| 12 A4 | Holds, with deviation 2 | `tests/ops/test_mail.py` |
+| 13 B1 | Holds | `test_preview_gives_the_example_counts_and_reasons_and_writes_nothing` |
+| 14 B2 | Holds | `test_a_test_goes_only_to_the_operators_own_address_with_the_sample_token` |
+| 15 B3 | Holds | `test_a_png_and_a_jpeg_are_stored_and_their_address_returned`; `test_a_picture_that_breaks_a_rule_is_refused_and_nothing_is_stored` |
+| 16 B4 | Holds | `test_a_send_records_everything_and_the_sender_runs_after_the_commit`; `test_a_changed_list_with_the_same_count_answers_409_and_inserts_nothing` |
+| 17 B5, I1 | Holds after the Codex fix | `tests/ops/test_announcements.py`; `test_ops_start_up_with_a_mailer_finishes_pending_rows` |
+| 18 B6 | Holds | `test_the_detail_shows_a_sent_row_bounced_after_the_send_and_stores_nothing`; `test_the_detail_answers_with_the_flag_when_the_suppression_list_cannot_be_read` |
+| 19 B7, I1 | Holds | `test_retry_sends_the_failed_rows_and_leaves_sent_and_sending_alone`; the page words a stale `sending` row "Not confirmed" |
+| 20 I2 | Holds | `test_no_log_line_or_audit_row_holds_an_address_the_subject_or_the_body`; `test_logs_and_audit_rows_of_a_send_hold_no_address_or_subject` |
+| 21 I3, C1 | Holds | `test_a_service_notice_reaches_people_who_unsubscribed_or_have_not_signed_in`; `tests/api/test_email_preferences.py` |
+| 22 C2 | Holds | `frontend/src/views/unsubscribe/UnsubscribeView.test.tsx` (10 tests) |
+| 23 C3 | **Open: a merge gate** | The text is in PR #151; the approval record is the owner's (deviation 8) |
+| 24 D1 to D4 | Holds | `announcements.journey.test.tsx` "plays the five scenes" |
+| 25 E1 | Holds | `test_ops_role_may_send_only_as_updates_and_read_suppressions_and_the_api_role_has_no_ses` |
+| 26 E2 | Holds | `test_announcement_settings_reach_only_the_ops_container_and_only_when_switched_on` |
+| 27 E3 | Holds | `test_picture_bucket_is_private_read_only_by_the_site_distribution_and_ops_may_only_add`; `test_rolling_back_sending_keeps_the_pictures_served_and_removes_every_send_right` |
+| 28 E4 | Holds | `test_one_dmarc_record_for_the_sender_domain_only_when_email_is_enabled` |
+| 29 E5 | Not in 068a | Part 068b |
+| 30 E6 | Document written; **live part open** | `infra/DEPLOYMENT.md` § Announcement email from the ops pages |
+| Polish passes | Agent pass done; **owner pass open** | Annex § Polish log, § Deferred polish |
 
 ## Intent & assumptions
 
@@ -152,16 +286,14 @@ commit; Claude built everything, so Codex anchors the review):
 | `api/routers/ops_announcements.py`, contract types, lifespan wiring, `test_ops_announcements_router.py` | `deep-reasoner` |
 | `api/routers/email_preferences.py`, `test_email_preferences.py` | `deep-reasoner` |
 | `infra/infra/components/email.py`, `test_email.py`, synth test stacks | `deep-reasoner` |
-| `frontend/src/ops/**` announcement pages, mock and tests | `frontend-designer` |
+| `frontend/src/ops/**` announcement pages, mock and tests; the agent polish pass | `frontend-designer` (two separate runs) |
+| `frontend/src/views/unsubscribe/**`, the `/unsubscribe` routes | `frontend-designer` |
+| The simplify fixes | `deep-reasoner` (backend), `frontend-designer` (frontend), to the lead's list |
 | `InvalidMessage.field`, the `invalid_message` 422, the fix in `test_ops_environment.py`, `infra/DEPLOYMENT.md`, this file | lead |
 
 **Adjudication items for the review:**
 
 - The seven flagged deviations above that change behaviour or wording (1 to 7).
-- `routers/ops_announcements.py` imports two private names (`_queue_log`,
-  `_failure_code`) and looks the audit row's id up again after `create_announcement` and
-  `retry_failed` (they do not return it).
-- A sender that crashes is logged by the shared helper as `titles.background_failed`.
 - A database error in the sender's result write ends the sender thread. Rows still
   `pending` then wait for a retry click or a restart; the page offers the retry button
   only when a row has failed.
@@ -175,8 +307,6 @@ commit; Claude built everything, so Codex anchors the review):
   adds it); they answer only 204 or 404.
 - `tests/api/test_ops_router.py`: the gate sweep skips `/api/v1/ops/announcement*`,
   because the new router's own test pins those routes. No assertion was removed.
-- `frontend/src/ops/views/ComposeAnnouncementView.tsx` imports `ChoiceRow` from the
-  public app's `views/workspace/PartCard.tsx`.
 
 **Knowledge candidates:**
 
@@ -215,9 +345,9 @@ commit; Claude built everything, so Codex anchors the review):
 - Narrow the "no notification channel" entry: operator-sent email now exists.
 - Unused pictures stay in the bucket. DMARC is at `p=none` with no report address.
 - No stand-in mailer for a local ops server.
-- `in_background` lives in `api/titles.py` and logs under a titles event name.
+- One store factory in `core/uploads.py` for both buckets (found at simplify).
+- The unsent announcement text is written to browser storage on each key press.
 - The sender has no shutdown hook; a stop during a send can leave one "Not confirmed" row.
-- `ChoiceRow` shared between the public app and the ops pages by a cross-import.
 
 ## Deferred work
 

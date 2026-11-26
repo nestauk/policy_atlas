@@ -177,5 +177,8 @@ For the owner's pass (round 2):
   busy button keeps the word "Unsubscribe"; the "again" state is a heading only.
 - Unsubscribe page, after Unsubscribe: the line "We still email you when…" shows, as in
   the mock. The annex lists only the heading and the link for that state.
+- Result page, new state from the code review: when people still wait and the send is
+  not running, the page says "The send stopped before it reached everyone." and offers
+  "Send to the N still waiting". A failure says "The emails were not sent. Try again."
 - Words used where the annex is silent (load failures, empty filter, picture errors,
   "N not confirmed"): listed in the build report; all plain, none changes a state.
