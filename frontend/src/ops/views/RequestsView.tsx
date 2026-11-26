@@ -21,6 +21,7 @@ import {
   Field,
   Loading,
   NameList,
+  CohortsField,
   OrganisationSelect,
   SearchField,
   SortTh,
@@ -28,9 +29,30 @@ import {
   TABLE_WRAP_CLASS,
   TD_CLASS,
   TH_CLASS,
+  useCohortNames,
   useRecordedToast,
   useSort,
+  withCohorts,
 } from "../ui";
+
+type RequestInvite = NonNullable<AccessRequest["invite"]>;
+
+/** The words after "Invite link: <label> — " for each reason a code has made no account yet. */
+const INVITE_REASONS: Record<Exclude<RequestInvite["reason"], "unknown_code">, string> = {
+  wrong_domain: "wrong email domain",
+  expired: "expired",
+  full: "full",
+  revoked: "revoked",
+  next_run: "waiting for the next run",
+  retry_wait: "last try failed, next try in a few minutes",
+};
+
+/** Why a waiting request's invite code has made no account yet. */
+function inviteLine(invite: RequestInvite): string {
+  return invite.reason === "unknown_code"
+    ? "Invite link: code not recognised"
+    : `Invite link: ${invite.label ?? ""} — ${INVITE_REASONS[invite.reason]}`;
+}
 
 /** A row turned to Check by a refused approval, before the list says so. */
 type Refusal = { org: string; message: string };
@@ -72,29 +94,32 @@ export function RequestsView() {
   );
   const [viewing, setViewing] = useState<AccessRequest | null>(null);
   const [orgId, setOrgId] = useState("");
+  const [cohortIds, setCohortIds] = useState<string[]>([]);
+  const cohortNames = useCohortNames();
   const [refusals, setRefusals] = useState<Record<string, Refusal>>({});
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   /** Whether the open dialog's approval came back: its row's button is then on its way out. */
   const answered = useRef(false);
-  const approve = useOpsAction((client, { entryId, org }: { entryId: string; org: string }) =>
-    unwrap(
-      client.POST("/api/v1/ops/requests/{entry_id}/approve", {
-        params: { path: { entry_id: entryId } },
-        body: { org_id: org },
-      }),
-    ),
+  const approve = useOpsAction(
+    (client, { entryId, org, cohorts }: { entryId: string; org: string; cohorts: string[] }) =>
+      unwrap(
+        client.POST("/api/v1/ops/requests/{entry_id}/approve", {
+          params: { path: { entry_id: entryId } },
+          body: { org_id: org, cohort_ids: cohorts },
+        }),
+      ),
   );
 
-  const send = (request: AccessRequest, org: string) => {
+  const send = (request: AccessRequest, org: string, cohorts: string[]) => {
     setRetry(null);
     approve.mutate(
-      { entryId: request.entry_id, org },
+      { entryId: request.entry_id, org, cohorts },
       {
         onSuccess: () => {
           answered.current = true;
           setApproving(null);
-          toast(`${request.name} approved`);
+          toast(withCohorts(`${request.name} approved`, cohortNames(cohorts)));
         },
         onError: (error) => {
           setApproving(null);
@@ -105,7 +130,7 @@ export function RequestsView() {
               [request.entry_id]: { org: orgInRefusal(error.message) ?? "another organisation", message: error.message },
             }));
           } else {
-            setRetry(() => () => send(request, org));
+            setRetry(() => () => send(request, org, cohorts));
           }
         },
       },
@@ -116,14 +141,14 @@ export function RequestsView() {
    * Approve each request in turn through the one-request route, so each keeps
    * its own audit row and its own outcome; a refusal marks its row Check.
    */
-  const sendMany = async (many: AccessRequest[], org: string) => {
+  const sendMany = async (many: AccessRequest[], org: string, cohorts: string[]) => {
     setBulkPending(true);
     setRetry(null);
     let approved = 0;
     const failed: AccessRequest[] = [];
     for (const request of many) {
       try {
-        await approve.mutateAsync({ entryId: request.entry_id, org });
+        await approve.mutateAsync({ entryId: request.entry_id, org, cohorts });
         approved += 1;
       } catch (error) {
         if (error instanceof OpsApiError && error.code === "enrolled_elsewhere") {
@@ -141,7 +166,7 @@ export function RequestsView() {
     setSelected(new Set());
     const refused = many.length - approved - failed.length;
     toast(facts(`${approved} approved`, ...(refused > 0 ? [`${refused} already in another organisation`] : []), ...(failed.length > 0 ? [`${failed.length} failed`] : [])));
-    if (failed.length > 0) setRetry(() => () => void sendMany(failed, org));
+    if (failed.length > 0) setRetry(() => () => void sendMany(failed, org, cohorts));
   };
 
   /** Reject each request in turn: no email; each keeps its own audit row. */
@@ -181,6 +206,7 @@ export function RequestsView() {
     {
       name: (item) => item.name,
       email: (item) => item.email,
+      organisation: (item) => item.organisation,
       requested: (item) => item.created_at,
       // Waiting first, then those to check, then the rejected record.
       status: (item) => ({ waiting: 0, check: 1, invited: 2, rejected: 3 })[item.status],
@@ -200,8 +226,12 @@ export function RequestsView() {
       return next;
     });
   const selectAll = () => setSelected(new Set(waiting.map((item) => item.entry_id)));
-  const openMany = () => {
+  const clearChoice = () => {
     setOrgId("");
+    setCohortIds([]);
+  };
+  const openMany = () => {
+    clearChoice();
     setApprovingMany(ticked);
   };
 
@@ -270,11 +300,12 @@ export function RequestsView() {
                       onChange={(on) => (on ? selectAll() : setSelected(new Set()))}
                     />
                   </th>
-                  <SortTh {...th} sortKey="name" label="Name" className="w-48" />
-                  <SortTh {...th} sortKey="email" label="Email" className="w-64" />
+                  <SortTh {...th} sortKey="name" label="Name" className="w-40" />
+                  <SortTh {...th} sortKey="email" label="Email" className="w-52" />
+                  <SortTh {...th} sortKey="organisation" label="Organisation" className="w-56" />
                   <SortTh {...th} sortKey="requested" label="Requested" className="w-32" />
-                  <SortTh {...th} sortKey="status" label="Status" className="w-60" />
-                  <th className={cn(TH_CLASS, ACTIONS_TH_CLASS, "w-52")}>
+                  <SortTh {...th} sortKey="status" label="Status" className="w-40" />
+                  <th className={cn(TH_CLASS, ACTIONS_TH_CLASS, "w-48")}>
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
@@ -307,6 +338,14 @@ export function RequestsView() {
                       </td>
                       <td className={cn(TD_CLASS, "truncate")} title={request.email}>
                         {request.email}
+                      </td>
+                      <td className={TD_CLASS}>
+                        <span className="block truncate" title={request.organisation ?? undefined}>
+                          {request.organisation ?? <span className="text-grey">—</span>}
+                        </span>
+                        {request.invite != null && request.status === "waiting" && (
+                          <span className="block text-meta text-grey">{inviteLine(request.invite)}</span>
+                        )}
                       </td>
                       <td className={cn(TD_CLASS, "whitespace-nowrap")}>
                         <Figures text={ago(request.created_at)} />
@@ -341,7 +380,7 @@ export function RequestsView() {
                               size="sm"
                               onClick={() => {
                                 answered.current = false;
-                                setOrgId("");
+                                clearChoice();
                                 setApproving(request);
                               }}
                             >
@@ -374,7 +413,7 @@ export function RequestsView() {
                 <Button
                   onClick={() => {
                     answered.current = false;
-                    setOrgId("");
+                    clearChoice();
                     setApproving(viewing);
                     setViewing(null);
                   }}
@@ -472,7 +511,7 @@ export function RequestsView() {
               <Button variant="ghost" disabled={bulkPending} onClick={() => setApprovingMany(null)}>
                 Cancel
               </Button>
-              <Button disabled={orgId === "" || bulkPending} onClick={() => void sendMany(approvingMany, orgId)}>
+              <Button disabled={orgId === "" || bulkPending} onClick={() => void sendMany(approvingMany, orgId, cohortIds)}>
                 {bulkPending ? "Approving…" : "Approve"}
               </Button>
             </>
@@ -494,6 +533,9 @@ export function RequestsView() {
               />
             )}
           </Field>
+          <div className="mt-5">
+            <CohortsField id="approve-many-cohorts" values={cohortIds} onChange={setCohortIds} />
+          </div>
           <NameList
             people={approvingMany.map((item) => ({ user_id: item.entry_id, display_name: item.name, email: item.email }))}
           />
@@ -512,7 +554,7 @@ export function RequestsView() {
               <Button variant="ghost" onClick={() => setApproving(null)}>
                 Cancel
               </Button>
-              <Button disabled={orgId === "" || approve.isPending} onClick={() => send(approving, orgId)}>
+              <Button disabled={orgId === "" || approve.isPending} onClick={() => send(approving, orgId, cohortIds)}>
                 Approve
               </Button>
             </>
@@ -534,6 +576,9 @@ export function RequestsView() {
               />
             )}
           </Field>
+          <div className="mt-5">
+            <CohortsField id="approve-cohorts" values={cohortIds} onChange={setCohortIds} />
+          </div>
         </Dialog>
       )}
     </>

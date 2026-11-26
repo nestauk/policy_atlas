@@ -64,7 +64,7 @@ def test_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 56  # task 065 adds four ops and cohort tables
+    assert len(metadata.tables) == 58  # with the ops, cohort and invite-link tables
 
 
 # --- Stub logic (pure Python, no DB) ---

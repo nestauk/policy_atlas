@@ -72,7 +72,7 @@ describe("MultiSelect — disabled", () => {
       <MultiSelect
         label="Searches"
         options={OPTIONS}
-        values={["a"]}
+        values={[]}
         onChange={() => {}}
         placeholder="Choose a project first"
         filterLabel="Find a search"
@@ -86,5 +86,23 @@ describe("MultiSelect — disabled", () => {
     await user.click(button);
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Searches: chosen" })).not.toBeInTheDocument();
+  });
+
+  it("keeps showing what was chosen, with no way to remove it", () => {
+    render(
+      <MultiSelect
+        label="Searches"
+        options={OPTIONS}
+        values={["a"]}
+        onChange={() => {}}
+        placeholder="None"
+        filterLabel="Find a search"
+        empty="No searches"
+        disabled
+      />,
+    );
+    expect(trigger()).toHaveTextContent(/^Childhood obesity$/);
+    expect(within(screen.getByRole("list", { name: "Searches: chosen" })).getByText("Childhood obesity")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Childhood obesity" })).not.toBeInTheDocument();
   });
 });

@@ -14,7 +14,13 @@ from sqlalchemy import create_engine, select, text, update
 from sqlalchemy.engine import URL, Connection, Engine
 from sqlalchemy.exc import ProgrammingError
 
-from policy_atlas.core.schema import app_user, ops_action, organisation, waitlist_entry
+from policy_atlas.core.schema import (
+    app_user,
+    invite_link_cohort,
+    ops_action,
+    organisation,
+    waitlist_entry,
+)
 from policy_atlas.ops import commands
 from tests.api.org_support import make_org, make_project, make_task, make_user, seeded
 from tests.ops.support import (
@@ -365,6 +371,8 @@ _EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
     "project_membership": {"SELECT", "DELETE"},
     "cohort": {"SELECT", "INSERT", "DELETE"},
     "cohort_member": {"SELECT", "INSERT", "DELETE"},
+    "invite_link": {"SELECT", "INSERT", "DELETE"},
+    "invite_link_cohort": {"SELECT", "INSERT"},
 }
 _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
     "app_user": {
@@ -372,14 +380,120 @@ _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
         "task_quota_per_year", "runs_per_user", "deactivated_at",
     },
     "organisation": {"name", "task_quota_per_year", "runs_per_user"},
-    "waitlist_entry": {"account_user_id", "account_created_at", "rejected_at"},
+    "waitlist_entry": {"account_user_id", "account_created_at", "rejected_at", "invite_link_id"},
     "task": {"org_id", "visibility", "is_public"},
     "project": {"org_id", "visibility"},
     "cohort": {
         "name", "description", "starts_on", "ends_on", "links", "task_quota_per_year",
         "runs_per_user",
     },
+    "invite_link": {"label", "max_uses", "expires_at", "revoked_at"},
 }
+
+
+def test_pa_ops_creates_updates_and_revokes_an_invite_link(
+    pa_ops_engine: Engine, engine: Engine
+) -> None:
+    """The three link commands run within the ops login's grants."""
+    from datetime import timedelta
+
+    org = _org(engine)
+    with seeded(engine) as conn:
+        target = commands.save_cohort(conn, cohort_id=None, name=f"Links {uuid.uuid4()}",
+                                      description=None, starts_on=None, ends_on=None, links=[])
+    now = datetime.now(UTC)
+    with _as_pa_ops(pa_ops_engine) as conn:
+        link = commands.create_invite_link(
+            conn, label="Pilot", org=org, cohorts=[target], allowed_domains=["nhs.net"],
+            max_uses=3, expires_at=now + timedelta(days=7), created_by="operator", now=now,
+        )
+        commands.update_invite_link(conn, invite_link_id=link.invite_link_id, label="Renamed",
+                                    max_uses=5, expires_at=now + timedelta(days=9), now=now)
+        revoked = commands.revoke_invite_link(conn, invite_link_id=link.invite_link_id, now=now)
+        assert revoked.revoked_at == now
+        # Deleting a cohort removes it from the link, with no DELETE grant on the join table.
+        commands.delete_cohort(conn, cohort_id=target.cohort_id)
+        assert conn.execute(select(invite_link_cohort).where(
+            invite_link_cohort.c.invite_link_id == link.invite_link_id)).all() == []
+
+
+def test_pa_ops_deletes_an_organisation_with_a_revoked_unused_invite_link(
+    pa_ops_engine: Engine, engine: Engine
+) -> None:
+    """The link goes with the organisation, and its cohort rows by the cascade."""
+    from datetime import timedelta
+
+    from policy_atlas.core.schema import invite_link
+
+    org = _org(engine)
+    now = datetime.now(UTC)
+    with seeded(engine) as conn:
+        target = commands.save_cohort(conn, cohort_id=None, name=f"Dead {uuid.uuid4()}",
+                                      description=None, starts_on=None, ends_on=None, links=[])
+        link = commands.create_invite_link(
+            conn, label="Pilot", org=org, cohorts=[target], allowed_domains=["nhs.net"],
+            max_uses=3, expires_at=now + timedelta(days=7), created_by="operator", now=now,
+        )
+        commands.revoke_invite_link(conn, invite_link_id=link.invite_link_id, now=now)
+    with _as_pa_ops(pa_ops_engine) as conn:
+        commands.delete_organisation(conn, org_id=org.org_id)
+        assert conn.execute(select(invite_link).where(
+            invite_link.c.invite_link_id == link.invite_link_id)).all() == []
+        assert conn.execute(select(invite_link_cohort).where(
+            invite_link_cohort.c.invite_link_id == link.invite_link_id)).all() == []
+
+
+def test_pa_ops_sweep_redeems_a_request_through_an_invite_link(
+    pa_ops_engine: Engine, engine: Engine
+) -> None:
+    """One full sweep tick as the ops login: tick lock, candidate query, redemption, audit."""
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from policy_atlas.api.deps import Identity
+    from policy_atlas.api.settings import Settings
+    from policy_atlas.core.schema import cohort_member
+    from policy_atlas.ops.sweep import sweep_once
+
+    org = _org(engine)
+    domain = f"pa-ops-{uuid.uuid4().hex[:8]}.test"
+    email, sub = f"pilot@{domain}", f"pa-ops-link-{uuid.uuid4()}"
+    now = datetime.now(UTC)
+    with seeded(engine) as conn:
+        target = commands.save_cohort(conn, cohort_id=None, name=f"Sweep {uuid.uuid4()}",
+                                      description=None, starts_on=None, ends_on=None, links=[])
+        link = commands.create_invite_link(
+            conn, label="Pilot", org=org, cohorts=[target], allowed_domains=[domain],
+            max_uses=1, expires_at=now + timedelta(days=7), created_by="operator", now=now,
+        )
+        entry_id = uuid.uuid4()
+        conn.execute(waitlist_entry.insert().values(
+            entry_id=entry_id, email=email, name="Pilot", role_or_reason="pilot",
+            invite_code=link.code,
+            # The oldest request on the shared test database, so a cap of one
+            # serves it and leaves every other module's waiting rows alone.
+            created_at=datetime(2000, 1, 1, tzinfo=UTC),
+        ))
+    settings = replace(
+        Settings("http://dev-issuer.local", "sweep-test", None, None,
+                 "http://app.example.test", "unused"),
+        self_signup_max_per_hour=1,
+    )
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        expect_create(stubber, email=email, sub=sub)
+        # Two hours ahead, so no sweep audit row written elsewhere spends the cap.
+        report = sweep_once(pa_ops_engine, Identity(client, POOL_ID, "eu-west-2"), settings,
+                            now=now + timedelta(hours=2))
+        stubber.assert_no_pending_responses()
+    assert report.invited == 1
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
+        ).mappings().one()
+        assert (row["account_user_id"], row["invite_link_id"]) == (sub, link.invite_link_id)
+        assert conn.execute(select(cohort_member.c.cohort_id).where(
+            cohort_member.c.user_id == sub)).scalar_one() == target.cohort_id
 
 
 def test_pa_ops_grants_are_exactly_the_contract_list(engine: Engine) -> None:

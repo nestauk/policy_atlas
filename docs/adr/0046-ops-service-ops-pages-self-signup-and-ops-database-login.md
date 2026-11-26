@@ -237,3 +237,71 @@ pages could show, and that re-adding the address left the login disabled. Task 0
 - **Accepted risk:** an access token issued before deactivation can read the
   organisation's shared work until it expires (up to 60 minutes). It is recorded in
   `docs/deferred.md`.
+
+## Amendment (2026-11-25, task 071): invite links, cohorts at add, and two sweep rules
+
+Approved by the owner (Karlis Kanders) on 2026-11-25 at the task 071 contract and plan
+gates ([contract](../tasks/071-self-signup-staging/contract.md)). The task turns
+self-signup on for staging. Production keeps the flag false.
+
+- **Decision 7 gains a second way to an account: the invite link.** An operator makes a
+  link for one organisation, its cohorts and 1 to 10 email domains, with a maximum number
+  of uses and an expiry date. A request that arrives through the link gets an account from
+  the sweep without an operator. This is for a pilot where only some people of a domain
+  get access, so the domain is not listed.
+- **The public route still reveals nothing.** `POST /api/v1/waitlist` accepts an optional
+  `invite_code` and stores it. Its answer has the same status, fields and headers for a
+  good, an unknown and a missing code. The public API never reads `invite_link` and never
+  calls Cognito. Only the sweep checks a code.
+- **The code travels in the fragment of the link** (`/#invite=…`), which a browser never
+  sends to a server, so no CDN or load-balancer log holds it. It is stored as plain text,
+  because an operator must be able to copy the link again. It is in no backend log line
+  and no audit row.
+- **Precedence.** A request with a redeemable code is redeemed through the link, also when
+  its domain is listed. A code that is not redeemable is ignored: a listed-domain request
+  still gets its normal account, and any other request waits and shows its reason on the
+  Waitlist page. The sweep therefore also runs when no domain is listed.
+- **The abuse ceiling of decision 7 is restated.** Invitations go only to addresses in a
+  listed domain or in one of the domains of a valid invite link: one invitation for each
+  address ever, at most `max_uses` for each link, at most `max_per_hour` each hour. A link
+  holder can enter addresses of those domains that are not theirs, and can put the link's
+  code on another person's waiting request; the result is an invitation to the mailbox
+  owner and nothing else. A known limit (review, 2026-11-26, the owner accepted it): the
+  public route cannot tell a real code from a made-up one, so anyone who knows a person's
+  address can replace the valid code on that person's waiting request with a made-up one.
+  A request in a listed domain still gets its account. A request in an unlisted domain
+  then waits; the Waitlist page shows "code not recognised" and an operator approves it
+  by hand.
+- **One sweep tick at a time.** A tick holds one PostgreSQL advisory lock for its whole
+  run; a second tick that finds it taken does nothing. Two ops tasks that overlap during a
+  deploy cannot pass `max_per_hour` or `max_uses`. Operator actions do not take this lock.
+- **A failed request waits 15 minutes before the next try.** Before, one request that kept
+  failing was tried every tick and could spend 60 of the hour's cap. This is read from the
+  audit rows the sweep already writes. It applies to listed-domain requests too.
+- **Cohorts at Add person and at Approve.** Both routes take optional `cohort_ids`. The
+  cohorts are resolved before any Cognito call, and the enrolment and the memberships are
+  one database transaction. Adding many people from a CSV file uses a check route that
+  writes nothing, then the one-person route for each person; there is no bulk-create route.
+- **`pa_ops`** gains read and insert on `invite_link` and `invite_link_cohort`, update of
+  `label`, `max_uses`, `expires_at` and `revoked_at` on `invite_link`, and update of
+  `waitlist_entry.invite_link_id`, and delete on `invite_link`. No route deletes a link.
+  The delete right has one use (review, 2026-11-26, the owner's ruling): Delete
+  organisation removes the organisation's links that are revoked and have no uses, so a
+  link that made no account does not keep an organisation for good. A link that is not
+  revoked, or has a use, still blocks the delete.
+- **The ops service gets `PUBLIC_APP_ORIGIN`**, set from the environment's `domain_name`,
+  to build the link's address. It is not a secret.
+- **Accepted limit.** Cognito is called before the database commit, as in the decisions
+  above. If the write fails after Cognito made the account, the sweep tries the
+  request again after the 15-minute wait for a failed request and completes it with no
+  second invitation. If the link became full, expired or revoked in
+  between, the request stays on the Waitlist page with its reason and an operator approves
+  it by hand.
+- **Rollback** is `self_signup.enabled` false and a deploy. The schema downgrade removes
+  data and needs the owner's word.
+
+*Rejected:* a code the public route checks (the answer would reveal which codes exist); a
+link with no domain rule (an invitation could go to any address); one bulk-create route
+(500 Cognito calls would pass the load balancer's 60-second limit and lose the per-person
+outcome); a queue or a Lambda function in place of the 60-second loop (a new moving part
+for a wait of at most one minute).

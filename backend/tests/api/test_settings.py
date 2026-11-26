@@ -29,6 +29,7 @@ def _set_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", os.environ["DATABASE_URL"])
     monkeypatch.setenv("OIDC_JWKS_URL", "https://dev-issuer.local/jwks")
     monkeypatch.delenv("OIDC_JWKS_PATH", raising=False)
+    monkeypatch.setenv("PUBLIC_APP_ORIGIN", "https://app.example.test")
 
 
 def test_db_pool_settings_default_to_five_and_ten(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,6 +135,39 @@ def test_self_signup_is_enabled_only_for_one(
         monkeypatch.setenv("POLICY_ATLAS_SELF_SIGNUP", value)
 
     assert load_settings().self_signup_enabled is enabled
+
+
+@pytest.mark.parametrize(
+    ("value", "accepted"),
+    [
+        ("https://v3.policyatlas.uk", True),
+        ("http://localhost:5173", True),
+        ("http://127.0.0.1:8003", True),
+        (None, False),
+        ("http://v3.policyatlas.uk", False),
+        ("https://v3.policyatlas.uk/", False),
+        ("https://v3.policyatlas.uk/app", False),
+        ("https://v3.policyatlas.uk?x=1", False),
+        ("https://v3.policyatlas.uk#top", False),
+        ("https://user@v3.policyatlas.uk", False),
+    ],
+)
+def test_ops_mode_requires_a_public_app_origin_and_the_api_ignores_it(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, accepted: bool
+) -> None:
+    _set_required_env(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("PUBLIC_APP_ORIGIN", raising=False)
+    else:
+        monkeypatch.setenv("PUBLIC_APP_ORIGIN", value)
+    monkeypatch.setenv("POLICY_ATLAS_SERVICE_ROLE", "api")
+    assert load_settings().public_app_origin is None
+    monkeypatch.setenv("POLICY_ATLAS_SERVICE_ROLE", "ops")
+    if accepted:
+        assert load_settings().public_app_origin == value
+    else:
+        with pytest.raises(RuntimeError, match="PUBLIC_APP_ORIGIN"):
+            load_settings()
 
 
 def test_self_signup_cap_and_ops_ui_directory_parse(

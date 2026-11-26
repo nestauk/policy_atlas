@@ -78,6 +78,8 @@ _CONFLICT_CODES = {
     # Ops-host command refusals.
     "ops_refused",
     "enrolled_elsewhere",
+    # A people-file run met a deactivated person and may not turn them back on.
+    "deactivated",
 }
 
 _CAPACITY_CODES = {"chat_capacity", "resend_cooldown"}

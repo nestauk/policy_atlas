@@ -28,6 +28,9 @@ from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import (
     app_user,
+    cohort_member,
+    invite_link,
+    invite_link_cohort,
     ops_action,
     organisation,
     organisation_domain,
@@ -71,6 +74,7 @@ _OPS_ROUTES = {
     ("POST", "/api/v1/ops/people/cohort-remove"),
     ("GET", "/api/v1/ops/people"),
     ("POST", "/api/v1/ops/people"),
+    ("POST", "/api/v1/ops/people/import-check"),
     ("POST", "/api/v1/ops/people/enrol"),
     ("POST", "/api/v1/ops/people/de-enrol"),
     ("POST", "/api/v1/ops/people/deactivate"),
@@ -81,7 +85,14 @@ _OPS_ROUTES = {
     ("POST", "/api/v1/ops/requests/{entry_id}/approve"),
     ("POST", "/api/v1/ops/requests/{entry_id}/reject"),
     ("DELETE", "/api/v1/ops/requests/{entry_id}"),
+    ("GET", "/api/v1/ops/invite-links"),
+    ("POST", "/api/v1/ops/invite-links"),
+    ("POST", "/api/v1/ops/invite-links/{invite_link_id}"),
+    ("POST", "/api/v1/ops/invite-links/{invite_link_id}/revoke"),
 }
+
+#: The public site's origin the ops-mode test application puts in front of an invite link.
+_PUBLIC_ORIGIN = "https://public.example.test"
 
 
 class Harness(NamedTuple):
@@ -104,6 +115,7 @@ def _settings(tmp_path: Path) -> Settings:
         os.environ["DATABASE_URL"],
         service_role="ops",
         ops_ui_dir=None,
+        public_app_origin=_PUBLIC_ORIGIN,
     )
 
 
@@ -255,7 +267,8 @@ def test_every_ops_route_refuses_without_a_token_or_the_role(
         plain = _principal(settings, tmp_path, "plain")
         with seeded(engine) as conn:
             ops_enrol(conn, user_id=plain.user_id)
-        ids = {"org_id": uuid.uuid4(), "entry_id": uuid.uuid4(), "cohort_id": uuid.uuid4()}
+        ids = {"org_id": uuid.uuid4(), "entry_id": uuid.uuid4(), "cohort_id": uuid.uuid4(),
+               "invite_link_id": uuid.uuid4()}
         filled = [(m, p.format(**ids)) for m, p in routes]
         for method, path in filled:
             assert client.request(method, path).status_code == 401, (method, path)
@@ -651,7 +664,7 @@ def test_delete_organisation_refuses_a_used_one_and_deletes_an_empty_one(ops: Ha
     _seed_person(ops, org_id=used, label="member")
     refused = ops.client.delete(f"/api/v1/ops/organisations/{used}", headers=ops.actor.headers)
     assert refused.status_code == 409
-    assert "still has 1 people" in refused.text
+    assert "still has 1 person. Nothing was deleted." in refused.text
     empty = _seed_org(ops)
     deleted = ops.client.delete(f"/api/v1/ops/organisations/{empty}", headers=ops.actor.headers)
     assert deleted.status_code == 204
@@ -933,6 +946,33 @@ def test_create_person_lower_cases_the_address_and_maps_a_cognito_refusal(ops: H
     assert lines == [] and _audit(ops) == []
 
 
+@pytest.mark.parametrize(
+    ("cognito_code", "status_code", "error_code"),
+    [("TooManyRequestsException", 503, "unavailable"),
+     ("UsernameExistsException", 409, "ops_refused")],
+)
+def test_create_person_answers_a_passing_cognito_failure_with_a_retryable_503(
+    ops: Harness, cognito_code: str, status_code: int, error_code: str
+) -> None:
+    """A throttle is a 503 the page can retry; a lasting refusal stays a 409. Neither writes."""
+    org_id = _seed_org(ops)
+    email = unique_email("throttled")
+    expect_lookup(ops.stubber, email=email, sub=None)
+    ops.stubber.add_client_error("admin_create_user", service_error_code=cognito_code)
+    response, lines = _post(
+        ops, "/api/v1/ops/people",
+        {"email": email, "display_name": "Throttled", "org_id": str(org_id)},
+    )
+    assert response.status_code == status_code, response.text
+    assert response.json()["error"]["code"] == error_code
+    assert lines == [] and _audit(ops) == []
+    with ops.engine.connect() as conn:
+        members = conn.execute(
+            select(func.count()).select_from(app_user).where(app_user.c.org_id == org_id)
+        ).scalar_one()
+    assert members == 0
+
+
 def test_quota_bodies_must_name_both_fields(ops: Harness) -> None:
     """Leaving a field out is a validation error, never a silent clear (review stack)."""
     org_id = _seed_org(ops)
@@ -1127,4 +1167,502 @@ def test_approving_a_rejected_request_reverses_the_decision(ops: Harness) -> Non
         assert conn.execute(
             select(waitlist_entry.c.rejected_at).where(waitlist_entry.c.entry_id == entry_id)
         ).scalar_one() is None
+
+
+# --- cohorts at Add person and Approve -------------------------------------
+
+
+def _new_cohort(h: Harness) -> str:
+    """Create one cohort through the route and return its id."""
+    response, _ = _post(h, "/api/v1/ops/cohorts", _cohort_body(f"Group {uuid.uuid4()}"))
+    return str(response.json()["cohort_id"])
+
+
+def _members(h: Harness, user_id: str) -> set[str]:
+    """The cohort ids one person is in."""
+    with h.engine.connect() as conn:
+        return {str(c) for c in conn.execute(
+            select(cohort_member.c.cohort_id).where(cohort_member.c.user_id == user_id)
+        ).scalars()}
+
+
+def _cohort_adds(h: Harness) -> list[str]:
+    """The targets of this caller's ``cohort.add`` audit rows, oldest first."""
+    return [row["target"] for row in _audit(h) if row["action"] == "cohort.add"]
+
+
+def test_create_person_joins_the_chosen_cohorts_and_audits_each(ops: Harness) -> None:
+    org_id, first, second = _seed_org(ops), _new_cohort(ops), _new_cohort(ops)
+    email, sub = unique_email("grouped"), f"grouped-{uuid.uuid4()}"
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    response, lines = _post(ops, "/api/v1/ops/people", {
+        "email": email, "display_name": "Grouped", "org_id": str(org_id),
+        "cohort_ids": [first, second]})
+    assert response.status_code == 201, response.text
+    assert {c["cohort_id"] for c in response.json()["person"]["cohorts"]} == {first, second}
+    assert _members(ops, sub) == {first, second}
+    assert _cohort_adds(ops) == [f"{sub}/cohort/{first}", f"{sub}/cohort/{second}"]
+    assert [line["action"] for line in lines] == ["person.create", "cohort.add", "cohort.add"]
+
+
+def test_create_person_without_reactivate_refuses_a_deactivated_person(ops: Harness) -> None:
+    """409 ``deactivated``; no Cognito enable call is queued, so one would fail the test."""
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    person = _seed_person(ops, org_id=org_id, label="gone", deactivated_at=datetime.now(UTC))
+    row = _user(ops, person)
+    assert row is not None
+    expect_lookup(ops.stubber, email=row["email"], sub=person)
+    response, lines = _post(ops, "/api/v1/ops/people", {
+        "email": row["email"], "display_name": "Gone", "org_id": str(org_id),
+        "cohort_ids": [group], "reactivate": False})
+    assert response.status_code == 409, response.text
+    assert response.json()["error"] == {
+        "code": "deactivated",
+        "message": f"{row['email']} is deactivated. Nothing was written. "
+                   "Reactivate them on People first."}
+    after = _user(ops, person)
+    assert after is not None and after["deactivated_at"] is not None
+    assert _members(ops, person) == set()
+    assert lines == [] and _cohort_adds(ops) == []
+    assert [row for row in _audit(ops) if row["action"] == "person.create"] == []
+
+
+def test_an_unknown_cohort_is_not_found_before_any_cognito_call(ops: Harness) -> None:
+    """Nothing is queued on the Cognito double, so any call would fail the request."""
+    org_id, known = _seed_org(ops), _new_cohort(ops)
+    response, lines = _post(ops, "/api/v1/ops/people", {
+        "email": unique_email("lost"), "display_name": "Lost", "org_id": str(org_id),
+        "cohort_ids": [known, str(uuid.uuid4())]})
+    assert response.status_code == 404, response.text
+    assert lines == [] and _cohort_adds(ops) == []
+
+
+@pytest.mark.parametrize(("count", "repeat"), [(11, False), (2, True)])
+def test_cohort_ids_refuse_more_than_ten_or_a_repeat(
+    ops: Harness, count: int, repeat: bool
+) -> None:
+    ids = [str(uuid.uuid4()) for _ in range(count)]
+    if repeat:
+        ids[1] = ids[0]
+    for path, body in (
+        ("/api/v1/ops/people", {"email": unique_email("x"), "display_name": "X"}),
+        (f"/api/v1/ops/requests/{uuid.uuid4()}/approve", {}),
+    ):
+        response, _ = _post(ops, path, {**body, "org_id": str(uuid.uuid4()), "cohort_ids": ids})
+        assert response.status_code == 422, (path, response.text)
+
+
+def test_an_existing_membership_writes_no_audit_row(ops: Harness) -> None:
+    org_id, held, new = _seed_org(ops), _new_cohort(ops), _new_cohort(ops)
+    known = _seed_person(ops, org_id=org_id, label="member")
+    _post(ops, "/api/v1/ops/people/cohort-add", {"user_ids": [known], "cohort_id": held})
+    row = _user(ops, known)
+    assert row is not None
+    expect_lookup(ops.stubber, email=row["email"], sub=known)
+    expect_enabled(ops.stubber, sub=known)
+    response, _ = _post(ops, "/api/v1/ops/people", {
+        "email": row["email"], "display_name": "Member", "org_id": str(org_id),
+        "cohort_ids": [held, new]})
+    assert response.status_code == 201, response.text
+    assert _members(ops, known) == {held, new}
+    # The first row is the bulk add above; this call wrote only the new membership.
+    assert _cohort_adds(ops) == [f"{known}/cohort/{held}", f"{known}/cohort/{new}"]
+
+
+def test_a_refused_create_leaves_no_membership(ops: Harness) -> None:
+    here, there, group = _seed_org(ops), _seed_org(ops), _new_cohort(ops)
+    elsewhere = _seed_person(ops, org_id=there, label="elsewhere")
+    row = _user(ops, elsewhere)
+    assert row is not None
+    expect_lookup(ops.stubber, email=row["email"], sub=elsewhere)
+    expect_enabled(ops.stubber, sub=elsewhere)
+    response, _ = _post(ops, "/api/v1/ops/people", {
+        "email": row["email"], "display_name": "X", "org_id": str(here), "cohort_ids": [group]})
+    assert response.status_code == 409, response.text
+    assert _members(ops, elsewhere) == set() and _cohort_adds(ops) == []
+
+
+def test_a_failed_cohort_write_undoes_the_enrolment_and_a_retry_sends_no_second_invitation(
+    ops: Harness,
+) -> None:
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    email, sub = unique_email("retry"), f"retry-{uuid.uuid4()}"
+    body = {"email": email, "display_name": "Retry", "org_id": str(org_id),
+            "cohort_ids": [group]}
+    with ops.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text(
+            "CREATE FUNCTION pa_test_refuse_member() RETURNS trigger LANGUAGE plpgsql AS $$ "
+            "BEGIN RAISE EXCEPTION 'refused by test trigger'; END $$"))
+        conn.execute(text(
+            "CREATE TRIGGER trg_pa_test_refuse_member BEFORE INSERT ON cohort_member "
+            "FOR EACH ROW EXECUTE FUNCTION pa_test_refuse_member()"))
+    try:
+        expect_lookup(ops.stubber, email=email, sub=None)
+        expect_create(ops.stubber, email=email, sub=sub)
+        failed, lines = _post(ops, "/api/v1/ops/people", body)
+    finally:
+        with ops.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text("DROP TRIGGER IF EXISTS trg_pa_test_refuse_member ON cohort_member"))
+            conn.execute(text("DROP FUNCTION IF EXISTS pa_test_refuse_member()"))
+    assert failed.status_code == 500
+    assert _user(ops, sub) is None and lines == []
+    assert [row["action"] for row in _audit(ops)] == ["cohort.create"]
+    # Cognito kept the account; the second call finds it and creates nothing.
+    expect_lookup(ops.stubber, email=email, sub=sub)
+    expect_enabled(ops.stubber, sub=sub)
+    retried, _ = _post(ops, "/api/v1/ops/people", body)
+    assert retried.status_code == 201, retried.text
+    assert retried.json()["invitation_sent"] is False
+    assert _members(ops, sub) == {group}
+
+
+def test_approve_joins_the_chosen_cohorts(ops: Harness) -> None:
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    email, sub = unique_email("approved"), f"approved-{uuid.uuid4()}"
+    entry_id = _seed_request(ops, email=email)
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    response, _ = _post(ops, f"/api/v1/ops/requests/{entry_id}/approve",
+                        {"org_id": str(org_id), "cohort_ids": [group]})
+    assert response.status_code == 200, response.text
+    assert _members(ops, sub) == {group}
+    assert _cohort_adds(ops) == [f"{sub}/cohort/{group}"]
+
+
+def test_adding_the_same_person_again_sends_no_second_invitation(ops: Harness) -> None:
+    """A file run twice: the second create finds the account in the organisation."""
+    org_id = _seed_org(ops)
+    email, sub = unique_email("twice"), f"twice-{uuid.uuid4()}"
+    body = {"email": email, "display_name": "Twice", "org_id": str(org_id)}
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    assert _post(ops, "/api/v1/ops/people", body)[0].json()["invitation_sent"] is True
+    expect_lookup(ops.stubber, email=email, sub=sub)
+    expect_enabled(ops.stubber, sub=sub)
+    again, _ = _post(ops, "/api/v1/ops/people", body)
+    assert again.status_code == 201, again.text
+    assert again.json()["invitation_sent"] is False
+
+
+# --- the people file check ---------------------------------------------------
+
+
+def _check_file(h: Harness, text: str) -> dict[str, Any]:
+    """POST one file to the check route and return its answer."""
+    response, _ = _post(h, "/api/v1/ops/people/import-check", {"csv": text})
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def test_import_check_answers_rows_for_a_good_file(ops: Harness) -> None:
+    """A byte-order mark, any column order and case, a quoted comma, Windows line ends."""
+    text = ('\ufeffName,EMAIL\r\n"Doe, Jane",Jane@Example.org\r\n'
+            "Bob Smith,bob@example.org\r\n")
+    assert _check_file(ops, text) == {
+        "rows": [
+            {"line": 2, "email": "jane@example.org", "display_name": "Doe, Jane"},
+            {"line": 3, "email": "bob@example.org", "display_name": "Bob Smith"},
+        ],
+        "errors": [],
+    }
+
+
+_TOO_MANY = "email,name\n" + "".join(f"p{i}@example.org,P{i}\n" for i in range(501))
+
+
+@pytest.mark.parametrize(
+    ("text", "errors", "row_lines"),
+    [
+        ("email,name,role\na@example.org,A,x\n", [(None, "only the columns")], []),
+        ("email,name,email\na@example.org,A,b@example.org\n", [(None, "only the columns")], []),
+        ("email\na@example.org\n", [(None, "needs the columns email and name")], []),
+        ('email,name\na@example.org,A\nb@example.org,"Bad"x\n',
+         [(3, "do not follow the CSV rules")], []),
+        ('email,name\na@example.org,"two\nlines"\nc@example.org,C\n',
+         [(2, "a name cannot hold a line break")], [4]),
+        ("email,name\na@example.org,Caf\ufffd\n", [(None, "not saved as UTF-8")], []),
+        ("email,name\na@example.org,A\nA@Example.org,B\n",
+         [(3, "this email is already on line 2")], [2]),
+        (_TOO_MANY, [(None, "at most 500 people")], []),
+        ("email,name\n" + "a" * 200_000, [(None, "at most 200,000 characters")], []),
+        ("email,name\nnot-an-address,A\n", [(2, "this is not an email address")], []),
+        ("email,name\na@example.org,  \n", [(2, "the name is empty")], []),
+        ("email,name\na@example.org," + "n" * 201 + "\n", [(2, "longer than 200")], []),
+        ("email,name\na@example.org," + "n" * 150_000 + "\n", [(2, "longer than 200")], []),
+        ("email,name\na@example.org,A,extra\n", [(2, "this line has 3 values")], []),
+        ("email,name\n\na@example.org,A\n\n", [], [3]),
+    ],
+    ids=["other-column", "repeated-column", "missing-column", "bad-quoting", "line-break",
+         "not-utf8", "repeated-email", "too-many", "too-large", "bad-email", "empty-name",
+         "long-name", "over-reader-limit", "value-count", "blank-line"],
+)
+def test_import_check_names_each_fault_with_its_line(
+    ops: Harness, text: str, errors: list[tuple[int | None, str]], row_lines: list[int]
+) -> None:
+    body = _check_file(ops, text)
+    assert [error["line"] for error in body["errors"]] == [line for line, _ in errors]
+    for error, (_, fragment) in zip(body["errors"], errors, strict=True):
+        assert fragment in error["message"]
+    assert [row["line"] for row in body["rows"]] == row_lines
+
+
+def test_import_check_writes_nothing(ops: Harness) -> None:
+    def counts() -> list[int]:
+        with ops.engine.connect() as conn:
+            return [
+                int(conn.execute(select(func.count()).select_from(table)).scalar_one())
+                for table in (app_user, ops_action, cohort_member)
+            ]
+
+    before = counts()
+    response, lines = _post(ops, "/api/v1/ops/people/import-check",
+                            {"csv": "email,name\nnew@example.org,New Person\n"})
+    assert response.status_code == 200 and response.json()["rows"]
+    assert counts() == before and lines == []
+
+
+# --- invite links -------------------------------------------------------------
+
+
+def _in_days(days: float) -> str:
+    """An aware time ``days`` from now, as the page sends it."""
+    return (datetime.now(UTC) + timedelta(days=days)).isoformat()
+
+
+def _link_body(org_id: uuid.UUID, **values: Any) -> dict[str, Any]:
+    """A full create body for one invite link."""
+    return {"label": "Pilot link", "org_id": str(org_id), "cohort_ids": [],
+            "allowed_domains": ["dhsc.gov.uk"], "max_uses": 5, "expires_at": _in_days(30),
+            **values}
+
+
+def _make_link(h: Harness, **values: Any) -> dict[str, Any]:
+    """Create one link through the route and return its answer."""
+    response, _ = _post(h, "/api/v1/ops/invite-links", _link_body(_seed_org(h), **values))
+    assert response.status_code == 201, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def _code_of(link: dict[str, Any]) -> str:
+    """The stored form of a link's code, read from its address."""
+    return str(link["url"]).split("#invite=")[1].replace("-", "")
+
+
+def test_invite_link_create_list_update_and_revoke_are_audited_and_never_log_the_code(
+    ops: Harness,
+) -> None:
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    with capture_logs() as captured:
+        created = ops.client.post("/api/v1/ops/invite-links", headers=ops.actor.headers,
+                                  json=_link_body(org_id, cohort_ids=[group],
+                                                  allowed_domains=["DHSC.gov.uk", "nhs.net"]))
+        assert created.status_code == 201, created.text
+        link = created.json()
+        link_id = link["invite_link_id"]
+        assert link["url"].startswith(f"{_PUBLIC_ORIGIN}/#invite=")
+        code = _code_of(link)
+        assert len(code) == 12 and link["url"].endswith(
+            f"{code[:4]}-{code[4:8]}-{code[8:]}")
+        assert (link["state"], link["uses"], link["allowed_domains"]) == (
+            "active", 0, ["dhsc.gov.uk", "nhs.net"])
+        assert [c["cohort_id"] for c in link["cohorts"]] == [group]
+        listed = ops.client.get("/api/v1/ops/invite-links", headers=ops.actor.headers).json()
+        assert link_id in {item["invite_link_id"] for item in listed}
+        updated = ops.client.post(f"/api/v1/ops/invite-links/{link_id}",
+                                  headers=ops.actor.headers,
+                                  json={"label": "Renamed", "max_uses": 9,
+                                        "expires_at": _in_days(60)})
+        assert updated.status_code == 200, updated.text
+        assert (updated.json()["label"], updated.json()["max_uses"]) == ("Renamed", 9)
+        revoked = ops.client.post(f"/api/v1/ops/invite-links/{link_id}/revoke",
+                                  headers=ops.actor.headers)
+        assert revoked.status_code == 200 and revoked.json()["state"] == "revoked"
+    assert [(row["action"], row["target"]) for row in _audit(ops)
+            if row["action"].startswith("invite_link")] == [
+        ("invite_link.create", link_id), ("invite_link.update", link_id),
+        ("invite_link.revoke", link_id)]
+    assert code not in str(_audit(ops)) and code not in str(list(captured))
+
+
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        ({"allowed_domains": []}, "Enter at least one domain."),
+        ({"allowed_domains": [f"d{i}.org" for i in range(11)]},
+         "A link can have at most 10 domains."),
+        ({"allowed_domains": ["nhs.net", "NHS.net"]}, "This domain is on the list twice."),
+        ({"allowed_domains": ["nhs.net", "someone@nhs.net"]},
+         "Line 2: enter a domain such as dhsc.gov.uk, with no @."),
+        ({"max_uses": 0}, "Maximum uses must be from 1 to 1,000."),
+        ({"max_uses": 1001}, "Maximum uses must be from 1 to 1,000."),
+        ({"expires_at": _in_days(-1)}, "Choose a date in the next 90 days."),
+        ({"expires_at": _in_days(92)}, "Choose a date in the next 90 days."),
+    ],
+    ids=["no-domain", "eleven-domains", "repeated-domain", "domain-with-at", "zero-uses",
+         "too-many-uses", "past", "too-far"],
+)
+def test_invite_link_create_refuses_values_outside_the_rules(
+    ops: Harness, values: dict[str, Any], message: str
+) -> None:
+    response, lines = _post(ops, "/api/v1/ops/invite-links",
+                            _link_body(_seed_org(ops), **values))
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["message"] == message
+    assert lines == [] and _audit(ops) == []
+
+
+def test_invite_link_maximum_cannot_go_below_its_uses(ops: Harness) -> None:
+    link = _make_link(ops, max_uses=2)
+    for _ in range(2):
+        _seed_request(ops, invite_link_id=uuid.UUID(link["invite_link_id"]))
+    listed = {item["invite_link_id"]: item for item in ops.client.get(
+        "/api/v1/ops/invite-links", headers=ops.actor.headers).json()}
+    assert (listed[link["invite_link_id"]]["uses"],
+            listed[link["invite_link_id"]]["state"]) == (2, "full")
+    response, _ = _post(ops, f"/api/v1/ops/invite-links/{link['invite_link_id']}",
+                        {"label": "Pilot link", "max_uses": 1, "expires_at": _in_days(30)})
+    assert response.status_code == 409
+    assert response.json()["error"]["message"] == (
+        "This link already has 2 uses. The maximum cannot be lower.")
+
+
+def test_a_revoked_invite_link_cannot_be_changed(ops: Harness) -> None:
+    link_id = _make_link(ops)["invite_link_id"]
+    _post(ops, f"/api/v1/ops/invite-links/{link_id}/revoke", {})
+    for path, body in (
+        (f"/api/v1/ops/invite-links/{link_id}",
+         {"label": "Again", "max_uses": 3, "expires_at": _in_days(10)}),
+        (f"/api/v1/ops/invite-links/{link_id}/revoke", {}),
+    ):
+        response, _ = _post(ops, path, body)
+        assert response.status_code == 409, path
+        assert response.json()["error"]["message"] == "A revoked link cannot be changed."
+
+
+def test_delete_organisation_refuses_a_live_or_used_invite_link(ops: Harness) -> None:
+    active = _make_link(ops)
+    used = _make_link(ops)
+    _seed_request(ops, invite_link_id=uuid.UUID(used["invite_link_id"]))
+    _post(ops, f"/api/v1/ops/invite-links/{used['invite_link_id']}/revoke", {})
+    for link in (active, used):
+        org_id = link["organisation"]["org_id"]
+        refused = ops.client.delete(f"/api/v1/ops/organisations/{org_id}",
+                                    headers=ops.actor.headers)
+        assert refused.status_code == 409
+        assert "still has 1 invite link. Nothing was deleted." in refused.text
+
+
+def test_delete_organisation_removes_its_revoked_unused_invite_links(ops: Harness) -> None:
+    link = _make_link(ops, cohort_ids=[_new_cohort(ops)])
+    link_id = uuid.UUID(link["invite_link_id"])
+    _post(ops, f"/api/v1/ops/invite-links/{link_id}/revoke", {})
+    org_id = link["organisation"]["org_id"]
+    deleted = ops.client.delete(f"/api/v1/ops/organisations/{org_id}", headers=ops.actor.headers)
+    assert deleted.status_code == 204, deleted.text
+    with ops.engine.connect() as conn:
+        assert conn.execute(select(invite_link).where(
+            invite_link.c.invite_link_id == link_id)).all() == []
+        assert conn.execute(select(invite_link_cohort).where(
+            invite_link_cohort.c.invite_link_id == link_id)).all() == []
+
+
+def test_a_label_only_edit_keeps_an_expired_links_stored_values(ops: Harness) -> None:
+    link = _make_link(ops, max_uses=7)
+    link_id = uuid.UUID(link["invite_link_id"])
+    ended = datetime.now(UTC) - timedelta(days=1)
+    with seeded(ops.engine) as conn:
+        conn.execute(update(invite_link).where(invite_link.c.invite_link_id == link_id)
+                     .values(expires_at=ended))
+    response, _ = _post(ops, f"/api/v1/ops/invite-links/{link_id}", {"label": "Renamed"})
+    assert response.status_code == 200, response.text
+    with ops.engine.connect() as conn:
+        stored = conn.execute(select(invite_link).where(
+            invite_link.c.invite_link_id == link_id)).mappings().one()
+    assert (stored["label"], stored["max_uses"], stored["expires_at"]) == ("Renamed", 7, ended)
+    refused, _ = _post(ops, f"/api/v1/ops/invite-links/{link_id}",
+                       {"expires_at": _in_days(-1)})
+    assert refused.status_code == 409
+    assert refused.json()["error"]["message"] == "Choose a date in the next 90 days."
+    empty, _ = _post(ops, f"/api/v1/ops/invite-links/{link_id}", {})
+    assert empty.status_code == 422
+
+
+def test_requests_list_says_why_a_request_with_a_code_has_no_account(ops: Harness) -> None:
+    """Each waiting request with a code shows the link's label and the reason, never the code."""
+    from policy_atlas.core import invite_code
+    from policy_atlas.ops import commands
+
+    domain = f"req-{uuid.uuid4().hex[:8]}.test"
+    now = datetime.now(UTC)
+    org_id = _seed_org(ops)
+    with seeded(ops.engine) as conn:
+        org = commands.Organisation(org_id=org_id, name="Requests org")
+
+        def link(label: str, **values: Any) -> commands.InviteLink:
+            made = values.pop("made", now)
+            return commands.create_invite_link(
+                conn, label=label, org=org, cohorts=[], allowed_domains=[domain],
+                max_uses=values.pop("max_uses", 5),
+                expires_at=values.pop("expires_at", made + timedelta(days=30)),
+                created_by="operator", now=made,
+            )
+
+        active = link("Active")
+        expired = link("Expired", made=now - timedelta(days=40),
+                       expires_at=now - timedelta(days=1))
+        full = link("Full", max_uses=1)
+        revoked = link("Revoked")
+        commands.revoke_invite_link(conn, invite_link_id=revoked.invite_link_id, now=now)
+    _seed_request(ops, email=unique_email("used"), invite_link_id=full.invite_link_id,
+                  account_user_id="used", account_created_at=now)
+    unknown = invite_code.new_code()
+    cases: dict[uuid.UUID, Any] = {
+        _seed_request(ops, email=f"{uuid.uuid4().hex[:8]}@{domain}", invite_code=code): expected
+        for code, expected in (
+            (unknown, {"label": None, "reason": "unknown_code"}),
+            (expired.code, {"label": "Expired", "reason": "expired"}),
+            (full.code, {"label": "Full", "reason": "full"}),
+            (revoked.code, {"label": "Revoked", "reason": "revoked"}),
+            (active.code, {"label": "Active", "reason": "next_run"}),
+        )
+    }
+    cases[_seed_request(ops, invite_code=active.code)] = {
+        "label": "Active", "reason": "wrong_domain"}
+    retrying = _seed_request(ops, email=f"retry@{domain}", invite_code=active.code)
+    cases[retrying] = {"label": "Active", "reason": "retry_wait"}
+    cases[_seed_request(ops)] = None
+    with seeded(ops.engine) as conn:
+        conn.execute(insert(ops_action).values(
+            action_id=uuid.uuid4(), at=now, actor_user_id="sweep", action="invite",
+            target=str(retrying), outcome="failed",
+        ))
+    response = ops.client.get("/api/v1/ops/requests", headers=ops.actor.headers)
+    assert response.status_code == 200, response.text
+    items = {uuid.UUID(item["entry_id"]): item for item in response.json()["items"]}
+    assert {entry_id: items[entry_id]["invite"] for entry_id in cases} == cases
+    for code in (unknown, active.code, expired.code, full.code, revoked.code):
+        assert code not in response.text and invite_code.display(code) not in response.text
+
+
+def test_manual_approve_of_a_request_with_a_code_counts_no_use(ops: Harness) -> None:
+    """The operator's choice of organisation wins and the link's uses do not change."""
+    link = _make_link(ops)
+    org_id = _seed_org(ops)
+    email, sub = unique_email("coded"), f"coded-{uuid.uuid4()}"
+    entry_id = _seed_request(ops, email=email, invite_code=_code_of(link))
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    response, _ = _post(ops, f"/api/v1/ops/requests/{entry_id}/approve", {"org_id": str(org_id)})
+    assert response.status_code == 200, response.text
+    with ops.engine.connect() as conn:
+        assert conn.execute(select(waitlist_entry.c.invite_link_id).where(
+            waitlist_entry.c.entry_id == entry_id)).scalar_one() is None
+    row = _user(ops, sub)
+    assert row is not None and row["org_id"] == org_id
+    listed = {item["invite_link_id"]: item for item in ops.client.get(
+        "/api/v1/ops/invite-links", headers=ops.actor.headers).json()}
+    assert listed[link["invite_link_id"]]["uses"] == 0
 

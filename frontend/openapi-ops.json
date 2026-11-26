@@ -44,8 +44,17 @@
       },
       "ApproveRequest": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.",
+        "description": "Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.\n\nThe person joins each cohort in ``cohort_ids``.",
         "properties": {
+          "cohort_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Cohort Ids",
+            "type": "array"
+          },
           "org_id": {
             "format": "uuid",
             "title": "Org Id",
@@ -383,6 +392,283 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "ImportCheck": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/people/import-check``: the text of a people file.\n\nThe size rule (:data:`IMPORT_CHARACTERS_MAX`) answers as a file error; the\nfield bound here only stops a body far beyond it.",
+        "properties": {
+          "csv": {
+            "maxLength": 800000,
+            "title": "Csv",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csv"
+        ],
+        "title": "ImportCheck",
+        "type": "object"
+      },
+      "ImportCheckOut": {
+        "description": "Answer to the file check: the good lines and the faults, in file order.",
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ImportProblem"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ImportRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows",
+          "errors"
+        ],
+        "title": "ImportCheckOut",
+        "type": "object"
+      },
+      "ImportProblem": {
+        "description": "One fault in a people file.\n\nArgs:\n    line: The file line where the faulty record starts, or ``None`` for a\n        fault of the whole file.\n    message: A sentence for the operator.",
+        "properties": {
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ImportProblem",
+        "type": "object"
+      },
+      "ImportRow": {
+        "description": "One good line of a people file.\n\nArgs:\n    line: The file line where the record starts; the header is line 1.\n    email: The address, lower-cased.\n    display_name: The name.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line",
+          "email",
+          "display_name"
+        ],
+        "title": "ImportRow",
+        "type": "object"
+      },
+      "InviteLinkCreate": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/invite-links``.\n\nArgs:\n    label: The operator's name for the link.\n    max_uses: How many requests the link may redeem.\n    expires_at: When it stops working, with its time zone.\n    org_id: The organisation a redeemed request joins.\n    allowed_domains: The email domains the link accepts, one each; the\n        command lower-cases them and refuses none, more than ten or a repeat.",
+        "properties": {
+          "allowed_domains": {
+            "items": {
+              "maxLength": 253,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Allowed Domains",
+            "type": "array"
+          },
+          "cohort_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Cohort Ids",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "max_uses": {
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "max_uses",
+          "expires_at",
+          "org_id",
+          "allowed_domains"
+        ],
+        "title": "InviteLinkCreate",
+        "type": "object"
+      },
+      "InviteLinkOut": {
+        "description": "One invite link as the Invite links page lists it.\n\nArgs:\n    invite_link_id: The link's identity.\n    label: The operator's name for it.\n    organisation: The organisation a redeemed request joins.\n    cohorts: The cohorts a redeemed person joins.\n    allowed_domains: The email domains it accepts.\n    max_uses: How many requests it may redeem.\n    uses: How many it has redeemed.\n    expires_at: When it stops working.\n    revoked_at: When an operator revoked it, or ``None``.\n    created_at: When it was made.\n    state: See :data:`InviteLinkStateOut`.\n    url: The full web address with the code in its fragment. Ops pages only.",
+        "properties": {
+          "allowed_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Domains",
+            "type": "array"
+          },
+          "cohorts": {
+            "items": {
+              "$ref": "#/components/schemas/CohortRef"
+            },
+            "title": "Cohorts",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invite_link_id": {
+            "format": "uuid",
+            "title": "Invite Link Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_uses": {
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "organisation": {
+            "$ref": "#/components/schemas/OrganisationRef"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "expired",
+              "full",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "invite_link_id",
+          "label",
+          "organisation",
+          "cohorts",
+          "allowed_domains",
+          "max_uses",
+          "uses",
+          "expires_at",
+          "created_at",
+          "state",
+          "url"
+        ],
+        "title": "InviteLinkOut",
+        "type": "object"
+      },
+      "InviteLinkUpdate": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.\n\nSend only the values to change; a value left out keeps the stored one, and\na body with none is refused. The command checks a sent use limit or end\nagainst the link rules, so a refusal reads as the pages word it.\n\nArgs:\n    label: The operator's name for the link.\n    max_uses: How many requests the link may redeem.\n    expires_at: When it stops working, with its time zone.",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "max_uses": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Uses"
+          }
+        },
+        "title": "InviteLinkUpdate",
+        "type": "object"
+      },
       "LimitSourceOut": {
         "description": "Where one limit came from (contract B12).\n\nArgs:\n    kind: A fixed word the pages branch on; never an operator-typed name.\n    name: The cohort's or organisation's name for those two kinds, else ``None``.",
         "properties": {
@@ -556,17 +842,22 @@
       },
       "PersonCreate": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation.",
+        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation. The person joins each cohort in ``cohort_ids``. The\naddress and name follow :func:`validate_person_fields`. With\n``reactivate`` false (a people-file run) a deactivated person is refused\nwith the ``deactivated`` code, not turned back on.",
         "properties": {
+          "cohort_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Cohort Ids",
+            "type": "array"
+          },
           "display_name": {
-            "maxLength": 200,
-            "minLength": 1,
             "title": "Display Name",
             "type": "string"
           },
           "email": {
-            "maxLength": 320,
-            "minLength": 3,
             "title": "Email",
             "type": "string"
           },
@@ -574,6 +865,11 @@
             "format": "uuid",
             "title": "Org Id",
             "type": "string"
+          },
+          "reactivate": {
+            "default": true,
+            "title": "Reactivate",
+            "type": "boolean"
           }
         },
         "required": [
@@ -786,8 +1082,42 @@
         "title": "QuotaSet",
         "type": "object"
       },
+      "RequestInvite": {
+        "description": "Why a waiting request that arrived through an invite link has no account yet.\n\nArgs:\n    label: The link's label; ``None`` when no link has the request's code.\n    reason: ``unknown_code``, ``wrong_domain``, ``expired``, ``full``,\n        ``revoked``, ``next_run`` (the sweep takes it at its next run) or\n        ``retry_wait`` (the last try failed; the sweep tries again in a few\n        minutes).",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "reason": {
+            "enum": [
+              "unknown_code",
+              "wrong_domain",
+              "expired",
+              "full",
+              "revoked",
+              "next_run",
+              "retry_wait"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RequestInvite",
+        "type": "object"
+      },
       "RequestOut": {
-        "description": "One waitlist row as the Requests page shows it.\n\nArgs:\n    entry_id: The row.\n    email: The requested address.\n    name: The name they gave.\n    organisation: The organisation they typed, if any.\n    role_or_reason: Why they asked.\n    created_at: When they asked.\n    status: See :data:`RequestStatus`.\n    account_user_id: The subject once an account exists.\n    account_created_at: When the row was stamped.\n    note: For ``check``, which organisation the address already belongs\n        to; otherwise ``None``.",
+        "description": "One waitlist row as the Requests page shows it.\n\nArgs:\n    entry_id: The row.\n    email: The requested address.\n    name: The name they gave.\n    organisation: The organisation they typed, if any.\n    role_or_reason: Why they asked.\n    created_at: When they asked.\n    status: See :data:`RequestStatus`.\n    account_user_id: The subject once an account exists.\n    account_created_at: When the row was stamped.\n    note: For ``check``, which organisation the address already belongs\n        to; otherwise ``None``.\n    invite: For a waiting request that carries an invite code, the link's\n        label and why it has no account yet; otherwise ``None``. The code\n        itself is never in the answer.",
         "properties": {
           "account_created_at": {
             "anyOf": [
@@ -825,6 +1155,16 @@
             "format": "uuid",
             "title": "Entry Id",
             "type": "string"
+          },
+          "invite": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestInvite"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "title": "Name",
@@ -1226,6 +1566,190 @@
           }
         ],
         "summary": "Set Cohort Quota",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/invite-links": {
+      "get": {
+        "description": "List every invite link with its organisation, cohorts, uses, state and address.",
+        "operationId": "list_invite_links_api_v1_ops_invite_links_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InviteLinkOut"
+                  },
+                  "title": "Response List Invite Links Api V1 Ops Invite Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Invite Links",
+        "tags": [
+          "ops"
+        ]
+      },
+      "post": {
+        "description": "Make an invite link; the server makes its code.",
+        "operationId": "create_invite_link_api_v1_ops_invite_links_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Invite Link",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/invite-links/{invite_link_id}": {
+      "post": {
+        "description": "Change a link's label, use limit or end; a value left out stays as stored.",
+        "operationId": "update_invite_link_api_v1_ops_invite_links__invite_link_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteLinkUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Invite Link",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/invite-links/{invite_link_id}/revoke": {
+      "post": {
+        "description": "Stop a link for good; the accounts it already made stay.",
+        "operationId": "revoke_invite_link_api_v1_ops_invite_links__invite_link_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Invite Link",
         "tags": [
           "ops"
         ]
@@ -1742,6 +2266,53 @@
           }
         ],
         "summary": "Enrol People",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/people/import-check": {
+      "post": {
+        "description": "Check a people file before the page creates its people; writes nothing.",
+        "operationId": "check_people_import_api_v1_ops_people_import_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCheck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Check People Import",
         "tags": [
           "ops"
         ]

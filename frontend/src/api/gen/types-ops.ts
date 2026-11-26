@@ -72,6 +72,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/invite-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Invite Links
+         * @description List every invite link with its organisation, cohorts, uses, state and address.
+         */
+        get: operations["list_invite_links_api_v1_ops_invite_links_get"];
+        put?: never;
+        /**
+         * Create Invite Link
+         * @description Make an invite link; the server makes its code.
+         */
+        post: operations["create_invite_link_api_v1_ops_invite_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/invite-links/{invite_link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Invite Link
+         * @description Change a link's label, use limit or end; a value left out stays as stored.
+         */
+        post: operations["update_invite_link_api_v1_ops_invite_links__invite_link_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/invite-links/{invite_link_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Invite Link
+         * @description Stop a link for good; the accounts it already made stay.
+         */
+        post: operations["revoke_invite_link_api_v1_ops_invite_links__invite_link_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/organisations": {
         parameters: {
             query?: never;
@@ -254,6 +318,26 @@ export interface paths {
          * @description Move each selected person to the destination organisation.
          */
         post: operations["enrol_people_api_v1_ops_people_enrol_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/people/import-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check People Import
+         * @description Check a people file before the page creates its people; writes nothing.
+         */
+        post: operations["check_people_import_api_v1_ops_people_import_check_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -471,8 +555,12 @@ export interface components {
         /**
          * ApproveRequest
          * @description Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.
+         *
+         *     The person joins each cohort in ``cohort_ids``.
          */
         ApproveRequest: {
+            /** Cohort Ids */
+            cohort_ids?: string[];
             /**
              * Org Id
              * Format: uuid
@@ -615,6 +703,167 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ImportCheck
+         * @description Body of ``POST /api/v1/ops/people/import-check``: the text of a people file.
+         *
+         *     The size rule (:data:`IMPORT_CHARACTERS_MAX`) answers as a file error; the
+         *     field bound here only stops a body far beyond it.
+         */
+        ImportCheck: {
+            /** Csv */
+            csv: string;
+        };
+        /**
+         * ImportCheckOut
+         * @description Answer to the file check: the good lines and the faults, in file order.
+         */
+        ImportCheckOut: {
+            /** Errors */
+            errors: components["schemas"]["ImportProblem"][];
+            /** Rows */
+            rows: components["schemas"]["ImportRow"][];
+        };
+        /**
+         * ImportProblem
+         * @description One fault in a people file.
+         *
+         *     Args:
+         *         line: The file line where the faulty record starts, or ``None`` for a
+         *             fault of the whole file.
+         *         message: A sentence for the operator.
+         */
+        ImportProblem: {
+            /** Line */
+            line?: number | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ImportRow
+         * @description One good line of a people file.
+         *
+         *     Args:
+         *         line: The file line where the record starts; the header is line 1.
+         *         email: The address, lower-cased.
+         *         display_name: The name.
+         */
+        ImportRow: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /** Line */
+            line: number;
+        };
+        /**
+         * InviteLinkCreate
+         * @description Body of ``POST /api/v1/ops/invite-links``.
+         *
+         *     Args:
+         *         label: The operator's name for the link.
+         *         max_uses: How many requests the link may redeem.
+         *         expires_at: When it stops working, with its time zone.
+         *         org_id: The organisation a redeemed request joins.
+         *         allowed_domains: The email domains the link accepts, one each; the
+         *             command lower-cases them and refuses none, more than ten or a repeat.
+         */
+        InviteLinkCreate: {
+            /** Allowed Domains */
+            allowed_domains: string[];
+            /** Cohort Ids */
+            cohort_ids?: string[];
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Label */
+            label: string;
+            /** Max Uses */
+            max_uses: number;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+        };
+        /**
+         * InviteLinkOut
+         * @description One invite link as the Invite links page lists it.
+         *
+         *     Args:
+         *         invite_link_id: The link's identity.
+         *         label: The operator's name for it.
+         *         organisation: The organisation a redeemed request joins.
+         *         cohorts: The cohorts a redeemed person joins.
+         *         allowed_domains: The email domains it accepts.
+         *         max_uses: How many requests it may redeem.
+         *         uses: How many it has redeemed.
+         *         expires_at: When it stops working.
+         *         revoked_at: When an operator revoked it, or ``None``.
+         *         created_at: When it was made.
+         *         state: See :data:`InviteLinkStateOut`.
+         *         url: The full web address with the code in its fragment. Ops pages only.
+         */
+        InviteLinkOut: {
+            /** Allowed Domains */
+            allowed_domains: string[];
+            /** Cohorts */
+            cohorts: components["schemas"]["CohortRef"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Invite Link Id
+             * Format: uuid
+             */
+            invite_link_id: string;
+            /** Label */
+            label: string;
+            /** Max Uses */
+            max_uses: number;
+            organisation: components["schemas"]["OrganisationRef"];
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "expired" | "full" | "revoked";
+            /** Url */
+            url: string;
+            /** Uses */
+            uses: number;
+        };
+        /**
+         * InviteLinkUpdate
+         * @description Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.
+         *
+         *     Send only the values to change; a value left out keeps the stored one, and
+         *     a body with none is refused. The command checks a sent use limit or end
+         *     against the link rules, so a refusal reads as the pages word it.
+         *
+         *     Args:
+         *         label: The operator's name for the link.
+         *         max_uses: How many requests the link may redeem.
+         *         expires_at: When it stops working, with its time zone.
+         */
+        InviteLinkUpdate: {
+            /** Expires At */
+            expires_at?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Max Uses */
+            max_uses?: number | null;
+        };
+        /**
          * LimitSourceOut
          * @description Where one limit came from (contract B12).
          *
@@ -719,9 +968,14 @@ export interface components {
          *     The organisation is required (contract B4): a browser-created account is
          *     never unenrolled. The route calls the ensure-account command, so an
          *     address that already has an unenrolled account is enrolled without a
-         *     second invitation.
+         *     second invitation. The person joins each cohort in ``cohort_ids``. The
+         *     address and name follow :func:`validate_person_fields`. With
+         *     ``reactivate`` false (a people-file run) a deactivated person is refused
+         *     with the ``deactivated`` code, not turned back on.
          */
         PersonCreate: {
+            /** Cohort Ids */
+            cohort_ids?: string[];
             /** Display Name */
             display_name: string;
             /** Email */
@@ -731,6 +985,11 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+            /**
+             * Reactivate
+             * @default true
+             */
+            reactivate: boolean;
         };
         /**
          * PersonCreatedOut
@@ -826,6 +1085,26 @@ export interface components {
             task_quota_per_year: number | null;
         };
         /**
+         * RequestInvite
+         * @description Why a waiting request that arrived through an invite link has no account yet.
+         *
+         *     Args:
+         *         label: The link's label; ``None`` when no link has the request's code.
+         *         reason: ``unknown_code``, ``wrong_domain``, ``expired``, ``full``,
+         *             ``revoked``, ``next_run`` (the sweep takes it at its next run) or
+         *             ``retry_wait`` (the last try failed; the sweep tries again in a few
+         *             minutes).
+         */
+        RequestInvite: {
+            /** Label */
+            label?: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "unknown_code" | "wrong_domain" | "expired" | "full" | "revoked" | "next_run" | "retry_wait";
+        };
+        /**
          * RequestOut
          * @description One waitlist row as the Requests page shows it.
          *
@@ -841,6 +1120,9 @@ export interface components {
          *         account_created_at: When the row was stamped.
          *         note: For ``check``, which organisation the address already belongs
          *             to; otherwise ``None``.
+         *         invite: For a waiting request that carries an invite code, the link's
+         *             label and why it has no account yet; otherwise ``None``. The code
+         *             itself is never in the answer.
          */
         RequestOut: {
             /** Account Created At */
@@ -859,6 +1141,7 @@ export interface components {
              * Format: uuid
              */
             entry_id: string;
+            invite?: components["schemas"]["RequestInvite"] | null;
             /** Name */
             name: string;
             /** Note */
@@ -1065,6 +1348,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CohortOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invite_links_api_v1_ops_invite_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"][];
+                };
+            };
+        };
+    };
+    create_invite_link_api_v1_ops_invite_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_invite_link_api_v1_ops_invite_links__invite_link_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteLinkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_invite_link_api_v1_ops_invite_links__invite_link_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"];
                 };
             };
             /** @description Validation Error */
@@ -1411,6 +1813,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_people_import_api_v1_ops_people_import_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCheck"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportCheckOut"];
                 };
             };
             /** @description Validation Error */

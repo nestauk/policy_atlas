@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 #: Where full-text ingestion runs: ``in_process`` on the API's own
 #: threads (the default), or ``queued`` through the cloud queue and function.
@@ -55,6 +56,9 @@ class Settings:
             it). None sends no such policy.
         ops_csp_enforced: Whether the browser blocks what ``ops_csp`` forbids
             (``OPS_CSP_MODE=enforce``) or only reports it in its console.
+        public_app_origin: The public site's origin, which the operations
+            service puts in front of an invite link (``PUBLIC_APP_ORIGIN``).
+            Required in ops mode; the public API does not read it.
     """
 
     oidc_issuer: str
@@ -80,6 +84,7 @@ class Settings:
     ops_ui_dir: Path | None = Path("/app/ops-ui")
     ops_csp: str | None = None
     ops_csp_enforced: bool = False
+    public_app_origin: str | None = None
 
 
 def load_settings() -> Settings:
@@ -111,6 +116,7 @@ def load_settings() -> Settings:
         raise RuntimeError("OIDC_JWKS_URL must be an HTTPS URL")
 
     ingest_mode = ingest_mode_from_env()
+    service_role = service_role_from_env()
 
     jwks_path = Path(jwks_path_value) if jwks_path_value is not None else None
     if jwks_path is not None and not jwks_path.is_file():
@@ -134,7 +140,7 @@ def load_settings() -> Settings:
         theory_of_change_enabled=_optional("POLICY_ATLAS_THEORY_OF_CHANGE") == "1",
         ingest_mode=ingest_mode,
         ingest_queue_url=ingest_queue_url_from_env(ingest_mode),
-        service_role=service_role_from_env(),
+        service_role=service_role,
         self_signup_enabled=_optional("POLICY_ATLAS_SELF_SIGNUP") == "1",
         self_signup_max_per_hour=_positive_int(
             "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", default=100
@@ -142,7 +148,39 @@ def load_settings() -> Settings:
         ops_ui_dir=Path(_optional("OPS_UI_DIR") or "/app/ops-ui"),
         ops_csp=_optional("OPS_CONTENT_SECURITY_POLICY"),
         ops_csp_enforced=_optional("OPS_CSP_MODE") == "enforce",
+        public_app_origin=public_app_origin_from_env() if service_role == "ops" else None,
     )
+
+
+def public_app_origin_from_env() -> str:
+    """Read ``PUBLIC_APP_ORIGIN``: the public site's origin, for invite links.
+
+    An origin is the scheme and host only, such as ``https://example.org``. A
+    local ``http://localhost`` or ``http://127.0.0.1`` (with a port) is allowed.
+
+    Returns:
+        The origin.
+
+    Raises:
+        RuntimeError: If it is missing, not https (outside local), or has a
+            path, query, fragment or user part.
+    """
+    value = _required("PUBLIC_APP_ORIGIN")
+    parts = urlsplit(value)
+    local = parts.scheme == "http" and parts.hostname in ("localhost", "127.0.0.1")
+    if (
+        (parts.scheme != "https" and not local)
+        or not parts.hostname
+        or parts.username is not None
+        or parts.path
+        or parts.query
+        or parts.fragment
+        or value.endswith(("?", "#"))
+    ):
+        raise RuntimeError(
+            "PUBLIC_APP_ORIGIN must be an https origin with no path, query or fragment"
+        )
+    return value
 
 
 def service_role_from_env() -> Literal["api", "ops"]:

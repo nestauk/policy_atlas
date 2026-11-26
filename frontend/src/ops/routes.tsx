@@ -3,6 +3,7 @@ import { Navigate, type RouteObject } from "react-router";
 import { OpsShell } from "./OpsShell";
 import { AddPersonView } from "./views/AddPersonView";
 import { CohortsView } from "./views/CohortsView";
+import { InviteLinksView } from "./views/InviteLinksView";
 import { OrganisationsView } from "./views/OrganisationsView";
 import { PeopleView } from "./views/PeopleView";
 import { CohortQuotaView, OrganisationQuotaView, PersonQuotaView } from "./views/QuotaView";
@@ -22,6 +23,7 @@ export const opsRoutes: RouteObject[] = [
       { path: "organisations/:orgId/quota", element: <OrganisationQuotaView /> },
       { path: "cohorts", element: <CohortsView /> },
       { path: "cohorts/:cohortId/quota", element: <CohortQuotaView /> },
+      { path: "invite-links", element: <InviteLinksView /> },
       { path: "waitlist", element: <RequestsView /> },
       { path: "*", element: <Navigate to="/people" replace /> },
     ],

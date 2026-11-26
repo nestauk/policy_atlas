@@ -72,10 +72,10 @@ describe("Organisations", () => {
     await screen.findByRole("table");
     const names = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
     await user.click(screen.getByRole("button", { name: "Sort by people" }));
-    expect(names()).toEqual(["Westbury Council", "Policy Lab", "Nesta"]);
+    expect(names()).toEqual(["Westbury Council", "DHSC", "Policy Lab", "Nesta"]);
     expect(screen.getByRole("columnheader", { name: /People/ })).toHaveAttribute("aria-sort", "ascending");
     await user.click(screen.getByRole("button", { name: "Sort by people" }));
-    expect(names()).toEqual(["Nesta", "Policy Lab", "Westbury Council"]);
+    expect(names()).toEqual(["Nesta", "Policy Lab", "Westbury Council", "DHSC"]);
   });
 
   it("deletes an empty organisation, and offers no delete for one with people", async () => {
@@ -95,5 +95,16 @@ describe("Organisations", () => {
     const dialog = await screen.findByRole("dialog", { name: "Delete Empty Org?" });
     await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     expect(await screen.findByText("Deleted Empty Org")).toBeInTheDocument();
+  });
+
+  it("shows the server's refusal when invite links still point at the organisation", async () => {
+    const user = userEvent.setup();
+    renderOps("/organisations");
+    await screen.findByRole("heading", { name: "Organisations" });
+    await user.click(screen.getByRole("button", { name: "Actions for DHSC" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete DHSC?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("DHSC still has 2 invite links. Nothing was deleted.");
   });
 });

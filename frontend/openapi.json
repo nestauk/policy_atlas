@@ -13704,13 +13704,25 @@
       },
       "WaitlistSignup": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/waitlist`.\n\nArgs:\n    email: Contact address. Unique on the waitlist table.\n    name: Display name of the requester.\n    organisation: Optional organisation or employer.\n    role_or_reason: Free-text role and/or why they want access.\n    website: Leave this field empty.",
+        "description": "Inbound body for `POST /api/v1/waitlist`.\n\nArgs:\n    email: Contact address. Unique on the waitlist table.\n    name: Display name of the requester.\n    organisation: Optional organisation or employer.\n    role_or_reason: Free-text role and/or why they want access.\n    website: Leave this field empty.\n    invite_code: The code of an invite link, if the page address held one.\n        Any text up to 64 characters; the route keeps it only when it is\n        well formed, and the answer is the same either way.",
         "properties": {
           "email": {
             "maxLength": 320,
             "minLength": 3,
             "title": "Email",
             "type": "string"
+          },
+          "invite_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Code"
           },
           "name": {
             "maxLength": 200,

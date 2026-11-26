@@ -309,3 +309,45 @@ is accepted and is now part of the script:
 - Open: a help address in the footer waits for the owner's choice (a Nesta group address
   now, or `help@policyatlas.uk`, which needs mail receiving on the domain).
 - People's Flags column and the person popup show "ADMIN" and "OPS" in capitals (owner, 2026-11-18).
+
+## Cohorts at add, Add many, Invite links (task 071)
+
+The states and the approved words are in
+[the 071 design annex](../071-self-signup-staging/design-annex.md). This section lists what
+the build added to them. Words marked *(proposal)* were written during the build and wait
+for the owner's polish pass.
+
+- **Add a person.** A switch "One person" · "Many from a file". New field "Cohorts
+  (optional)"; each choice is a removable chip. Toasts gain "Added to <cohort>, <cohort>."
+- **Approve dialogs** (one request, many requests): "Cohorts (optional)" under Organisation.
+- **Add many.** The file check answers each problem as "Line <n>: <message>" or as one whole
+  sentence for a fault of the whole file. Messages beyond the annex *(proposal)*:
+  "this line has <n> values; it needs 2: email and name." · "an email cannot hold a line
+  break." · "the quotes on this line do not follow the CSV rules." · "The file can have only
+  the columns email and name, each once." · "the name is empty." · "the name is longer than
+  200 characters." · "A file can hold at most 200,000 characters." · "Could not check the
+  file." · "The server had an error. You can try again." · "No answer from the server. You
+  can try again." · "The address was refused." · "Already in another organisation (<org>).
+  Not tried again." The counts line gains " · <n> refused" only when a person was refused.
+  Singular forms: "This file has 1 problem." · "Create 1 account and send invitations".
+- **Invite links** (`/invite-links`, tab between Cohorts and Waitlist). Help texts from the
+  mock: "Only operators see this name." · "From 1 to 1,000." · "The link works to the end of
+  that day. At most 90 days from today." After create: "Invite link created" · "You can copy
+  the link again later from the list." Toasts *(proposal)*: "Saved <label>" · "Revoked
+  <label>" · "Link copied". The revoke sentence has a singular form ("The 1 account already
+  made stays.") and is left out when the link has no uses. The code is never in a toast.
+- **Waitlist.** A new Organisation column (the organisation the person typed). Under it, for
+  a waiting request that came through a link: "Invite link: <label> — <reason>".
+- **Organisations.** The Delete refusal counts invite links in the server's existing format
+  ("<org> still has 3 people, 1 invite links. Nothing was deleted."). The annex wording
+  ("Still has 3 people and 1 invite link.") is open: the existing format has no singular
+  forms for any of its counts.
+- **Public page.** The intro, the success message and the invite line are the annex words.
+- **Added after the review, waiting for the owner.** Add many: the counts line gains
+  " · <n> deactivated" only when a person was deactivated (a file run never turns one back
+  on); the not-added table's reason for them: "Deactivated. To turn this person back on, add
+  them with One person." The browser's question before moving to another page during a file
+  run *(proposal)*: "People are still being added. If you leave now, the rest are not added.
+  Leave this page?"
+- **Invitation email.** After "You set your own password the first time you sign in.": "You
+  also set up an authenticator app on your phone."

@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { EMPTY_ORG as WESTBURY_FOR_TEST } from "../mock/fixtures";
+import { DHSC_PILOT, EMPTY_ORG as WESTBURY_FOR_TEST } from "../mock/fixtures";
 import { apiError, opsMock } from "../mock";
 import { renderOps, withOpsMock } from "../testing";
 
@@ -33,7 +33,7 @@ describe("Waitlist", () => {
     opsMock.requests.items = [];
     renderOps("/waitlist");
     expect(await screen.findByText("No requests yet.")).toHaveAttribute("role", "status");
-    expect(screen.getAllByRole("columnheader")).toHaveLength(6);
+    expect(screen.getAllByRole("columnheader")).toHaveLength(7);
   });
 
   it("Open person lands on People searching for the address, with the address kept out of the URL", async () => {
@@ -71,7 +71,7 @@ describe("Waitlist", () => {
     await user.click(await screen.findByRole("option", { name: "Westbury Council" }));
     await user.click(within(dialog).getByRole("button", { name: "Approve" }));
     expect(await screen.findByText("Ana Lopez approved")).toBeInTheDocument();
-    expect(opsMock.writes.at(-1)?.body).toEqual({ org_id: WESTBURY_FOR_TEST });
+    expect(opsMock.writes.at(-1)?.body).toEqual({ org_id: WESTBURY_FOR_TEST, cohort_ids: [] });
     // Approved, the request leaves the waitlist: focus goes to the table.
     await waitFor(() => expect(screen.queryByRole("button", { name: "Ana Lopez" })).toBeNull());
     await waitFor(() => expect(screen.getByRole("table", { name: "Waitlist" })).toHaveFocus());
@@ -123,6 +123,61 @@ describe("Waitlist", () => {
     await user.click(within(dialog).getByRole("button", { name: "Approve" }));
     expect(await screen.findByText(new RegExp(`approved$`))).toBeInTheDocument();
     expect(opsMock.writes.filter((write) => write.path.endsWith("/approve"))).toHaveLength(waiting.length);
+  });
+
+  it("approves one request into the chosen cohorts and names them in the toast", async () => {
+    const user = userEvent.setup();
+    renderOps("/waitlist");
+    await user.click(await screen.findByRole("button", { name: "Approve" }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve Ana Lopez" });
+    await user.click(within(dialog).getByRole("combobox", { name: "Organisation" }));
+    await user.click(await screen.findByRole("option", { name: "Westbury Council" }));
+    await user.click(within(dialog).getByRole("button", { name: /^Cohorts/ }));
+    await user.click(await screen.findByRole("checkbox", { name: "DHSC pilot 2027" }));
+    await user.keyboard("{Escape}");
+    await user.click(within(dialog).getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("Ana Lopez approved. Added to DHSC pilot 2027.")).toBeInTheDocument();
+    expect(opsMock.writes.at(-1)?.body).toEqual({ org_id: WESTBURY_FOR_TEST, cohort_ids: [DHSC_PILOT] });
+  });
+
+  it("approves several requests into the chosen cohorts", async () => {
+    const user = userEvent.setup();
+    opsMock.requests.items.push({ ...opsMock.requests.items[0], entry_id: "00000000-0000-4000-8000-0000000000e9", name: "Sam Lee", email: "sam.lee@westbury.gov.uk" });
+    renderOps("/waitlist");
+    await user.click(await screen.findByRole("button", { name: "Select all 2 waiting" }));
+    const bar = document.querySelector("[data-selection-bar]") as HTMLElement;
+    await user.click(within(bar).getByRole("button", { name: "Approve" }));
+    const dialog = await screen.findByRole("dialog", { name: "Approve 2 requests" });
+    await user.click(within(dialog).getByRole("combobox", { name: "Organisation" }));
+    await user.click(await screen.findByRole("option", { name: "Westbury Council" }));
+    await user.click(within(dialog).getByRole("button", { name: /^Cohorts/ }));
+    await user.click(await screen.findByRole("checkbox", { name: "DHSC pilot 2027" }));
+    await user.keyboard("{Escape}");
+    await user.click(within(dialog).getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText(/approved$/)).toBeInTheDocument();
+    const approvals = opsMock.writes.filter((write) => write.path.endsWith("/approve"));
+    expect(approvals.map((write) => write.body)).toEqual([
+      { org_id: WESTBURY_FOR_TEST, cohort_ids: [DHSC_PILOT] },
+      { org_id: WESTBURY_FOR_TEST, cohort_ids: [DHSC_PILOT] },
+    ]);
+  });
+
+  it("shows under the organisation why a request's invite link made no account yet", async () => {
+    const [first] = opsMock.requests.items;
+    opsMock.requests.items = [
+      { ...first, name: "Tom Reid", invite: { label: "Treasury workshop", reason: "full" } },
+      { ...first, entry_id: "00000000-0000-4000-8000-0000000000e8", name: "Lee Wong", invite: { label: null, reason: "unknown_code" } },
+      { ...first, entry_id: "00000000-0000-4000-8000-0000000000e7", name: "Eve Stone", invite: { label: "DHSC pilot", reason: "retry_wait" } },
+      { ...first, entry_id: "00000000-0000-4000-8000-0000000000e6", name: "Mia Brown", invite: null },
+    ];
+    renderOps("/waitlist");
+    await screen.findByRole("heading", { name: "Waitlist" });
+    expect(within(row("Tom Reid")).getByText("Invite link: Treasury workshop — full")).toBeInTheDocument();
+    expect(within(row("Lee Wong")).getByText("Invite link: code not recognised")).toBeInTheDocument();
+    expect(
+      within(row("Eve Stone")).getByText("Invite link: DHSC pilot — last try failed, next try in a few minutes"),
+    ).toBeInTheDocument();
+    expect(within(row("Mia Brown")).queryByText(/^Invite link/)).toBeNull();
   });
 
   it("rejects a request without an email after a confirmation", async () => {

@@ -39,7 +39,7 @@ APP_SECRET_NAMES = {
     "LANGFUSE_HOST",
 }
 OPS_ENVIRONMENT_NAMES = {
-    "OIDC_ISSUER", "OIDC_JWKS_URL", "OIDC_CLIENT_ID", "APP_ORIGIN",
+    "OIDC_ISSUER", "OIDC_JWKS_URL", "OIDC_CLIENT_ID", "APP_ORIGIN", "PUBLIC_APP_ORIGIN",
     "POLICY_ATLAS_SERVICE_ROLE", "POLICY_ATLAS_SELF_SIGNUP",
     "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", "OPS_UI_DIR",
     "OPS_CONTENT_SECURITY_POLICY", "OPS_CSP_MODE",
@@ -186,6 +186,8 @@ def test_ops_container_has_the_complete_least_privilege_environment_and_secret_m
         "OIDC_JWKS_URL": environment["OIDC_JWKS_URL"],
         "OIDC_CLIENT_ID": environment["OIDC_CLIENT_ID"],
         "APP_ORIGIN": "https://ops.v3.policyatlas.uk",
+        # The public site's origin, from domain_name, for invite-link addresses.
+        "PUBLIC_APP_ORIGIN": "https://v3.policyatlas.uk",
         "POLICY_ATLAS_SERVICE_ROLE": "ops",
         "POLICY_ATLAS_SELF_SIGNUP": "0",
         "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "100",

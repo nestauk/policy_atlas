@@ -4,6 +4,7 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "rea
 import { Button } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { InfoHint } from "../ui/brand/InfoHint";
+import { MultiSelect } from "../ui/brand/MultiSelect";
 import { SortArrow, type SortOrder } from "../ui/brand/SortableColumnHeader";
 import { ChevronIcon, MoreIcon, SearchIcon, iconButtonClass, ICON_ROW } from "../ui/brand/icons";
 import { CAPTION_LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
@@ -13,7 +14,7 @@ import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { SHEET_SCRIM_CLASS } from "../ui/radix/Sheet";
 import { useToast } from "../ui/radix/Toast";
 import { portalContainer } from "../ui/radix/portal";
-import { OpsApiError, unwrap, useOpsAction, type Organisation } from "./api";
+import { OpsApiError, unwrap, useCohorts, useOpsAction, type Organisation } from "./api";
 
 /* The ops pages' own pieces, built from the shared design system. */
 
@@ -145,6 +146,7 @@ export function SearchSelect({
   invalid,
   className,
   create,
+  disabled,
 }: {
   id?: string;
   label: string;
@@ -158,6 +160,7 @@ export function SearchSelect({
   invalid?: boolean;
   className?: string;
   create?: { noun: string; pending: boolean; error: string | null; run: (name: string, close: () => void) => void; clearError: () => void };
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -215,9 +218,10 @@ export function SearchSelect({
           aria-label={label}
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
+          disabled={disabled}
           className={cn(
             "relative inline-flex h-10 w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-body text-ink",
-            "transition-colors duration-150",
+            "transition-colors duration-150 disabled:cursor-default disabled:bg-ground disabled:text-grey",
             open ? "border-navy" : invalid ? "border-red" : "border-line-2",
             className,
           )}
@@ -320,6 +324,7 @@ export function OrganisationSelect({
   onChange,
   describedBy,
   invalid,
+  disabled,
 }: {
   id: string;
   label: string;
@@ -328,6 +333,7 @@ export function OrganisationSelect({
   onChange: (orgId: string) => void;
   describedBy?: string;
   invalid?: boolean;
+  disabled?: boolean;
 }) {
   const toast = useRecordedToast();
   const [error, setError] = useState<string | null>(null);
@@ -352,6 +358,7 @@ export function OrganisationSelect({
       empty="No organisations yet. Type a name to create one."
       describedBy={describedBy}
       invalid={invalid}
+      disabled={disabled}
       create={{
         noun: "organisation",
         pending: create.isPending,
@@ -375,6 +382,53 @@ export function OrganisationSelect({
       }}
     />
   );
+}
+
+/**
+ * "Cohorts (optional)": the shared multi-select over the cohorts, each
+ * chosen one a removable chip under it.
+ */
+export function CohortsField({
+  id,
+  values,
+  onChange,
+  help,
+  disabled,
+}: {
+  id: string;
+  values: readonly string[];
+  onChange: (values: string[]) => void;
+  help?: string;
+  disabled?: boolean;
+}) {
+  const cohorts = useCohorts();
+  return (
+    <Field id={id} label="Cohorts (optional)" help={help}>
+      <MultiSelect
+        id={id}
+        label="Cohorts"
+        options={(cohorts.data ?? []).map((cohort) => ({ value: cohort.cohort_id, label: cohort.name }))}
+        values={values}
+        onChange={onChange}
+        placeholder="Add a cohort"
+        filterLabel="Find a cohort"
+        empty="No cohorts yet."
+        disabled={disabled}
+      />
+    </Field>
+  );
+}
+
+/** The chosen cohorts' names, in the order chosen. */
+export function useCohortNames() {
+  const cohorts = useCohorts();
+  return (ids: readonly string[]) =>
+    ids.flatMap((id) => cohorts.data?.find((cohort) => cohort.cohort_id === id)?.name ?? []);
+}
+
+/** A toast's second sentence when cohorts were chosen: "<summary>. Added to A, B." */
+export function withCohorts(summary: string, names: readonly string[]): string {
+  return names.length === 0 ? summary : `${summary}. Added to ${names.join(", ")}.`;
 }
 
 /** A value a column sorts by; empty values always sort last. */
@@ -510,6 +564,9 @@ export function FormHeader({ back, title, line }: { back: ReactNode; title: stri
   );
 }
 
+/** A form page's card: Paper on the ground, a Line 2 hairline, the paper weight. */
+export const FORM_CARD_CLASS = "flex flex-col gap-6 border border-line-2 bg-paper p-6 shadow-paper max-md:p-4";
+
 /** A ruled panel beside or below a page's content, under a pane heading. */
 export function Panel({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   const id = useId();
@@ -538,6 +595,8 @@ export const DANGER_CLASS = "bg-red hover:bg-red/90";
  *     consequence (a field's help that sits under its control).
  *   returnFocus: Where focus goes when it closes, when its opener is gone
  *     (a menu item, a row's button); null leaves Radix's return to the opener.
+ *   clampTitle: Cut a title that carries a typed name at two lines; the
+ *     whole title stays the dialog's accessible name.
  */
 export function Dialog({
   open,
@@ -546,6 +605,7 @@ export function Dialog({
   description,
   describedBy,
   returnFocus,
+  clampTitle = false,
   children,
   footer,
 }: {
@@ -555,6 +615,7 @@ export function Dialog({
   description?: ReactNode;
   describedBy?: string;
   returnFocus?: () => HTMLElement | null;
+  clampTitle?: boolean;
   children?: ReactNode;
   footer: ReactNode;
 }) {
@@ -575,7 +636,9 @@ export function Dialog({
             "border border-line-2 bg-paper shadow-overlay focus-visible:outline-none",
           )}
         >
-          <DialogPrimitive.Title className="px-6 pt-5 font-sans text-lead font-bold text-navy">
+          <DialogPrimitive.Title
+            className={cn("px-6 pt-5 font-sans text-lead font-bold text-navy", clampTitle && "line-clamp-2 break-words")}
+          >
             {title}
           </DialogPrimitive.Title>
           <div className="min-h-0 overflow-y-auto px-6 pb-2 pt-3">

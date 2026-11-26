@@ -534,6 +534,32 @@ make org-domain-add ENV=staging DOMAIN=nesta.org.uk ORG=Nesta
 Then set `enabled` to true and deploy. On production, do this only after the
 WAF (web application firewall) rate rule from task 064b is live.
 
+**Invite links.** An operator makes an invite link on the ops pages ("Invite
+links"): one organisation, optional cohorts, 1 to 10 email domains, a maximum
+number of uses and an end date. A person who uses Request access through the
+link gets an account without an operator. Things to know:
+
+- Links work only where the sweep runs, so only where `self_signup.enabled` is
+  true. With the switch off, a request that carries a code waits on the
+  Requests page like any other.
+- The ops service builds the link's web address from `PUBLIC_APP_ORIGIN`, which
+  the infrastructure code sets to `https://{domain_name}` on the ops container.
+  The ops service does not start without it.
+- A request from a listed domain still gets its account when its link is
+  revoked, expired, full or unknown: it joins the listed organisation, not the
+  link's.
+- A request that fails for a passing reason (a Cognito throttle, an outage)
+  waits 15 minutes before the next try. Only one sweep run works at a time, also
+  when two ops tasks overlap during a deploy.
+- `max_per_hour` covers link accounts and listed-domain accounts together.
+- To stop one link, use Revoke on the page. To stop all of them, set
+  `self_signup.enabled` to false and deploy.
+- A link is never deleted from the page. Delete organisation removes the
+  organisation's links that are revoked and have no uses; any other link makes
+  it refuse.
+- "Many from a file" on Add person never turns a deactivated person back on. It
+  lists them as not added; add such a person with "One person" if you mean it.
+
 **Rollback, one step at a time.**
 
 - Email (SES): set `email.enabled` to false and deploy. The pool goes back to
@@ -547,8 +573,17 @@ WAF (web application firewall) rate rule from task 064b is live.
   reads the quota and cohort tables and writes the first-sign-in column, so it
   must be stopped, and the API image you start afterwards must be one from
   before task 065.
-- Self-signup: set `self_signup.enabled` to false and deploy. The sweep stops.
-  Its schema is removed only by the full downgrade above.
+- Self-signup and invite links: set `self_signup.enabled` to false and deploy.
+  The sweep stops, so listed domains and invite links both stop making
+  accounts. Requests keep arriving and wait. The 065 schema is removed only by
+  the full downgrade above.
+- Invite-link schema (last resort, **destroys data**: every link, every stored
+  code, and the record of which link made which account; ask the owner first):
+  stop both services, run `alembic downgrade a3c9e1f7b2d4` (the revision before
+  the invite-link migration `9c5cdd050525`; downgrade any later migration
+  first), then start an image from before invite links. A code rollback alone
+  needs no downgrade: the new columns are nullable and older code does not
+  name them.
 
 A rollback never drops a table while a service that reads it is running.
 

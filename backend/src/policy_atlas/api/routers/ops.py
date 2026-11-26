@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import asdict
@@ -17,6 +19,8 @@ from sqlalchemy.engine import Connection, RowMapping
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser, get_current_user
 from policy_atlas.api.contract.ops import (
+    IMPORT_CHARACTERS_MAX,
+    IMPORT_PEOPLE_MAX,
     ActionResult,
     ApproveRequest,
     BulkCohort,
@@ -27,6 +31,13 @@ from policy_atlas.api.contract.ops import (
     CohortOut,
     CohortRef,
     CohortSave,
+    ImportCheck,
+    ImportCheckOut,
+    ImportProblem,
+    ImportRow,
+    InviteLinkCreate,
+    InviteLinkOut,
+    InviteLinkUpdate,
     LimitSourceOut,
     LimitsOut,
     OrganisationCreate,
@@ -35,18 +46,23 @@ from policy_atlas.api.contract.ops import (
     PersonCreatedOut,
     PersonOut,
     QuotaSet,
+    RequestInvite,
     RequestOut,
     RequestsOut,
     SelfSignupOut,
+    validate_person_fields,
 )
 from policy_atlas.api.contract.tenancy import OrganisationRef
 from policy_atlas.api.deps import Identity, get_conn, get_identity, get_settings
 from policy_atlas.api.routers.common import created_in_last_days, effective_limits
 from policy_atlas.api.settings import Settings
+from policy_atlas.core import invite_code
 from policy_atlas.core.schema import (
     app_user,
     cohort,
     cohort_member,
+    invite_link,
+    invite_link_cohort,
     ops_action,
     organisation,
     organisation_domain,
@@ -54,8 +70,15 @@ from policy_atlas.core.schema import (
     waitlist_entry,
 )
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
-from policy_atlas.ops.sweep import TERMINAL_OUTCOMES
+from policy_atlas.ops.errors import (
+    TRANSIENT_COGNITO_CODES,
+    Deactivated,
+    EnrolledElsewhere,
+    NotFound,
+    OpsError,
+    ResendTooSoon,
+)
+from policy_atlas.ops.sweep import RETRY_WAIT, TERMINAL_OUTCOMES
 
 log = structlog.get_logger()
 
@@ -84,6 +107,10 @@ def after_commit(request: Request) -> Generator[None, None, None]:
         for line in request.state.ops_log:
             log.info("ops.action", **line)
 
+
+# The reader's own field limit (131,072 characters) would call a long value bad
+# quoting; the file's character cap and the name rule are the limits that answer.
+csv.field_size_limit(IMPORT_CHARACTERS_MAX)
 
 router = APIRouter(
     prefix="/api/v1/ops",
@@ -114,10 +141,16 @@ def _queue_log(
     )
 
 
-def _cognito_refusal(error: ClientError) -> str:
-    """Name a Cognito refusal by its code only (no address, no request detail)."""
+def _cognito_failure(error: ClientError) -> Exception:
+    """Turn a Cognito error into the response to raise, named by its code only.
+
+    A passing failure (a throttle, an outage) is a 503 the page may retry;
+    any other code is a 409 refusal. Neither names the address or request.
+    """
     code = error.response.get("Error", {}).get("Code", "") or "ClientError"
-    return f"Cognito refused the request ({code}). Nothing was written."
+    if code in TRANSIENT_COGNITO_CODES:
+        return HTTPException(503, f"Cognito is busy or down ({code}). Nothing was written.")
+    return ApiConflict("ops_refused", f"Cognito refused the request ({code}). Nothing was written.")
 
 
 def _not_self(actor: AuthenticatedUser, user_id: str) -> str:
@@ -417,17 +450,20 @@ def create_person(
     """Ensure a person is invited and enrolled in the requested organisation."""
     cognito, pool_id = _identity(identity)
     org = _org(conn, body.org_id)
+    cohorts = [_cohort(conn, cohort_id) for cohort_id in body.cohort_ids]
     try:
         enrolled = commands.ensure_account_enrolled(
             conn, cognito, pool_id=pool_id, email=body.email,
-            display_name=body.display_name, org=org, reactivate=True,
+            display_name=body.display_name, org=org, reactivate=body.reactivate,
         )
     except EnrolledElsewhere as exc:
         raise ApiConflict("enrolled_elsewhere", str(exc)) from None
+    except Deactivated as exc:
+        raise ApiConflict("deactivated", str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
     except ClientError as exc:
-        raise ApiConflict("ops_refused", _cognito_refusal(exc)) from None
+        raise _cognito_failure(exc) from None
     outcome = "invited" if enrolled.invitation_sent else "enrolled"
     if enrolled.reactivated:
         outcome = f"reactivated, {outcome}"
@@ -435,6 +471,7 @@ def create_person(
                                        target=enrolled.user_id, outcome=outcome)
     _queue_log(request, actor=actor.user_id, action="person.create", target=enrolled.user_id,
                outcome=outcome, action_id=action_id)
+    _join_cohorts(request, conn, actor=actor.user_id, user_id=enrolled.user_id, cohorts=cohorts)
     row = conn.execute(
         select(app_user, organisation.c.org_id.label("organisation_id"),
                organisation.c.name.label("organisation_name"))
@@ -442,10 +479,89 @@ def create_person(
         .where(app_user.c.user_id == enrolled.user_id)
     ).mappings().one()
     return PersonCreatedOut(
-        person=_person_out(conn, row, settings=settings, task_counts={}),
+        person=_person_out(conn, row, settings=settings, task_counts={},
+                           cohorts=_cohorts_of(conn, [enrolled.user_id])),
         invitation_sent=enrolled.invitation_sent,
         reactivated=enrolled.reactivated,
     )
+
+
+def _people_file_line(values: list[str], header: list[str]) -> tuple[str, str] | str:
+    """Return one record of a people file as its cleaned (email, name), or its first fault."""
+    if len(values) != len(header):
+        return f"this line has {len(values)} values; it needs 2: email and name."
+    fields = dict(zip(header, values, strict=True))
+    for column, article in (("email", "an"), ("name", "a")):
+        if "\n" in fields[column] or "\r" in fields[column]:
+            return f"{article} {column} cannot hold a line break."
+    try:
+        return validate_person_fields(fields["email"], fields["name"])
+    except ValueError as exc:
+        return str(exc)
+
+
+def check_people_file(text: str) -> ImportCheckOut:
+    """Read a people file (CSV text) and answer its good lines and its faults.
+
+    Python's ``csv`` reader in strict mode does the reading. A line number is
+    the file line where the record starts, counting the header as line 1.
+
+    Args:
+        text: The file as the browser decoded it (UTF-8; a byte-order mark is allowed).
+
+    Returns:
+        The good lines with the address lower-cased, and every fault found.
+    """
+    def whole_file(message: str) -> ImportCheckOut:
+        return ImportCheckOut(rows=[], errors=[ImportProblem(message=message)])
+
+    if len(text) > IMPORT_CHARACTERS_MAX:
+        return whole_file(f"A file can hold at most {IMPORT_CHARACTERS_MAX:,} characters.")
+    if "\ufffd" in text:
+        return whole_file(
+            "This file is not saved as UTF-8. Save it as CSV UTF-8 and choose it again."
+        )
+    reader = csv.reader(io.StringIO(text.removeprefix("\ufeff"), newline=""), strict=True)
+    records: list[tuple[int, list[str]]] = []
+    start = 1
+    try:
+        for values in reader:
+            records.append((start, values))
+            start = reader.line_num + 1
+    except csv.Error:
+        return ImportCheckOut(rows=[], errors=[ImportProblem(
+            line=start, message="the quotes on this line do not follow the CSV rules.")])
+    header = [name.strip().lower() for name in records[0][1]] if records else []
+    if sorted(header) != ["email", "name"]:
+        if {"email", "name"} <= set(header):
+            return whole_file("The file can have only the columns email and name, each once.")
+        return whole_file("The file needs the columns email and name.")
+    people = [(line, values) for line, values in records[1:]
+              if any(value.strip() for value in values)]
+    if len(people) > IMPORT_PEOPLE_MAX:
+        return whole_file(f"A file can hold at most {IMPORT_PEOPLE_MAX} people.")
+    rows: list[ImportRow] = []
+    errors: list[ImportProblem] = []
+    first_line: dict[str, int] = {}
+    for line, values in people:
+        checked = _people_file_line(values, header)
+        if isinstance(checked, str):
+            errors.append(ImportProblem(line=line, message=checked))
+            continue
+        email, name = checked
+        if email in first_line:
+            errors.append(ImportProblem(
+                line=line, message=f"this email is already on line {first_line[email]}."))
+            continue
+        first_line[email] = line
+        rows.append(ImportRow(line=line, email=email, display_name=name))
+    return ImportCheckOut(rows=rows, errors=errors)
+
+
+@router.post("/people/import-check", response_model=ImportCheckOut)
+def check_people_import(body: ImportCheck) -> ImportCheckOut:
+    """Check a people file before the page creates its people; writes nothing."""
+    return check_people_file(body.csv)
 
 
 def _bulk(
@@ -603,6 +719,22 @@ def _cohort(conn: Connection, cohort_id: uuid.UUID) -> commands.Cohort:
         raise HTTPException(404, str(exc)) from None
 
 
+def _join_cohorts(
+    request: Request, conn: Connection, *, actor: str, user_id: str,
+    cohorts: list[commands.Cohort],
+) -> None:
+    """Add a person to each cohort, auditing only the memberships that are new.
+
+    Runs on the caller's transaction after the enrolment: a failure here rolls
+    the enrolment back too.
+    """
+    for target, action_id in commands.join_cohorts(
+        conn, actor=actor, user_id=user_id, cohorts=cohorts
+    ):
+        _queue_log(request, actor=actor, action="cohort.add", target=target, outcome="ok",
+                   action_id=action_id)
+
+
 @router.post("/people/cohort-add", response_model=BulkOut)
 def add_people_to_cohort(
     body: BulkCohort, request: Request, actor: Annotated[AuthenticatedUser, Depends(require_ops)],
@@ -663,6 +795,11 @@ def list_requests(
         ops_action.c.outcome == "invited",
         ops_action.c.at >= func.now() - func.make_interval(0, 0, 0, 0, 1),
     )).scalar_one())
+    invites = _invite_reasons(conn, [
+        row for row in rows
+        if row["invite_code"] is not None and row["rejected_at"] is None
+        and str(row["entry_id"]) not in terminal
+    ])
     items: list[RequestOut] = []
     for row in rows:
         check = str(row["entry_id"]) in terminal
@@ -679,6 +816,7 @@ def list_requests(
             status="rejected" if row["rejected_at"] is not None else
             "check" if check else "waiting",
             note=note,
+            invite=invites.get(row["entry_id"]),
         ))
     return RequestsOut(
         items=items,
@@ -686,6 +824,45 @@ def list_requests(
                                  sent_this_hour=sent,
                                  max_per_hour=settings.self_signup_max_per_hour),
     )
+
+
+def _invite_reasons(
+    conn: Connection, rows: list[RowMapping]
+) -> dict[uuid.UUID, RequestInvite]:
+    """For waiting requests that carry a code: the link's label and why it has no account yet.
+
+    Three reads for the whole page, never one for each request.
+    """
+    if not rows:
+        return {}
+    links = {
+        str(row["code"]): commands.invite_link_record(row)
+        for row in conn.execute(select(invite_link).where(
+            invite_link.c.code.in_({row["invite_code"] for row in rows})
+        )).mappings()
+    }
+    uses = commands.invite_link_uses_by_id(
+        conn, [link.invite_link_id for link in links.values()]
+    )
+    now = _now()
+    retrying = set(conn.execute(select(ops_action.c.target).where(
+        ops_action.c.actor_user_id == "sweep", ops_action.c.action == "invite",
+        ops_action.c.outcome == "failed", ops_action.c.at > now - RETRY_WAIT,
+        ops_action.c.target.in_([str(row["entry_id"]) for row in rows]),
+    )).scalars())
+    reasons: dict[uuid.UUID, RequestInvite] = {}
+    for row in rows:
+        link = links.get(str(row["invite_code"]))
+        reason = commands.invite_request_reason(
+            request_domain=commands.email_domain(str(row["email"])),
+            link=link, uses=uses.get(link.invite_link_id, 0) if link else 0, now=now,
+        )
+        reasons[row["entry_id"]] = RequestInvite(
+            label=link.label if link else None,
+            reason="retry_wait" if reason == "next_run" and str(row["entry_id"]) in retrying
+            else reason,
+        )
+    return reasons
 
 
 @router.post("/requests/{entry_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
@@ -732,6 +909,7 @@ def approve_request(
     """Approve a waitlist request using the shared sweep command."""
     cognito, pool_id = _identity(identity)
     org = _org(conn, body.org_id)
+    cohorts = [_cohort(conn, cohort_id) for cohort_id in body.cohort_ids]
     try:
         approved = commands.approve_request(
             conn, cognito, pool_id=pool_id, entry_id=entry_id, org=org, now=_now()
@@ -743,14 +921,130 @@ def approve_request(
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
     except ClientError as exc:
-        raise ApiConflict("ops_refused", _cognito_refusal(exc)) from None
+        raise _cognito_failure(exc) from None
     outcome = "invited" if approved.enrolment.invitation_sent else "enrolled"
     action_id = commands.record_action(
         conn, actor=actor.user_id, action="request.approve", target=str(entry_id), outcome=outcome
     )
     _queue_log(request, actor=actor.user_id, action="request.approve", target=str(entry_id),
                outcome=outcome, action_id=action_id)
+    _join_cohorts(request, conn, actor=actor.user_id, user_id=approved.enrolment.user_id,
+                  cohorts=cohorts)
     row = conn.execute(
         select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
     ).mappings().one()
     return RequestOut(**row, status="invited")
+
+
+def _invite_links(
+    conn: Connection, settings: Settings, invite_link_id: uuid.UUID | None = None
+) -> list[InviteLinkOut]:
+    """Every invite link, newest first, or the one asked for, with its uses and state."""
+    if settings.public_app_origin is None:
+        raise HTTPException(503, "the public site's address is not configured")
+    query = (
+        select(invite_link, organisation.c.name.label("organisation_name"))
+        .join(organisation, organisation.c.org_id == invite_link.c.org_id)
+        .order_by(invite_link.c.created_at.desc(), invite_link.c.invite_link_id)
+    )
+    if invite_link_id is not None:
+        query = query.where(invite_link.c.invite_link_id == invite_link_id)
+    rows = conn.execute(query).mappings().all()
+    ids = [row["invite_link_id"] for row in rows]
+    uses = commands.invite_link_uses_by_id(conn, ids)
+    cohorts: dict[uuid.UUID, list[CohortRef]] = {}
+    for link_id, cohort_id, name in conn.execute(
+        select(invite_link_cohort.c.invite_link_id, cohort.c.cohort_id, cohort.c.name)
+        .join(cohort, cohort.c.cohort_id == invite_link_cohort.c.cohort_id)
+        .where(invite_link_cohort.c.invite_link_id.in_(ids))
+        .order_by(cohort.c.name)
+    ) if ids else ():
+        cohorts.setdefault(link_id, []).append(CohortRef(cohort_id=cohort_id, name=name))
+    now = _now()
+    items: list[InviteLinkOut] = []
+    for row in rows:
+        link = commands.invite_link_record(row)
+        used = uses.get(link.invite_link_id, 0)
+        items.append(InviteLinkOut(
+            invite_link_id=link.invite_link_id, label=link.label,
+            organisation=OrganisationRef(org_id=link.org_id, name=row["organisation_name"]),
+            cohorts=cohorts.get(link.invite_link_id, []),
+            allowed_domains=list(link.allowed_domains), max_uses=link.max_uses, uses=used,
+            expires_at=link.expires_at, revoked_at=link.revoked_at, created_at=link.created_at,
+            state=commands.invite_link_state(link, used, now),
+            # The code travels in the fragment, which a browser never sends to a server.
+            url=f"{settings.public_app_origin}/#invite={invite_code.display(link.code)}",
+        ))
+    return items
+
+
+def _invite_link_refusal(run: Callable[[], commands.InviteLink]) -> commands.InviteLink:
+    """Run one link command, mapping its refusals to the ordinary errors."""
+    try:
+        return run()
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    except OpsError as exc:
+        raise ApiConflict("ops_refused", str(exc)) from None
+
+
+@router.get("/invite-links", response_model=list[InviteLinkOut])
+def list_invite_links(
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> list[InviteLinkOut]:
+    """List every invite link with its organisation, cohorts, uses, state and address."""
+    return _invite_links(conn, settings)
+
+
+@router.post("/invite-links", response_model=InviteLinkOut,
+             status_code=status.HTTP_201_CREATED)
+def create_invite_link(
+    body: InviteLinkCreate, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> InviteLinkOut:
+    """Make an invite link; the server makes its code."""
+    org = _org(conn, body.org_id)
+    cohorts = [_cohort(conn, cohort_id) for cohort_id in body.cohort_ids]
+    link = _invite_link_refusal(lambda: commands.create_invite_link(
+        conn, label=body.label, org=org, cohorts=cohorts, allowed_domains=body.allowed_domains,
+        max_uses=body.max_uses, expires_at=body.expires_at, created_by=actor.user_id, now=_now(),
+    ))
+    _audit(request, conn, actor=actor.user_id, action="invite_link.create",
+           target=str(link.invite_link_id))
+    return _invite_links(conn, settings, link.invite_link_id)[0]
+
+
+@router.post("/invite-links/{invite_link_id}", response_model=InviteLinkOut)
+def update_invite_link(
+    invite_link_id: uuid.UUID, body: InviteLinkUpdate, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> InviteLinkOut:
+    """Change a link's label, use limit or end; a value left out stays as stored."""
+    _invite_link_refusal(lambda: commands.update_invite_link(
+        conn, invite_link_id=invite_link_id, label=body.label, max_uses=body.max_uses,
+        expires_at=body.expires_at, now=_now(),
+    ))
+    _audit(request, conn, actor=actor.user_id, action="invite_link.update",
+           target=str(invite_link_id))
+    return _invite_links(conn, settings, invite_link_id)[0]
+
+
+@router.post("/invite-links/{invite_link_id}/revoke", response_model=InviteLinkOut)
+def revoke_invite_link(
+    invite_link_id: uuid.UUID, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> InviteLinkOut:
+    """Stop a link for good; the accounts it already made stay."""
+    _invite_link_refusal(lambda: commands.revoke_invite_link(
+        conn, invite_link_id=invite_link_id, now=_now(),
+    ))
+    _audit(request, conn, actor=actor.user_id, action="invite_link.revoke",
+           target=str(invite_link_id))
+    return _invite_links(conn, settings, invite_link_id)[0]

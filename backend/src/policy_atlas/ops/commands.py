@@ -58,20 +58,23 @@ import secrets
 import string
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Literal, NoReturn
 
 from botocore.exceptions import ClientError
-from sqlalchemy import and_, case, delete, func, insert, or_, select, update
+from sqlalchemy import and_, case, delete, func, insert, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas.core import invite_code
 from policy_atlas.core.schema import (
     app_user,
     cohort,
     cohort_member,
+    invite_link,
+    invite_link_cohort,
     ops_action,
     organisation,
     organisation_domain,
@@ -592,7 +595,9 @@ def delete_organisation(conn: Connection, *, org_id: uuid.UUID) -> OrganisationD
     """Delete an organisation nothing points at any more.
 
     The foreign keys would refuse too; this check comes first so the refusal
-    says what is still there (contract 066 B7).
+    says what is still there (contract 066 B7). A revoked link that made no
+    account cannot be used again and does not count: it is deleted with the
+    organisation, and its cohort rows with it.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -603,23 +608,35 @@ def delete_organisation(conn: Connection, *, org_id: uuid.UUID) -> OrganisationD
 
     Raises:
         NotFound: If no organisation has that id.
-        OpsError: If any person, task, project or domain still points at it.
+        OpsError: If any person, task, project, domain or live or used invite
+            link still points at it.
     """
     name = conn.execute(
         select(organisation.c.name).where(organisation.c.org_id == org_id).with_for_update()
     ).scalar_one_or_none()
     if name is None:
         raise NotFound(f"no organisation {org_id}")
-    counts = {
-        label: int(conn.execute(
-            select(func.count()).select_from(table).where(table.c.org_id == org_id)
+    dead_link = and_(
+        invite_link.c.revoked_at.is_not(None),
+        ~select(waitlist_entry.c.entry_id)
+        .where(waitlist_entry.c.invite_link_id == invite_link.c.invite_link_id).exists(),
+    )
+    left = []
+    for one, many, table, where in (
+        ("person", "people", app_user, true()), ("task", "tasks", task, true()),
+        ("project", "projects", project, true()),
+        ("domain", "domains", organisation_domain, true()),
+        ("invite link", "invite links", invite_link, ~dead_link),
+    ):
+        count = int(conn.execute(
+            select(func.count()).select_from(table).where(table.c.org_id == org_id, where)
         ).scalar_one())
-        for label, table in (("people", app_user), ("tasks", task), ("projects", project),
-                             ("domains", organisation_domain))
-    }
-    left = [f"{count} {label}" for label, count in counts.items() if count]
+        if count:
+            left.append(f"{count} {one if count == 1 else many}")
     if left:
-        raise OpsError(f"{name} still has {', '.join(left)}. Nothing was deleted.")
+        listed = left[0] if len(left) == 1 else f"{', '.join(left[:-1])} and {left[-1]}"
+        raise OpsError(f"{name} still has {listed}. Nothing was deleted.")
+    conn.execute(delete(invite_link).where(invite_link.c.org_id == org_id, dead_link))
     conn.execute(delete(organisation).where(organisation.c.org_id == org_id))
     return OrganisationDeletion(org_id=org_id, name=str(name))
 
@@ -2014,6 +2031,33 @@ def add_to_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMe
     return CohortMembership(cohort=target, user_id=user_id, added=True, changed=added is not None)
 
 
+def join_cohorts(
+    conn: Connection, *, actor: str, user_id: str, cohorts: Sequence[Cohort]
+) -> list[tuple[str, uuid.UUID]]:
+    """Add a person to each cohort, writing a ``cohort.add`` audit row only for a new membership.
+
+    Args:
+        conn: Open connection inside the caller's transaction.
+        actor: Who the audit rows name.
+        user_id: The person.
+        cohorts: The cohorts to join.
+
+    Returns:
+        The audit target and action id of each new membership, in order.
+
+    Raises:
+        NotFound: If no person has that id.
+    """
+    added: list[tuple[str, uuid.UUID]] = []
+    for target in cohorts:
+        if add_to_cohort(conn, target=target, user_id=user_id).changed:
+            audit_target = f"{user_id}/cohort/{target.cohort_id}"
+            added.append((audit_target, record_action(
+                conn, actor=actor, action="cohort.add", target=audit_target, outcome="ok"
+            )))
+    return added
+
+
 def remove_from_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMembership:
     """Remove one person from a cohort; removing a non-member changes nothing."""
     removed = conn.execute(
@@ -2024,6 +2068,270 @@ def remove_from_cohort(conn: Connection, *, target: Cohort, user_id: str) -> Coh
     return CohortMembership(
         cohort=target, user_id=user_id, added=False, changed=removed.rowcount == 1
     )
+
+
+#: Limits on an invite link.
+INVITE_DOMAINS_MAX = 10
+INVITE_USES_MAX = 1000
+#: How far ahead a link may end. One day more than ninety, because the page
+#: sends the end of the chosen day in the operator's own time zone.
+INVITE_AHEAD_MAX = timedelta(days=91)
+
+#: The state of an invite link, worked out when it is read.
+InviteLinkState = Literal["active", "expired", "full", "revoked"]
+
+
+@dataclass(frozen=True)
+class InviteLink(Record):
+    """One invite link. ``code`` is kept out of ``repr`` so it never reaches a log line."""
+
+    invite_link_id: uuid.UUID
+    code: str = field(repr=False)
+    label: str
+    org_id: uuid.UUID
+    allowed_domains: tuple[str, ...]
+    max_uses: int
+    expires_at: datetime
+    revoked_at: datetime | None
+    created_at: datetime
+
+
+def invite_link_state(link: InviteLink, uses: int, now: datetime) -> InviteLinkState:
+    """Return whether a link can still make accounts, and if not, why.
+
+    Args:
+        link: The link.
+        uses: How many requests the link has redeemed.
+        now: The time to judge at.
+
+    Returns:
+        ``revoked``, ``expired`` or ``full`` in that order of precedence, else ``active``.
+    """
+    if link.revoked_at is not None:
+        return "revoked"
+    if link.expires_at <= now:
+        return "expired"
+    if uses >= link.max_uses:
+        return "full"
+    return "active"
+
+
+#: Why a waiting request that carries a code has no account yet.
+InviteRequestReason = Literal[
+    "unknown_code", "wrong_domain", "expired", "full", "revoked", "next_run"
+]
+
+
+def email_domain(email: str) -> str:
+    """Return an address's domain, lower-cased, or ``""`` when it has no ``@``."""
+    # Must match the sweep query's lower(split_part(email, '@', 2)).
+    return email.split("@")[1].lower() if "@" in email else ""
+
+
+def invite_request_reason(
+    *,
+    request_domain: str,
+    link: InviteLink | None,
+    uses: int,
+    now: datetime,
+) -> InviteRequestReason:
+    """Say why a waiting request's code has not made an account yet.
+
+    Args:
+        request_domain: The request's email domain, lower-cased.
+        link: The link with the request's code, or ``None`` when no link has it.
+        uses: How many requests the link has redeemed.
+        now: The time to judge the link at.
+
+    Returns:
+        ``unknown_code``; ``wrong_domain``; the link's state when it is not
+        active; else ``next_run`` (the sweep redeems it at its next run).
+    """
+    if link is None:
+        return "unknown_code"
+    if request_domain not in link.allowed_domains:
+        return "wrong_domain"
+    state = invite_link_state(link, uses, now)
+    return "next_run" if state == "active" else state
+
+
+def invite_link_record(row: RowMapping) -> InviteLink:
+    """Build the record from an ``invite_link`` row."""
+    return InviteLink(
+        invite_link_id=row["invite_link_id"], code=str(row["code"]), label=str(row["label"]),
+        org_id=row["org_id"], allowed_domains=tuple(row["allowed_domains"]),
+        max_uses=int(row["max_uses"]), expires_at=row["expires_at"],
+        revoked_at=row["revoked_at"], created_at=row["created_at"],
+    )
+
+
+def invite_link_uses_by_id(
+    conn: Connection, ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """Count the requests each link has redeemed; a link with no use is left out."""
+    if not ids:
+        return {}
+    return {link_id: int(count) for link_id, count in conn.execute(
+        select(waitlist_entry.c.invite_link_id, func.count())
+        .where(waitlist_entry.c.invite_link_id.in_(ids))
+        .group_by(waitlist_entry.c.invite_link_id)
+    )}
+
+
+def invite_link_uses(conn: Connection, invite_link_id: uuid.UUID) -> int:
+    """Count the requests a link has redeemed."""
+    return invite_link_uses_by_id(conn, [invite_link_id]).get(invite_link_id, 0)
+
+
+def _require_invite_limits(
+    *, max_uses: int | None, expires_at: datetime | None, now: datetime
+) -> None:
+    """Refuse a use limit or an end outside the link rules; ``None`` is not checked."""
+    if max_uses is not None and not 1 <= max_uses <= INVITE_USES_MAX:
+        raise OpsError(f"Maximum uses must be from 1 to {INVITE_USES_MAX:,}.")
+    if expires_at is not None and not now < expires_at <= now + INVITE_AHEAD_MAX:
+        raise OpsError("Choose a date in the next 90 days.")
+
+
+def _invite_domains(domains: Sequence[str]) -> list[str]:
+    """Lower-case each domain by the listed-domain rule; refuse none, too many or a repeat."""
+    if not domains:
+        raise OpsError("Enter at least one domain.")
+    if len(domains) > INVITE_DOMAINS_MAX:
+        raise OpsError(f"A link can have at most {INVITE_DOMAINS_MAX} domains.")
+    kept: list[str] = []
+    for line, domain in enumerate(domains, start=1):
+        try:
+            value = _normalise_domain(domain.strip())
+        except OpsError:
+            raise OpsError(
+                f"Line {line}: enter a domain such as dhsc.gov.uk, with no @."
+            ) from None
+        if value in kept:
+            raise OpsError("This domain is on the list twice.")
+        kept.append(value)
+    return kept
+
+
+def create_invite_link(
+    conn: Connection,
+    *,
+    label: str,
+    org: Organisation,
+    cohorts: Sequence[Cohort],
+    allowed_domains: Sequence[str],
+    max_uses: int,
+    expires_at: datetime,
+    created_by: str,
+    now: datetime,
+) -> InviteLink:
+    """Make an invite link with a new server-made code.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        label: The operator's name for the link.
+        org: The organisation a redeemed request joins.
+        cohorts: The cohorts a redeemed person joins, already resolved.
+        allowed_domains: The email domains the link accepts.
+        max_uses: How many requests the link may redeem.
+        expires_at: When the link stops working.
+        created_by: The operator's user id.
+        now: The time to judge the end against and to stamp.
+
+    Returns:
+        The new link.
+
+    Raises:
+        OpsError: On a domain list, use limit or end outside the link rules.
+    """
+    domains = _invite_domains(allowed_domains)
+    _require_invite_limits(max_uses=max_uses, expires_at=expires_at, now=now)
+    invite_link_id = uuid.uuid4()
+    conn.execute(insert(invite_link).values(
+        invite_link_id=invite_link_id, code=invite_code.new_code(), label=label.strip(),
+        org_id=org.org_id, allowed_domains=domains, max_uses=max_uses, expires_at=expires_at,
+        created_at=now, created_by=created_by,
+    ))
+    for target in cohorts:
+        conn.execute(insert(invite_link_cohort).values(
+            invite_link_id=invite_link_id, cohort_id=target.cohort_id
+        ))
+    return _lock_invite_link(conn, invite_link_id)
+
+
+def _lock_invite_link(conn: Connection, invite_link_id: uuid.UUID) -> InviteLink:
+    """Read one link under its row lock.
+
+    Raises:
+        NotFound: If no link has that id.
+    """
+    row = conn.execute(
+        select(invite_link).where(invite_link.c.invite_link_id == invite_link_id)
+        .with_for_update()
+    ).mappings().one_or_none()
+    if row is None:
+        raise NotFound(f"no invite link {invite_link_id}")
+    return invite_link_record(row)
+
+
+def update_invite_link(
+    conn: Connection,
+    *,
+    invite_link_id: uuid.UUID,
+    label: str | None = None,
+    max_uses: int | None = None,
+    expires_at: datetime | None = None,
+    now: datetime,
+) -> InviteLink:
+    """Change a link's label, use limit or end; its organisation, cohorts and domains stay.
+
+    A value left out (``None``) keeps the stored one and is not checked, so a
+    link whose end has passed can still be renamed. The uses are counted under
+    the link's row lock, so a redemption cannot slip between the count and the
+    write.
+
+    Raises:
+        NotFound: If no link has that id.
+        OpsError: If the link is revoked, the limit is below its uses, or a
+            changed value is outside the link rules.
+    """
+    link = _lock_invite_link(conn, invite_link_id)
+    if link.revoked_at is not None:
+        raise OpsError("A revoked link cannot be changed.")
+    changed = replace(
+        link,
+        label=link.label if label is None else label.strip(),
+        max_uses=link.max_uses if max_uses is None else max_uses,
+        expires_at=link.expires_at if expires_at is None else expires_at,
+    )
+    # Check only what this call changes: a stored end in the past stays as it is.
+    _require_invite_limits(max_uses=max_uses, expires_at=expires_at, now=now)
+    if max_uses is not None:
+        uses = invite_link_uses(conn, invite_link_id)
+        if max_uses < uses:
+            raise OpsError(f"This link already has {uses} uses. The maximum cannot be lower.")
+    conn.execute(
+        update(invite_link).where(invite_link.c.invite_link_id == invite_link_id)
+        .values(label=changed.label, max_uses=changed.max_uses, expires_at=changed.expires_at)
+    )
+    return changed
+
+
+def revoke_invite_link(conn: Connection, *, invite_link_id: uuid.UUID, now: datetime) -> InviteLink:
+    """Stop a link for good; the accounts it already made stay.
+
+    Raises:
+        NotFound: If no link has that id.
+        OpsError: If it is already revoked.
+    """
+    link = _lock_invite_link(conn, invite_link_id)
+    if link.revoked_at is not None:
+        raise OpsError("A revoked link cannot be changed.")
+    conn.execute(
+        update(invite_link).where(invite_link.c.invite_link_id == invite_link_id)
+        .values(revoked_at=now)
+    )
+    return replace(link, revoked_at=now)
 
 
 def record_action(
@@ -2097,6 +2405,81 @@ def approve_request(
         .values(account_user_id=enrolment.user_id, account_created_at=now, rejected_at=None)
     )
     return Approval(entry_id=entry_id, enrolment=enrolment, created_at=now)
+
+
+def redeem_request(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    entry_id: uuid.UUID,
+    now: datetime,
+) -> Approval | None:
+    """Turn a waiting request into an account through the invite link its code names.
+
+    Locks the link row first and the request row second, and checks again under
+    both locks that the link still accepts the request, so two redemptions at
+    once cannot pass the link's use limit. The person joins the link's cohorts
+    (a ``cohort.add`` audit row for each new membership) and the request records
+    the link, which counts the use.
+
+    Args:
+        conn: Open connection inside the sweep's per-request transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified Cognito user pool.
+        entry_id: The waiting request.
+        now: The time to judge the link at and to stamp the request with.
+
+    Returns:
+        The approval, or ``None`` when the request is not (or no longer)
+        redeemable; then nothing was written and Cognito was not called.
+
+    Raises:
+        EnrolledElsewhere: If the address belongs to another organisation.
+        Deactivated: If the account is deactivated.
+    """
+    link_id = conn.execute(
+        select(invite_link.c.invite_link_id)
+        .join(waitlist_entry, waitlist_entry.c.invite_code == invite_link.c.code)
+        .where(waitlist_entry.c.entry_id == entry_id)
+    ).scalar_one_or_none()
+    if link_id is None:
+        return None
+    link = _lock_invite_link(conn, link_id)
+    row = conn.execute(
+        select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).with_for_update()
+    ).mappings().one()
+    if (
+        row["invite_code"] != link.code
+        or row["account_created_at"] is not None
+        or row["rejected_at"] is not None
+        or invite_request_reason(
+            request_domain=email_domain(str(row["email"])), link=link,
+            uses=invite_link_uses(conn, link_id), now=now,
+        ) != "next_run"
+    ):
+        return None
+    name = conn.execute(
+        select(organisation.c.name).where(organisation.c.org_id == link.org_id)
+    ).scalar_one()
+    approved = approve_request(
+        conn, cognito, pool_id=pool_id, entry_id=entry_id,
+        org=Organisation(org_id=link.org_id, name=str(name)), now=now,
+    )
+    join_cohorts(conn, actor="sweep", user_id=approved.enrolment.user_id, cohorts=[
+        Cohort(cohort_id=cohort_id, name=str(cohort_name))
+        for cohort_id, cohort_name in conn.execute(
+            select(cohort.c.cohort_id, cohort.c.name)
+            .join(invite_link_cohort, invite_link_cohort.c.cohort_id == cohort.c.cohort_id)
+            .where(invite_link_cohort.c.invite_link_id == link_id)
+            .order_by(cohort.c.name)
+        )
+    ])
+    conn.execute(
+        update(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
+        .values(invite_link_id=link_id)
+    )
+    return approved
 
 
 def reject_request(conn: Connection, *, entry_id: uuid.UUID, now: datetime) -> None:

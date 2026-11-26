@@ -8490,10 +8490,15 @@ export interface components {
          *         organisation: Optional organisation or employer.
          *         role_or_reason: Free-text role and/or why they want access.
          *         website: Leave this field empty.
+         *         invite_code: The code of an invite link, if the page address held one.
+         *             Any text up to 64 characters; the route keeps it only when it is
+         *             well formed, and the answer is the same either way.
          */
         WaitlistSignup: {
             /** Email */
             email: string;
+            /** Invite Code */
+            invite_code?: string | null;
             /** Name */
             name: string;
             /** Organisation */

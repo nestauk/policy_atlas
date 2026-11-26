@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { useAuth } from "../../auth";
@@ -14,16 +14,49 @@ import { WaitlistForm } from "./WaitlistForm";
 /** Set true once product screenshots replace the dashed placeholders. */
 const SHOW_SPLASH_FEATURE_STEPS = false;
 
+const INVITE_FRAGMENT = "#invite=";
+
+/**
+ * The code of an invite link (`/#invite=XXXX-XXXX-XXXX`), or null. A link
+ * pasted in a chat can come with trailing punctuation or encoding: the code
+ * is its letters and digits, upper case, and anything but 12 of them is no code.
+ */
+function readInviteCode(): string | null {
+  const { hash } = window.location;
+  if (!hash.startsWith(INVITE_FRAGMENT)) return null;
+  let text = hash.slice(INVITE_FRAGMENT.length);
+  try {
+    text = decodeURIComponent(text);
+  } catch {
+    // A broken escape: read the characters as they are.
+  }
+  const code = text.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return code.length === 12 ? code : null;
+}
+
 /**
  * Logged-out marketing home — fold-mark constellation, Request-access
  * waitlist form, and Sign-in into Cognito (or the dev-token panel when
  * OIDC is unset). Feature steps 01–06 stay behind
  * {@link SHOW_SPLASH_FEATURE_STEPS} until screenshots are ready.
+ *
+ * An invite link carries its code in the fragment, which no server sees. The
+ * page keeps the code in memory, swaps the fragment for `#access` so the
+ * address bar no longer holds it, and scrolls to the form as `#access` does.
  */
 export function SplashView() {
   const auth = useAuth();
   const [showDevSignIn, setShowDevSignIn] = useState(false);
   const oidcConfigured = Boolean(import.meta.env.VITE_OIDC_AUTHORITY);
+  const [inviteCode] = useState(readInviteCode);
+
+  useEffect(() => {
+    // Any invite fragment goes, a code or not.
+    if (!window.location.hash.startsWith(INVITE_FRAGMENT)) return;
+    // Keep the router's history state; only the fragment changes.
+    window.history.replaceState(window.history.state, "", "#access");
+    document.getElementById("access")?.scrollIntoView();
+  }, []);
 
   const onSignIn = () => {
     if (!oidcConfigured) {
@@ -90,11 +123,12 @@ export function SplashView() {
               Request access
             </h2>
             <p className={`mt-3 ${SPLASH_PROSE} text-grey`}>
-              Tell us a little about yourself. We review requests and get in touch when a place opens
-              up.
+              Tell us a little about yourself. If your organisation already has access, we email
+              your sign-in details in a few minutes. If not, we review your request and get in
+              touch.
             </p>
             <div className="mt-8">
-              <WaitlistForm />
+              <WaitlistForm inviteCode={inviteCode} onSignIn={onSignIn} />
             </div>
           </div>
           {showDevSignIn && !oidcConfigured && (

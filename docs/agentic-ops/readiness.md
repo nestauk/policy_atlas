@@ -39,7 +39,8 @@ hard gates of the [task-cycle](../../.claude/skills/task-cycle/SKILL.md) skill.
   the same key
   ([ADR 0048](../adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)).
 - **Accounts and operations.** An operations service behind the office allowlist, with its own
-  pages and its own database login, and self-signup for one email domain
+  pages and its own database login, and self-signup for a listed email domain or through an
+  invite link, in an environment that turns it on
   ([ADR 0046](../adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md)).
 - **Command surface.** The root `Makefile` (see [harness.md](harness.md) § Tool layer).
 - **Prompt governance.** The code is the source of truth for prompts. The app never fetches a

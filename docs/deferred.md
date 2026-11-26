@@ -1227,8 +1227,44 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   caps and no per-user chat or planner turn limits. The next step is a usage table with spend per
   user ([ADR 0045](adr/0045-per-user-run-cap-task-quota-offboarding.md) § Alternatives). Condition:
   the task quota has run for a while.
-- Self-signup works for one email domain (`nesta.org.uk`). Condition: a second organisation wants
-  self-signup; adding a domain is `org domain add`, not a deploy.
+- Self-signup without an operator has two ways in: a listed email domain (one today,
+  `nesta.org.uk`; every address of the domain gets an account) and an invite link (one
+  organisation, its cohorts and 1 to 10 email domains, for a pilot where only some people of a
+  domain get access). Both work only where `self_signup.enabled` is true. Production keeps
+  it false. Condition for a second listed domain: an organisation wants every
+  address to get in; that is `org domain add`, not a deploy. Condition for production: a pilot
+  needs links there; that is a production config decision.
+- An invite link always has a domain rule; there is no link that any address can use, and the
+  public form has no visible code field. Condition: a pilot group has no common email domain.
+- The domains of an invite link do not change after it is made; an operator revokes the link and
+  makes a new one. Condition: operators do this often.
+- A people file gives every person the same organisation and cohorts; there is no column for
+  them. Condition: an operator must add people of several organisations in one go.
+- A listed domain has no default cohort; an operator adds the people to a cohort by hand.
+  Condition: every self-signup of a domain should land in one cohort.
+- Operators get no email when a request needs a check; they look at the Waitlist page.
+  Condition: requests wait too long because no one looks.
+- A made-up invite code can replace a valid one on a waiting request, because the public route
+  never reads a link ([ADR 0046](adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md),
+  the invite-link amendment). A request in an unlisted domain then waits until an operator
+  approves it. Options: keep the first code only (a person whose link expired then cannot use a
+  new one), or let the sweep remember the last code that matched a link. Condition: it happens,
+  or links go to a group where this kind of mischief is likely.
+- The ops pages do not say when the sweep is off. Where `self_signup.enabled` is false
+  (production), an operator can still make an invite link, and a request that carries its code
+  shows "waiting for the next run" for good. Condition: before invite links are used on
+  production; then the list answer carries the switch and the pages say so.
+- A request the sweep refused for good (another organisation, deactivated, refused by Cognito) is
+  never tried again, also when the person sends a new, valid invite code. It shows as Check with
+  no invite line, and an operator decides. Condition: operators miss such requests.
+- A request from a listed domain that carries a dead code shows the link's reason ("revoked",
+  "expired") on the Waitlist page for the minute before the sweep gives it the listed-domain
+  account. Condition: it confuses an operator.
+- Delete organisation removes the organisation's invite links only when they are revoked and
+  have no uses. A link with a use is never deleted, because the request row points at it, so an
+  organisation whose link made an account cannot be deleted even after its people are gone.
+  Condition: an operator must delete such an organisation; then the request rows lose their link
+  reference first.
 - The domain table is edited from the ops CLI only (`org domain add` and `remove`), not from the
   ops pages: edits are rare and are a tenancy decision. Condition: the edits become routine.
 - The ops pages do not show the `ops_action` log; an operator queries the table. Condition:
@@ -1236,6 +1272,38 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Limits in the code
 
+- `ops/sweep.py` (`_candidates`): the query that picks requests reads every waiting request on
+  each run and applies the domain, link and retry tests to all of them; no index serves the
+  waiting state or the email domain. It is fast for thousands of rows. Condition: the waitlist
+  holds tens of thousands of waiting requests, or a run takes seconds; then build the candidates
+  from the link branch and the listed-domain branch separately, with an index for each.
+- `ops/sweep.py` (`_candidates`) and `ops/commands.py` (`invite_request_reason`): the rule for
+  "this request can be redeemed" exists in SQL and in Python, and `api/routers/ops.py` holds a
+  third copy of "failed in the last 15 minutes" for the reason on the Waitlist page. A change to
+  one must change the others. Condition: the retry rule or the link rule changes.
+- `api/routers/ops.py` (`check_people_file`): the file check lives in the route module, so the
+  ops CLI cannot use it. Condition: a CLI import of people is wanted.
+- `api/routers/ops.py` (`create_person`): each person of a file run gets a full person answer
+  that the page does not read (a few small queries for each of up to 500 people). Condition: a
+  file run is slow.
+- `ops/commands.py` and the `invite_link` checks: the label length and the domain count are
+  plain numbers in the database checks and named constants in the commands. Condition: a limit
+  changes; then change both.
+- `ops/commands.py` (`create_invite_link`): a database error on the insert could carry the code
+  in its message and so reach a log line. Every check runs before the insert and a code clash has
+  a chance of about 1 in 31 to the power 12, so nothing reaches it today. Condition: a new
+  constraint on `invite_link`; then catch the integrity error and answer without detail.
+- `api/settings.py` (`public_app_origin_from_env`): `PUBLIC_APP_ORIGIN` is checked for its scheme
+  only, not its host or port. The infrastructure code is its only source. Condition: a person
+  sets it by hand.
+- `frontend/src/ops/views/InviteLinksView.tsx`: a domain refusal is recognised by the word
+  "domain" in the server's message, to mark and focus the field. Condition: the refusal words
+  change; then the server sends an error code for it.
+- `frontend/src/ops/OpsShell.tsx`: on a phone the tab row scrolls, but the active tab is not
+  scrolled into view. Condition: operators use the pages on a phone.
+- `backend/tests/ops/test_pa_ops_login.py` turns the cluster-wide `pa_ops` login on and off, so
+  two of its tests on different workers can fail with "tuple concurrently updated". It passes
+  alone and in most whole runs. Condition: it fails a CI run; then one worker group for the file.
 - `ops/commands.py` (`reissue_temporary_password`): `user reissue` on an account that has
   signed in replaces the password but does not end sessions that are already open (a refresh
   token lasts 30 days), and it writes no row in the ops action log; the operator's AWS identity
