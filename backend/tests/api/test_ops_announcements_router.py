@@ -367,6 +367,8 @@ def test_a_field_rule_answers_422_and_writes_nothing(ops: Harness) -> None:
 
     assert (sent.status_code, tested.status_code) == (422, 422)
     assert "https://" in sent.json()["error"]["message"]
+    assert sent.json()["error"]["details"] == {"field": "button_url"}
+    assert tested.json()["error"]["code"] == "invalid_message"
     assert _table_counts(ops.engine) == before
     assert ops.mailer.sent == []
 

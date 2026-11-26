@@ -215,7 +215,7 @@ def send_test(
             settings=mail_settings,
         )
     except InvalidMessage as exc:
-        raise HTTPException(422, str(exc)) from None
+        raise ApiUnprocessable("invalid_message", str(exc), {"field": exc.field}) from None
     try:
         mailer.send(
             to=own, subject=f"[Test] {rendered.subject}", html=rendered.html, text=rendered.text,
@@ -283,7 +283,7 @@ def send_announcement(
             suppressed=_suppressed(mailer), settings=mail_settings,
         )
     except InvalidMessage as exc:
-        raise HTTPException(422, str(exc)) from None
+        raise ApiUnprocessable("invalid_message", str(exc), {"field": exc.field}) from None
     except NotFound as exc:
         raise HTTPException(404, str(exc)) from None
     except announcements.RecipientsChanged as exc:

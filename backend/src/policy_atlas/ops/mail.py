@@ -396,26 +396,34 @@ def _blocks(body: str) -> list[tuple[bool, list[str]]]:
 def _check(message: Message, settings: MailSettings) -> None:
     """Apply the field rules; raise :class:`InvalidMessage` on the first broken one."""
     if not message.subject.strip():
-        raise InvalidMessage("the subject is empty")
+        raise InvalidMessage("the subject is empty", field="subject")
     if "\n" in message.subject or "\r" in message.subject:
-        raise InvalidMessage("the subject must be one line")
+        raise InvalidMessage("the subject must be one line", field="subject")
     if len(message.subject) > SUBJECT_MAX:
-        raise InvalidMessage(f"the subject is longer than {SUBJECT_MAX} characters")
+        raise InvalidMessage(
+            f"the subject is longer than {SUBJECT_MAX} characters", field="subject"
+        )
     if not message.body.strip():
-        raise InvalidMessage("the message is empty")
+        raise InvalidMessage("the message is empty", field="body")
     if len(message.body) > BODY_MAX:
-        raise InvalidMessage(f"the message is longer than {BODY_MAX} characters")
+        raise InvalidMessage(f"the message is longer than {BODY_MAX} characters", field="body")
     if bool(message.button_label) != bool(message.button_url):
-        raise InvalidMessage("a button needs both its words and its link")
+        raise InvalidMessage("a button needs both its words and its link", field="button_label")
     if message.button_url and not message.button_url.startswith("https://"):
-        raise InvalidMessage("the button link must start with https://")
+        raise InvalidMessage("the button link must start with https://", field="button_url")
     if message.button_label and len(message.button_label) > BUTTON_LABEL_MAX:
-        raise InvalidMessage(f"the button words are longer than {BUTTON_LABEL_MAX} characters")
+        raise InvalidMessage(
+            f"the button words are longer than {BUTTON_LABEL_MAX} characters", field="button_label"
+        )
     if bool(message.image_url) != bool(message.image_alt):
-        raise InvalidMessage("a picture needs both its address and its description")
+        raise InvalidMessage(
+            "a picture needs both its address and its description", field="image_alt"
+        )
     if message.image_url and not message.image_url.startswith(
         f"{settings.site_url}/email-images/"
     ):
-        raise InvalidMessage("use a picture added on this page")
+        raise InvalidMessage("use a picture added on this page", field="image_url")
     if message.image_alt and len(message.image_alt) > IMAGE_ALT_MAX:
-        raise InvalidMessage(f"the picture description is longer than {IMAGE_ALT_MAX} characters")
+        raise InvalidMessage(
+            f"the picture description is longer than {IMAGE_ALT_MAX} characters", field="image_alt"
+        )

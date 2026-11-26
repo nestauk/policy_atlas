@@ -97,6 +97,8 @@ _UNPROCESSABLE_CODES = {
     "upload_type",
     "upload_size",
     "upload_not_theory",
+    # An announcement field broke a rule; the details name the field.
+    "invalid_message",
 }
 
 
@@ -134,14 +136,16 @@ class ApiUnprocessable(Exception):
     Args:
         code: One of the contract-defined 422 codes.
         message: Human-readable explanation for the caller.
+        details: Optional structured detail sent in the envelope's ``details``.
     """
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, details: Any | None = None) -> None:
         if code not in _UNPROCESSABLE_CODES:
             raise ValueError(f"unsupported API unprocessable code: {code}")
         super().__init__(message)
         self.code = code
         self.message = message
+        self.details = details
 
 
 class ApiNotFound(Exception):
@@ -678,7 +682,7 @@ def _install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ApiUnprocessable)
     async def api_unprocessable_handler(_: Request, exc: ApiUnprocessable) -> JSONResponse:
-        return _error_response(422, exc.code, exc.message)
+        return _error_response(422, exc.code, exc.message, exc.details)
 
     @app.exception_handler(ApiNotFound)
     async def api_not_found_handler(_: Request, exc: ApiNotFound) -> JSONResponse:
