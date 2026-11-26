@@ -478,7 +478,14 @@ function RevokeDialog({ link, onClose }: { link: InviteLink; onClose: () => void
       open
       onOpenChange={(open) => !open && onClose()}
       title={`Revoke ${link.label}?`}
-      description={`People who use the link after this get no account through it. The ${formatCount(link.uses)} accounts already made stay.`}
+      description={
+        "People who use the link after this get no account through it." +
+        (link.uses === 1
+          ? " The 1 account already made stays."
+          : link.uses > 1
+            ? ` The ${formatCount(link.uses)} accounts already made stay.`
+            : "")
+      }
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>

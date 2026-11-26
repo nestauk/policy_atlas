@@ -166,9 +166,10 @@ artefact, groups) are whole-object.
 Splash-page **Request access** intake. Public — no bearer token.
 
 - `POST /api/v1/waitlist` `{email, name, organisation?, role_or_reason,
-  website?}` → 201 `{entry_id, email, created_at}`. Email is lower-cased and
-  unique: a duplicate email gets the same 201 and writes nothing (so the
-  endpoint cannot reveal who is registered). Organisation is optional;
+  website?, invite_code?}` → 201 `{entry_id, email, created_at}`. Email is
+  lower-cased and unique: a duplicate email gets the same 201 (so the
+  endpoint cannot reveal who is registered) and changes nothing, with one
+  exception for `invite_code` below. Organisation is optional;
   blank becomes null. Response omits organisation and role/reason. `website`
   is a honeypot (hidden on the form): any non-empty value gets a fake 201
   and stores nothing. The ops host lists the rows and approves one into an
@@ -178,6 +179,20 @@ Splash-page **Request access** intake. Public — no bearer token.
   self-signup sweep below for listed domains only. Behind the firewall (task
   064b) the form sends a CAPTCHA token in the `x-aws-waf-token` request header,
   which CORS allows; the firewall checks it and the API never reads it.
+- `invite_code` is the code of an **invite link** (ADR 0046, the invite-link
+  amendment): optional text of at most 64 characters, with no pattern. A
+  longer value gets the ordinary 422. The route makes the value upper case and
+  removes hyphens and spaces; if the result is not 12 characters of the code
+  alphabet, the request is stored with no code. A waiting request (no account,
+  not rejected) for the same email takes a new well-formed code, which replaces
+  an older one; nothing else on it changes. The route never reads the link
+  table and never calls Cognito, so the answer has the same status, fields and
+  headers for a good code, an unknown code, a malformed code and no code. The
+  public page takes the code from the address fragment
+  (`/#invite=XXXX-XXXX-XXXX`), which a browser never sends to a server. The
+  ops service's sweep redeems the code later: an account in the link's
+  organisation and cohorts, only for an address in one of the link's email
+  domains, while the link is not revoked, not expired and not full.
 
 With the self-signup flag on (task 065), the ops service's sweep turns rows
 whose address domain is in `organisation_domain` into accounts within about a
