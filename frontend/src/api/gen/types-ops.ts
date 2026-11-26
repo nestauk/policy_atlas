@@ -72,6 +72,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/invite-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Invite Links
+         * @description List every invite link with its organisation, cohorts, uses, state and address.
+         */
+        get: operations["list_invite_links_api_v1_ops_invite_links_get"];
+        put?: never;
+        /**
+         * Create Invite Link
+         * @description Make an invite link; the server makes its code.
+         */
+        post: operations["create_invite_link_api_v1_ops_invite_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/invite-links/{invite_link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Invite Link
+         * @description Change a link's label, use limit and end.
+         */
+        post: operations["update_invite_link_api_v1_ops_invite_links__invite_link_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/invite-links/{invite_link_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Invite Link
+         * @description Stop a link for good; the accounts it already made stay.
+         */
+        post: operations["revoke_invite_link_api_v1_ops_invite_links__invite_link_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/organisations": {
         parameters: {
             query?: never;
@@ -692,6 +756,113 @@ export interface components {
             line: number;
         };
         /**
+         * InviteLinkCreate
+         * @description Body of ``POST /api/v1/ops/invite-links``.
+         *
+         *     Args:
+         *         org_id: The organisation a redeemed request joins.
+         *         allowed_domains: The email domains the link accepts, one each; the
+         *             command lower-cases them and refuses none, more than ten or a repeat.
+         */
+        InviteLinkCreate: {
+            /** Allowed Domains */
+            allowed_domains: string[];
+            /** Cohort Ids */
+            cohort_ids?: string[];
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Label */
+            label: string;
+            /** Max Uses */
+            max_uses: number;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+        };
+        /**
+         * InviteLinkOut
+         * @description One invite link as the Invite links page lists it.
+         *
+         *     Args:
+         *         invite_link_id: The link's identity.
+         *         label: The operator's name for it.
+         *         organisation: The organisation a redeemed request joins.
+         *         cohorts: The cohorts a redeemed person joins.
+         *         allowed_domains: The email domains it accepts.
+         *         max_uses: How many requests it may redeem.
+         *         uses: How many it has redeemed.
+         *         expires_at: When it stops working.
+         *         revoked_at: When an operator revoked it, or ``None``.
+         *         created_at: When it was made.
+         *         state: See :data:`InviteLinkStateOut`.
+         *         url: The full web address with the code in its fragment. Ops pages only.
+         */
+        InviteLinkOut: {
+            /** Allowed Domains */
+            allowed_domains: string[];
+            /** Cohorts */
+            cohorts: components["schemas"]["CohortRef"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Invite Link Id
+             * Format: uuid
+             */
+            invite_link_id: string;
+            /** Label */
+            label: string;
+            /** Max Uses */
+            max_uses: number;
+            organisation: components["schemas"]["OrganisationRef"];
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "expired" | "full" | "revoked";
+            /** Url */
+            url: string;
+            /** Uses */
+            uses: number;
+        };
+        /**
+         * InviteLinkUpdate
+         * @description Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.
+         *
+         *     The command checks the use limit and the end against the link rules, so a
+         *     refusal reads as the pages word it.
+         *
+         *     Args:
+         *         label: The operator's name for the link.
+         *         max_uses: How many requests the link may redeem.
+         *         expires_at: When it stops working, with its time zone.
+         */
+        InviteLinkUpdate: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Label */
+            label: string;
+            /** Max Uses */
+            max_uses: number;
+        };
+        /**
          * LimitSourceOut
          * @description Where one limit came from (contract B12).
          *
@@ -1145,6 +1316,125 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CohortOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invite_links_api_v1_ops_invite_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"][];
+                };
+            };
+        };
+    };
+    create_invite_link_api_v1_ops_invite_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_invite_link_api_v1_ops_invite_links__invite_link_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteLinkUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_invite_link_api_v1_ops_invite_links__invite_link_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteLinkOut"];
                 };
             };
             /** @description Validation Error */

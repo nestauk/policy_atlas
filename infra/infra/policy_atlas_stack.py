@@ -401,6 +401,8 @@ class PolicyAtlasStack(Stack):
                 "OIDC_JWKS_URL": auth.jwks_url,
                 "OIDC_CLIENT_ID": auth.client_id_value,
                 "APP_ORIGIN": f"https://{ops_domain}",
+                # The public site, for the address of an invite link.
+                "PUBLIC_APP_ORIGIN": f"https://{domain_name}",
                 "POLICY_ATLAS_SERVICE_ROLE": "ops",
                 "POLICY_ATLAS_SELF_SIGNUP": "1" if self_signup_config["enabled"] else "0",
                 "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": str(self_signup_config["max_per_hour"]),

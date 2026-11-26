@@ -83,7 +83,14 @@ _OPS_ROUTES = {
     ("POST", "/api/v1/ops/requests/{entry_id}/approve"),
     ("POST", "/api/v1/ops/requests/{entry_id}/reject"),
     ("DELETE", "/api/v1/ops/requests/{entry_id}"),
+    ("GET", "/api/v1/ops/invite-links"),
+    ("POST", "/api/v1/ops/invite-links"),
+    ("POST", "/api/v1/ops/invite-links/{invite_link_id}"),
+    ("POST", "/api/v1/ops/invite-links/{invite_link_id}/revoke"),
 }
+
+#: The public site's origin the ops-mode test application puts in front of an invite link.
+_PUBLIC_ORIGIN = "https://public.example.test"
 
 
 class Harness(NamedTuple):
@@ -106,6 +113,7 @@ def _settings(tmp_path: Path) -> Settings:
         os.environ["DATABASE_URL"],
         service_role="ops",
         ops_ui_dir=None,
+        public_app_origin=_PUBLIC_ORIGIN,
     )
 
 
@@ -257,7 +265,8 @@ def test_every_ops_route_refuses_without_a_token_or_the_role(
         plain = _principal(settings, tmp_path, "plain")
         with seeded(engine) as conn:
             ops_enrol(conn, user_id=plain.user_id)
-        ids = {"org_id": uuid.uuid4(), "entry_id": uuid.uuid4(), "cohort_id": uuid.uuid4()}
+        ids = {"org_id": uuid.uuid4(), "entry_id": uuid.uuid4(), "cohort_id": uuid.uuid4(),
+               "invite_link_id": uuid.uuid4()}
         filled = [(m, p.format(**ids)) for m, p in routes]
         for method, path in filled:
             assert client.request(method, path).status_code == 401, (method, path)
@@ -1298,7 +1307,7 @@ def _check_file(h: Harness, text: str) -> dict[str, Any]:
 
 def test_import_check_answers_rows_for_a_good_file(ops: Harness) -> None:
     """A byte-order mark, any column order and case, a quoted comma, Windows line ends."""
-    text = ('﻿Name,EMAIL\r\n"Doe, Jane",Jane@Example.org\r\n'
+    text = ('\ufeffName,EMAIL\r\n"Doe, Jane",Jane@Example.org\r\n'
             "Bob Smith,bob@example.org\r\n")
     assert _check_file(ops, text) == {
         "rows": [
@@ -1322,7 +1331,7 @@ _TOO_MANY = "email,name\n" + "".join(f"p{i}@example.org,P{i}\n" for i in range(5
          [(3, "do not follow the CSV rules")], []),
         ('email,name\na@example.org,"two\nlines"\nc@example.org,C\n',
          [(2, "a name cannot hold a line break")], [4]),
-        ("email,name\na@example.org,Caf�\n", [(None, "not saved as UTF-8")], []),
+        ("email,name\na@example.org,Caf\ufffd\n", [(None, "not saved as UTF-8")], []),
         ("email,name\na@example.org,A\nA@Example.org,B\n",
          [(3, "this email is already on line 2")], [2]),
         (_TOO_MANY, [(None, "at most 500 people")], []),
@@ -1360,4 +1369,130 @@ def test_import_check_writes_nothing(ops: Harness) -> None:
                             {"csv": "email,name\nnew@example.org,New Person\n"})
     assert response.status_code == 200 and response.json()["rows"]
     assert counts() == before and lines == []
+
+
+# --- invite links -------------------------------------------------------------
+
+
+def _in_days(days: float) -> str:
+    """An aware time ``days`` from now, as the page sends it."""
+    return (datetime.now(UTC) + timedelta(days=days)).isoformat()
+
+
+def _link_body(org_id: uuid.UUID, **values: Any) -> dict[str, Any]:
+    """A full create body for one invite link."""
+    return {"label": "Pilot link", "org_id": str(org_id), "cohort_ids": [],
+            "allowed_domains": ["dhsc.gov.uk"], "max_uses": 5, "expires_at": _in_days(30),
+            **values}
+
+
+def _make_link(h: Harness, **values: Any) -> dict[str, Any]:
+    """Create one link through the route and return its answer."""
+    response, _ = _post(h, "/api/v1/ops/invite-links", _link_body(_seed_org(h), **values))
+    assert response.status_code == 201, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def _code_of(link: dict[str, Any]) -> str:
+    """The stored form of a link's code, read from its address."""
+    return str(link["url"]).split("#invite=")[1].replace("-", "")
+
+
+def test_invite_link_create_list_update_and_revoke_are_audited_and_never_log_the_code(
+    ops: Harness,
+) -> None:
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    with capture_logs() as captured:
+        created = ops.client.post("/api/v1/ops/invite-links", headers=ops.actor.headers,
+                                  json=_link_body(org_id, cohort_ids=[group],
+                                                  allowed_domains=["DHSC.gov.uk", "nhs.net"]))
+        assert created.status_code == 201, created.text
+        link = created.json()
+        link_id = link["invite_link_id"]
+        assert link["url"].startswith(f"{_PUBLIC_ORIGIN}/#invite=")
+        code = _code_of(link)
+        assert len(code) == 12 and link["url"].endswith(
+            f"{code[:4]}-{code[4:8]}-{code[8:]}")
+        assert (link["state"], link["uses"], link["allowed_domains"]) == (
+            "active", 0, ["dhsc.gov.uk", "nhs.net"])
+        assert [c["cohort_id"] for c in link["cohorts"]] == [group]
+        listed = ops.client.get("/api/v1/ops/invite-links", headers=ops.actor.headers).json()
+        assert link_id in {item["invite_link_id"] for item in listed}
+        updated = ops.client.post(f"/api/v1/ops/invite-links/{link_id}",
+                                  headers=ops.actor.headers,
+                                  json={"label": "Renamed", "max_uses": 9,
+                                        "expires_at": _in_days(60)})
+        assert updated.status_code == 200, updated.text
+        assert (updated.json()["label"], updated.json()["max_uses"]) == ("Renamed", 9)
+        revoked = ops.client.post(f"/api/v1/ops/invite-links/{link_id}/revoke",
+                                  headers=ops.actor.headers)
+        assert revoked.status_code == 200 and revoked.json()["state"] == "revoked"
+    assert [(row["action"], row["target"]) for row in _audit(ops)
+            if row["action"].startswith("invite_link")] == [
+        ("invite_link.create", link_id), ("invite_link.update", link_id),
+        ("invite_link.revoke", link_id)]
+    assert code not in str(_audit(ops)) and code not in str(list(captured))
+
+
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        ({"allowed_domains": []}, "Enter at least one domain."),
+        ({"allowed_domains": [f"d{i}.org" for i in range(11)]},
+         "A link can have at most 10 domains."),
+        ({"allowed_domains": ["nhs.net", "NHS.net"]}, "This domain is on the list twice."),
+        ({"allowed_domains": ["nhs.net", "someone@nhs.net"]},
+         "Line 2: enter a domain such as dhsc.gov.uk, with no @."),
+        ({"max_uses": 0}, "Maximum uses must be from 1 to 1,000."),
+        ({"max_uses": 1001}, "Maximum uses must be from 1 to 1,000."),
+        ({"expires_at": _in_days(-1)}, "Choose a date in the next 90 days."),
+        ({"expires_at": _in_days(92)}, "Choose a date in the next 90 days."),
+    ],
+    ids=["no-domain", "eleven-domains", "repeated-domain", "domain-with-at", "zero-uses",
+         "too-many-uses", "past", "too-far"],
+)
+def test_invite_link_create_refuses_values_outside_the_rules(
+    ops: Harness, values: dict[str, Any], message: str
+) -> None:
+    response, lines = _post(ops, "/api/v1/ops/invite-links",
+                            _link_body(_seed_org(ops), **values))
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["message"] == message
+    assert lines == [] and _audit(ops) == []
+
+
+def test_invite_link_maximum_cannot_go_below_its_uses(ops: Harness) -> None:
+    link = _make_link(ops, max_uses=2)
+    for _ in range(2):
+        _seed_request(ops, invite_link_id=uuid.UUID(link["invite_link_id"]))
+    listed = {item["invite_link_id"]: item for item in ops.client.get(
+        "/api/v1/ops/invite-links", headers=ops.actor.headers).json()}
+    assert (listed[link["invite_link_id"]]["uses"],
+            listed[link["invite_link_id"]]["state"]) == (2, "full")
+    response, _ = _post(ops, f"/api/v1/ops/invite-links/{link['invite_link_id']}",
+                        {"label": "Pilot link", "max_uses": 1, "expires_at": _in_days(30)})
+    assert response.status_code == 409
+    assert response.json()["error"]["message"] == (
+        "This link already has 2 uses. The maximum cannot be lower.")
+
+
+def test_a_revoked_invite_link_cannot_be_changed(ops: Harness) -> None:
+    link_id = _make_link(ops)["invite_link_id"]
+    _post(ops, f"/api/v1/ops/invite-links/{link_id}/revoke", {})
+    for path, body in (
+        (f"/api/v1/ops/invite-links/{link_id}",
+         {"label": "Again", "max_uses": 3, "expires_at": _in_days(10)}),
+        (f"/api/v1/ops/invite-links/{link_id}/revoke", {}),
+    ):
+        response, _ = _post(ops, path, body)
+        assert response.status_code == 409, path
+        assert response.json()["error"]["message"] == "A revoked link cannot be changed."
+
+
+def test_delete_organisation_refuses_one_with_an_invite_link(ops: Harness) -> None:
+    org_id = uuid.UUID(_make_link(ops)["organisation"]["org_id"])
+    refused = ops.client.delete(f"/api/v1/ops/organisations/{org_id}", headers=ops.actor.headers)
+    assert refused.status_code == 409
+    assert "still has 1 invite links" in refused.text
 

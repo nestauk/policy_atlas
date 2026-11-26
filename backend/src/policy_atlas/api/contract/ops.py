@@ -18,9 +18,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from .tenancy import OrganisationRef
 from .waitlist import WaitlistSignup
@@ -477,3 +484,77 @@ class ApproveRequest(CohortChoice):
     """
 
     org_id: uuid.UUID
+
+
+#: The longest invite-link label.
+INVITE_LABEL_MAX = 200
+
+
+class InviteLinkUpdate(BaseModel):
+    """Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.
+
+    The command checks the use limit and the end against the link rules, so a
+    refusal reads as the pages word it.
+
+    Args:
+        label: The operator's name for the link.
+        max_uses: How many requests the link may redeem.
+        expires_at: When it stops working, with its time zone.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    label: str = Field(min_length=1, max_length=INVITE_LABEL_MAX)
+    max_uses: int
+    expires_at: AwareDatetime
+
+
+class InviteLinkCreate(InviteLinkUpdate, CohortChoice):
+    """Body of ``POST /api/v1/ops/invite-links``.
+
+    Args:
+        org_id: The organisation a redeemed request joins.
+        allowed_domains: The email domains the link accepts, one each; the
+            command lower-cases them and refuses none, more than ten or a repeat.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    org_id: uuid.UUID
+    allowed_domains: list[Annotated[str, Field(max_length=253)]] = Field(max_length=100)
+
+
+#: An invite link's state, worked out when it is read.
+InviteLinkStateOut = Literal["active", "expired", "full", "revoked"]
+
+
+class InviteLinkOut(BaseModel):
+    """One invite link as the Invite links page lists it.
+
+    Args:
+        invite_link_id: The link's identity.
+        label: The operator's name for it.
+        organisation: The organisation a redeemed request joins.
+        cohorts: The cohorts a redeemed person joins.
+        allowed_domains: The email domains it accepts.
+        max_uses: How many requests it may redeem.
+        uses: How many it has redeemed.
+        expires_at: When it stops working.
+        revoked_at: When an operator revoked it, or ``None``.
+        created_at: When it was made.
+        state: See :data:`InviteLinkStateOut`.
+        url: The full web address with the code in its fragment. Ops pages only.
+    """
+
+    invite_link_id: uuid.UUID
+    label: str
+    organisation: OrganisationRef
+    cohorts: list[CohortRef]
+    allowed_domains: list[str]
+    max_uses: int
+    uses: int
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    created_at: datetime
+    state: InviteLinkStateOut
+    url: str

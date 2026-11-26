@@ -482,6 +482,177 @@
         "title": "ImportRow",
         "type": "object"
       },
+      "InviteLinkCreate": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/invite-links``.\n\nArgs:\n    org_id: The organisation a redeemed request joins.\n    allowed_domains: The email domains the link accepts, one each; the\n        command lower-cases them and refuses none, more than ten or a repeat.",
+        "properties": {
+          "allowed_domains": {
+            "items": {
+              "maxLength": 253,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Allowed Domains",
+            "type": "array"
+          },
+          "cohort_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Cohort Ids",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "max_uses": {
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "max_uses",
+          "expires_at",
+          "org_id",
+          "allowed_domains"
+        ],
+        "title": "InviteLinkCreate",
+        "type": "object"
+      },
+      "InviteLinkOut": {
+        "description": "One invite link as the Invite links page lists it.\n\nArgs:\n    invite_link_id: The link's identity.\n    label: The operator's name for it.\n    organisation: The organisation a redeemed request joins.\n    cohorts: The cohorts a redeemed person joins.\n    allowed_domains: The email domains it accepts.\n    max_uses: How many requests it may redeem.\n    uses: How many it has redeemed.\n    expires_at: When it stops working.\n    revoked_at: When an operator revoked it, or ``None``.\n    created_at: When it was made.\n    state: See :data:`InviteLinkStateOut`.\n    url: The full web address with the code in its fragment. Ops pages only.",
+        "properties": {
+          "allowed_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Domains",
+            "type": "array"
+          },
+          "cohorts": {
+            "items": {
+              "$ref": "#/components/schemas/CohortRef"
+            },
+            "title": "Cohorts",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invite_link_id": {
+            "format": "uuid",
+            "title": "Invite Link Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_uses": {
+            "title": "Max Uses",
+            "type": "integer"
+          },
+          "organisation": {
+            "$ref": "#/components/schemas/OrganisationRef"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "expired",
+              "full",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "invite_link_id",
+          "label",
+          "organisation",
+          "cohorts",
+          "allowed_domains",
+          "max_uses",
+          "uses",
+          "expires_at",
+          "created_at",
+          "state",
+          "url"
+        ],
+        "title": "InviteLinkOut",
+        "type": "object"
+      },
+      "InviteLinkUpdate": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.\n\nThe command checks the use limit and the end against the link rules, so a\nrefusal reads as the pages word it.\n\nArgs:\n    label: The operator's name for the link.\n    max_uses: How many requests the link may redeem.\n    expires_at: When it stops working, with its time zone.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "max_uses": {
+            "title": "Max Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "max_uses",
+          "expires_at"
+        ],
+        "title": "InviteLinkUpdate",
+        "type": "object"
+      },
       "LimitSourceOut": {
         "description": "Where one limit came from (contract B12).\n\nArgs:\n    kind: A fixed word the pages branch on; never an operator-typed name.\n    name: The cohort's or organisation's name for those two kinds, else ``None``.",
         "properties": {
@@ -1330,6 +1501,190 @@
           }
         ],
         "summary": "Set Cohort Quota",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/invite-links": {
+      "get": {
+        "description": "List every invite link with its organisation, cohorts, uses, state and address.",
+        "operationId": "list_invite_links_api_v1_ops_invite_links_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InviteLinkOut"
+                  },
+                  "title": "Response List Invite Links Api V1 Ops Invite Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Invite Links",
+        "tags": [
+          "ops"
+        ]
+      },
+      "post": {
+        "description": "Make an invite link; the server makes its code.",
+        "operationId": "create_invite_link_api_v1_ops_invite_links_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Invite Link",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/invite-links/{invite_link_id}": {
+      "post": {
+        "description": "Change a link's label, use limit and end.",
+        "operationId": "update_invite_link_api_v1_ops_invite_links__invite_link_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteLinkUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Invite Link",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/invite-links/{invite_link_id}/revoke": {
+      "post": {
+        "description": "Stop a link for good; the accounts it already made stay.",
+        "operationId": "revoke_invite_link_api_v1_ops_invite_links__invite_link_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invite Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Revoke Invite Link",
         "tags": [
           "ops"
         ]

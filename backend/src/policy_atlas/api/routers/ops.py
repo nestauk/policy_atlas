@@ -35,6 +35,9 @@ from policy_atlas.api.contract.ops import (
     ImportCheckOut,
     ImportProblem,
     ImportRow,
+    InviteLinkCreate,
+    InviteLinkOut,
+    InviteLinkUpdate,
     LimitSourceOut,
     LimitsOut,
     OrganisationCreate,
@@ -52,10 +55,13 @@ from policy_atlas.api.contract.tenancy import OrganisationRef
 from policy_atlas.api.deps import Identity, get_conn, get_identity, get_settings
 from policy_atlas.api.routers.common import created_in_last_days, effective_limits
 from policy_atlas.api.settings import Settings
+from policy_atlas.core import invite_code
 from policy_atlas.core.schema import (
     app_user,
     cohort,
     cohort_member,
+    invite_link,
+    invite_link_cohort,
     ops_action,
     organisation,
     organisation_domain,
@@ -492,11 +498,11 @@ def check_people_file(text: str) -> ImportCheckOut:
 
     if len(text) > IMPORT_CHARACTERS_MAX:
         return whole_file(f"A file can hold at most {IMPORT_CHARACTERS_MAX:,} characters.")
-    if "�" in text:
+    if "\ufffd" in text:
         return whole_file(
             "This file is not saved as UTF-8. Save it as CSV UTF-8 and choose it again."
         )
-    reader = csv.reader(io.StringIO(text.removeprefix("﻿"), newline=""), strict=True)
+    reader = csv.reader(io.StringIO(text.removeprefix("\ufeff"), newline=""), strict=True)
     records: list[tuple[int, list[str]]] = []
     start = 1
     try:
@@ -863,3 +869,121 @@ def approve_request(
         select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
     ).mappings().one()
     return RequestOut(**row, status="invited")
+
+
+def _invite_links(
+    conn: Connection, settings: Settings, invite_link_id: uuid.UUID | None = None
+) -> list[InviteLinkOut]:
+    """Every invite link, newest first, or the one asked for, with its uses and state."""
+    if settings.public_app_origin is None:
+        raise HTTPException(503, "the public site's address is not configured")
+    query = (
+        select(invite_link, organisation.c.name.label("organisation_name"))
+        .join(organisation, organisation.c.org_id == invite_link.c.org_id)
+        .order_by(invite_link.c.created_at.desc(), invite_link.c.invite_link_id)
+    )
+    if invite_link_id is not None:
+        query = query.where(invite_link.c.invite_link_id == invite_link_id)
+    rows = conn.execute(query).mappings().all()
+    ids = [row["invite_link_id"] for row in rows]
+    uses = {link_id: int(count) for link_id, count in conn.execute(
+        select(waitlist_entry.c.invite_link_id, func.count())
+        .where(waitlist_entry.c.invite_link_id.in_(ids))
+        .group_by(waitlist_entry.c.invite_link_id)
+    )} if ids else {}
+    cohorts: dict[uuid.UUID, list[CohortRef]] = {}
+    for link_id, cohort_id, name in conn.execute(
+        select(invite_link_cohort.c.invite_link_id, cohort.c.cohort_id, cohort.c.name)
+        .join(cohort, cohort.c.cohort_id == invite_link_cohort.c.cohort_id)
+        .where(invite_link_cohort.c.invite_link_id.in_(ids))
+        .order_by(cohort.c.name)
+    ) if ids else ():
+        cohorts.setdefault(link_id, []).append(CohortRef(cohort_id=cohort_id, name=name))
+    now = _now()
+    items: list[InviteLinkOut] = []
+    for row in rows:
+        link = commands.invite_link_record(row)
+        used = uses.get(link.invite_link_id, 0)
+        items.append(InviteLinkOut(
+            invite_link_id=link.invite_link_id, label=link.label,
+            organisation=OrganisationRef(org_id=link.org_id, name=row["organisation_name"]),
+            cohorts=cohorts.get(link.invite_link_id, []),
+            allowed_domains=list(link.allowed_domains), max_uses=link.max_uses, uses=used,
+            expires_at=link.expires_at, revoked_at=link.revoked_at, created_at=link.created_at,
+            state=commands.invite_link_state(link, used, now),
+            # The code travels in the fragment, which a browser never sends to a server.
+            url=f"{settings.public_app_origin}/#invite={invite_code.display(link.code)}",
+        ))
+    return items
+
+
+def _invite_link_refusal(run: Callable[[], commands.InviteLink]) -> commands.InviteLink:
+    """Run one link command, mapping its refusals to the ordinary errors."""
+    try:
+        return run()
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    except OpsError as exc:
+        raise ApiConflict("ops_refused", str(exc)) from None
+
+
+@router.get("/invite-links", response_model=list[InviteLinkOut])
+def list_invite_links(
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> list[InviteLinkOut]:
+    """List every invite link with its organisation, cohorts, uses, state and address."""
+    return _invite_links(conn, settings)
+
+
+@router.post("/invite-links", response_model=InviteLinkOut,
+             status_code=status.HTTP_201_CREATED)
+def create_invite_link(
+    body: InviteLinkCreate, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> InviteLinkOut:
+    """Make an invite link; the server makes its code."""
+    org = _org(conn, body.org_id)
+    cohorts = [_cohort(conn, cohort_id) for cohort_id in body.cohort_ids]
+    link = _invite_link_refusal(lambda: commands.create_invite_link(
+        conn, label=body.label, org=org, cohorts=cohorts, allowed_domains=body.allowed_domains,
+        max_uses=body.max_uses, expires_at=body.expires_at, created_by=actor.user_id, now=_now(),
+    ))
+    _audit(request, conn, actor=actor.user_id, action="invite_link.create",
+           target=str(link.invite_link_id))
+    return _invite_links(conn, settings, link.invite_link_id)[0]
+
+
+@router.post("/invite-links/{invite_link_id}", response_model=InviteLinkOut)
+def update_invite_link(
+    invite_link_id: uuid.UUID, body: InviteLinkUpdate, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> InviteLinkOut:
+    """Change a link's label, use limit and end."""
+    _invite_link_refusal(lambda: commands.update_invite_link(
+        conn, invite_link_id=invite_link_id, label=body.label, max_uses=body.max_uses,
+        expires_at=body.expires_at, now=_now(),
+    ))
+    _audit(request, conn, actor=actor.user_id, action="invite_link.update",
+           target=str(invite_link_id))
+    return _invite_links(conn, settings, invite_link_id)[0]
+
+
+@router.post("/invite-links/{invite_link_id}/revoke", response_model=InviteLinkOut)
+def revoke_invite_link(
+    invite_link_id: uuid.UUID, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> InviteLinkOut:
+    """Stop a link for good; the accounts it already made stay."""
+    _invite_link_refusal(lambda: commands.revoke_invite_link(
+        conn, invite_link_id=invite_link_id, now=_now(),
+    ))
+    _audit(request, conn, actor=actor.user_id, action="invite_link.revoke",
+           target=str(invite_link_id))
+    return _invite_links(conn, settings, invite_link_id)[0]

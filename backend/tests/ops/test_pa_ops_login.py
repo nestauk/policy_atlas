@@ -385,6 +385,28 @@ _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
 }
 
 
+def test_pa_ops_creates_updates_and_revokes_an_invite_link(
+    pa_ops_engine: Engine, engine: Engine
+) -> None:
+    """The three link commands run within the ops login's grants."""
+    from datetime import timedelta
+
+    org = _org(engine)
+    with seeded(engine) as conn:
+        target = commands.save_cohort(conn, cohort_id=None, name=f"Links {uuid.uuid4()}",
+                                      description=None, starts_on=None, ends_on=None, links=[])
+    now = datetime.now(UTC)
+    with _as_pa_ops(pa_ops_engine) as conn:
+        link = commands.create_invite_link(
+            conn, label="Pilot", org=org, cohorts=[target], allowed_domains=["nhs.net"],
+            max_uses=3, expires_at=now + timedelta(days=7), created_by="operator", now=now,
+        )
+        commands.update_invite_link(conn, invite_link_id=link.invite_link_id, label="Renamed",
+                                    max_uses=5, expires_at=now + timedelta(days=9), now=now)
+        revoked = commands.revoke_invite_link(conn, invite_link_id=link.invite_link_id, now=now)
+        assert revoked.revoked_at == now
+
+
 def test_pa_ops_grants_are_exactly_the_contract_list(engine: Engine) -> None:
     """The catalogue agrees with B13: every table-level and column-level grant, no more."""
     with engine.connect() as conn:

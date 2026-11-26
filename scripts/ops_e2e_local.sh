@@ -37,7 +37,7 @@ uv run python -m policy_atlas.api.dev_issuer init --dir "$issuer_dir" >/dev/null
 sub="e2e-ops-$RANDOM$RANDOM"
 token="$(uv run python -m policy_atlas.api.dev_issuer mint --dir "$issuer_dir" --sub "$sub" --client-id policy-atlas-dev --ttl 600)"
 common=(OIDC_ISSUER=http://dev-issuer.local OIDC_CLIENT_ID=policy-atlas-dev OIDC_JWKS_PATH="$issuer_dir/jwks.json" OIDC_JWKS_URL= DATABASE_URL="$db" PA_BACKEND_MODE=stub)
-env "${common[@]}" DATABASE_URL="$ops_db" APP_ORIGIN=http://127.0.0.1:8002 POLICY_ATLAS_SERVICE_ROLE=ops OPS_UI_DIR="$repo/backend/ops-ui" \
+env "${common[@]}" DATABASE_URL="$ops_db" APP_ORIGIN=http://127.0.0.1:8002 PUBLIC_APP_ORIGIN=http://127.0.0.1:8003 POLICY_ATLAS_SERVICE_ROLE=ops OPS_UI_DIR="$repo/backend/ops-ui" \
   uv run uvicorn policy_atlas.api.app:create_app --factory --host 127.0.0.1 --port 8002 >"$ops_log" 2>&1 &
 ops_pid=$!
 env "${common[@]}" APP_ORIGIN=http://127.0.0.1:8003 \
