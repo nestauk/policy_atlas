@@ -18,6 +18,7 @@ import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
 import { DRAFT_CHAT_ID, isTaskAgentConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { TaskAgentPane } from "./workspace/TaskAgentPane";
+import { TrackEvent } from "./feedback/TrackEvent";
 
 /**
  * The Agent tab: the Task's conversations in a sidebar, the selected one in
@@ -125,6 +126,8 @@ export function WorkspaceView() {
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-paper">
+      {/* In-app feedback analytics: `planner_opened` (the Agent tab is the planner). */}
+      <TrackEvent event="planner_opened" taskId={taskId} />
       {/* Sidebar and conversation share the row; the site footer runs under
           both, so neither column ever appears to overhang it. */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">

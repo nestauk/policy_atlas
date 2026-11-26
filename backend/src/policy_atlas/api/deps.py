@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, cast
 
 import structlog
-from fastapi import Request
+from fastapi import HTTPException, Request
+from langfuse import Langfuse
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.analytics import Sender, posthog_sender_from_env
 from policy_atlas.api.auth import get_current_user, get_optional_user
 from policy_atlas.api.settings import IngestMode, Settings
 from policy_atlas.api.titles import TitleWriter
@@ -23,6 +25,7 @@ from policy_atlas.core.embeddings import (
 )
 from policy_atlas.core.model_routes import live_api_key, route
 from policy_atlas.core.uploads import UploadStore, store_from_env
+from policy_atlas.evidence_search.sourcing.search_live import OpenAlexLiveBackend
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     OpenAIGroundingJudgeBackend,
@@ -124,6 +127,61 @@ def get_identity(request: Request) -> Identity:
     """
     return cast(Identity, request.app.state.identity)
 
+
+def require_feedback(element: str) -> Callable[[Request], None]:
+    """Build a route dependency that hides a feedback element when its flag is off.
+
+    Args:
+        element: A name from ``settings.FEEDBACK_ELEMENTS``.
+
+    Returns:
+        A dependency that raises a 404 when the element is off, so the API
+        surface with the flag off is the same as before the element.
+    """
+
+    def check(request: Request) -> None:
+        """Raise a 404 when the element's flag is off."""
+        if element not in get_settings(request).feedback_elements:
+            raise HTTPException(status_code=404, detail="Not found")
+
+    return check
+
+
+def get_langfuse_client() -> Langfuse | None:
+    """Return the Langfuse client that mirrors feedback events as scores.
+
+    Returns:
+        The client, or None when the Langfuse keys are unset. Tests override
+        this seam with a fake client to assert the score call.
+    """
+    return tracing.get_langfuse()
+
+
+def get_analytics_sender() -> Sender | None:
+    """Return the function that sends analytics events to PostHog.
+
+    Returns:
+        The sender, or None when analytics is off. Tests override this seam
+        with a function that records each event.
+    """
+    return posthog_sender_from_env()
+
+
+def get_paper_lookup() -> OpenAlexLiveBackend | None:
+    """Return the OpenAlex client that resolves a reported missing paper.
+
+    Data source: OpenAlex Works API (publisher: OurResearch; worldwide coverage).
+
+    Returns:
+        The live client when the API runs live and ``OPENALEX_API_KEY`` is
+        set, else None. With None, only an identifier (a DOI or an OpenAlex
+        address) or an exact title of a task document resolves. Tests
+        override this seam with a fake.
+    """
+    key = os.environ.get("OPENALEX_API_KEY")
+    if not _live() or not key:
+        return None
+    return OpenAlexLiveBackend(key, email=os.environ.get("OPENALEX_EMAIL"))
 
 
 def get_engine(request: Request) -> Engine:
@@ -292,6 +350,7 @@ def get_grounding_judge_backend() -> GroundingJudgeBackend:
 
 
 __all__ = [
+    "get_analytics_sender",
     "get_conn",
     "get_chat_backend",
     "get_chat_embedding_backend",
@@ -299,10 +358,13 @@ __all__ = [
     "get_optional_user",
     "get_engine",
     "get_executor",
+    "get_langfuse_client",
+    "get_paper_lookup",
     "get_grounding_judge_backend",
     "get_agent_backend",
     "get_task_agent_backend",
     "get_runner_backends",
     "runner_backends_for",
     "get_settings",
+    "require_feedback",
 ]

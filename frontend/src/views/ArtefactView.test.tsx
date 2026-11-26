@@ -1362,4 +1362,15 @@ describe("ProvenanceSheet footer (042 item 5)", () => {
     expect(screen.getByText("A claim.")).toBeInTheDocument();
     expect(screen.queryByText(/Every claim links to the exact passage/)).toBeNull();
   });
+
+  it("shows a footer block after the sources (in-app feedback: the claim flag)", () => {
+    render(
+      <ProvenanceSheet claimTexts={["A claim."]} onClose={() => {}} footer={<p>Flag this claim</p>}>
+        <p>Source one</p>
+      </ProvenanceSheet>,
+    );
+    const source = screen.getByText("Source one");
+    const footer = screen.getByText("Flag this claim");
+    expect(source.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

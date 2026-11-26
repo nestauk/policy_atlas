@@ -592,6 +592,9 @@ class ReferenceOut(BaseModel):
         venue: Publication venue, or `None` if unknown.
         url: Optional reference URL.
         authorships: Authors and their institutions, for display.
+        source_id: The cited document's task source identity, so that in-app
+            feedback on a reference names the document. ``None`` for a
+            snapshot with no link to the task.
     """
 
     n: int
@@ -599,6 +602,7 @@ class ReferenceOut(BaseModel):
     year: int | None = None
     venue: str | None = None
     url: str | None = None
+    source_id: uuid.UUID | None = None
     authorships: list[AuthorshipOut] = Field(default_factory=list)
 
 

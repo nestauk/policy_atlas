@@ -21,13 +21,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import MeOut, OrganisationRef, TaskQuotaOut
 from policy_atlas.api.deps import get_conn, get_current_user, get_settings
-from policy_atlas.api.identity import sub_display
+from policy_atlas.api.identity import provision_user
 from policy_atlas.api.routers.common import effective_limits, tasks_created_since
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import app_user, organisation
@@ -62,15 +61,7 @@ def get_me(
         The caller's identity, with their organisation resolved by name, and
         their task quota unless they are exempt (task 064a, Q8).
     """
-    conn.execute(
-        pg_insert(app_user)
-        .values(
-            user_id=user.user_id,
-            display_name=sub_display(user.user_id),
-            created_at=datetime.now(UTC),
-        )
-        .on_conflict_do_nothing(index_elements=["user_id"])
-    )
+    provision_user(conn, user.user_id)
     # The first time the person opens the app: the
     # ops pages tell an invitation still waiting from one used. Later calls
     # match no row and write nothing.

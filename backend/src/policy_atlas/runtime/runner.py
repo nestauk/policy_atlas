@@ -19,7 +19,9 @@ import structlog
 from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
+from policy_atlas.api.analytics import capture_run_finished, posthog_sender_from_env
 from policy_atlas.api.contract import StageKey
 from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.core import events, tracing
@@ -5870,6 +5872,16 @@ def _finish_run(
         ):
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
     tick_hub.end_run(task_id, capability_run_id)
+    # In-app feedback analytics: a run that the user started has ended. Not a
+    # child walk and not an option search, which end inside their parent's run.
+    if (
+        walk_scope is not None
+        and walk_scope.parent_capability_run_id is None
+        and purpose != TARGETED_PURPOSE
+    ):
+        capture_run_finished(
+            engine, posthog_sender_from_env(), task_id=task_id, status=status
+        )
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
@@ -6081,6 +6093,7 @@ def _run_step_attempt(
             component=step.component,
             session_id=session_id,
         ) as run_span:
+            _store_trace_id(engine, run_id=run_id, trace_id=tracing.trace_id_of(run_span))
             ingest_backends = backends
             if registry_component == "ingest_full_text" and backends.queue is None:
                 # A bundle built without the construction paths (tests, stubs):
@@ -6351,6 +6364,28 @@ def _record_component_timing(
 def _bounded_error(exc: Exception) -> str:
     """``safe_error`` capped at 200 characters; callers log ``exc_info=True``."""
     return safe_error(exc)[:200]
+
+
+def _store_trace_id(engine: Engine, *, run_id: uuid.UUID, trace_id: str | None) -> None:
+    """Store the Langfuse trace id of a component run on its ``runs`` row.
+
+    In-app feedback reads this column to join a feedback event to the trace.
+    The write has its own short transaction, so it survives a rollback of the
+    component transaction: a failed run is the one a problem report needs.
+    A failure is logged and not raised, because telemetry must not fail a run.
+
+    Args:
+        engine: The process engine.
+        run_id: The component run.
+        trace_id: The trace id, or ``None`` when tracing is off (nothing is written).
+    """
+    if trace_id is None:
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(runs.update().where(runs.c.run_id == run_id).values(trace_id=trace_id))
+    except SQLAlchemyError as exc:
+        log.warning("run.trace_id_not_stored", run_id=str(run_id), error=type(exc).__name__)
 
 
 def _stamped_stage(

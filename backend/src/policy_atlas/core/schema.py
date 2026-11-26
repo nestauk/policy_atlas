@@ -403,6 +403,10 @@ runs = Table(
     # the composite FK below binds only once it's set (MATCH SIMPLE, per
     # synthesis_result's optional-reference precedent).
     Column("capability_run_id", UUID(as_uuid=True), nullable=True),
+    # The Langfuse trace of this component run, written when its span opens, so
+    # that a feedback event can join to the trace. NULL for a run made with
+    # tracing off, and for every run made before this column existed.
+    Column("trace_id", Text, nullable=True),
     # Composite unique so event_log can FK on (run_id, task_id) and prevent cross-task events.
     UniqueConstraint("run_id", "task_id", name="uq_runs_run_task"),
     # Cross-task FK guard, per the synthesis-result/task-plan
@@ -2305,4 +2309,179 @@ task_upload = Table(
     ),
     CheckConstraint("size_bytes > 0 AND size_bytes <= 10485760", name="ck_task_upload_size"),
     Index("ix_task_upload_task", "task_id"),
+)
+
+# --- In-app feedback -------------------------------------------------------
+#
+# Postgres is the system of record for feedback. Each row of `feedback_event`
+# joins to a pipeline artefact (`target_type`, `target_id`), to the user-facing
+# run (`capability_run_id`), to that run's Langfuse trace (`trace_id`) and to
+# the user (`user_id`, then `user_profile` for department and job).
+#
+# Closed vocabularies are Text columns with a CHECK, as in the rest of this
+# file: a CHECK can be dropped and re-created by a migration, a Postgres enum
+# value cannot be removed.
+
+FEEDBACK_KINDS: tuple[str, ...] = (
+    "citation_flag",
+    "missing_paper",
+    "screening_override",
+    "use_intent",
+    "claim_flag",
+    "problem_report",
+)
+#: Kinds where a second submit changes or retracts the first. One active row
+#: per (user, target, kind): `uq_feedback_event_active_toggle`.
+FEEDBACK_TOGGLE_KINDS: tuple[str, ...] = (
+    "citation_flag",
+    "screening_override",
+    "use_intent",
+    "claim_flag",
+)
+FEEDBACK_SURFACES: tuple[str, ...] = (
+    "report_references",
+    "sources_all",
+    "report_foot",
+    "sources_tab",
+    "screened_out_row",
+    "report_key_findings",
+    "report_claim_sidebar",
+    "app_header",
+)
+FEEDBACK_TARGET_TYPES: tuple[str, ...] = ("document", "run", "report", "claim")
+MISSING_PAPER_FAILURE_STAGES: tuple[str, ...] = (
+    "unresolved",
+    "cited",
+    "not_cited",
+    "not_selected",
+    "screened_out_s2",
+    "screened_out_s1",
+    "acquired_only",
+    "not_retrieved",
+)
+#: Stable codes for the "main use" answers. The labels (J1 to J7) will change
+#: after user testing; they live in one frontend file and are not stored.
+PROFILE_JOBS: tuple[str, ...] = ("j1", "j2", "j3", "j4", "j5", "j6", "j7", "other")
+PROFILE_SOURCES: tuple[str, ...] = ("signup", "migration", "waitlist")
+
+
+def _in_list(column: str, values: tuple[str, ...]) -> str:
+    """Return the SQL text of a CHECK that limits a column to a closed list.
+
+    Args:
+        column: The column name.
+        values: The permitted values. They are constants in this module, never
+            user input, so they are safe to put in the SQL text.
+
+    Returns:
+        SQL such as ``kind IN ('a', 'b')``.
+    """
+    return f"{column} IN ({', '.join(repr(value) for value in values)})"
+
+
+feedback_event = Table(
+    "feedback_event",
+    metadata,
+    # Also the id of the mirrored Langfuse score, so the two records reconcile.
+    Column("feedback_event_id", UUID(as_uuid=True), primary_key=True),
+    # The token `sub` of the person who gives the feedback (not always the
+    # owner of the run).
+    Column("user_id", Text, ForeignKey("app_user.user_id"), nullable=False),
+    # The user-facing run. NULL only for a problem report made before a run exists.
+    Column(
+        "capability_run_id",
+        UUID(as_uuid=True),
+        ForeignKey("capability_run.capability_run_id"),
+        nullable=True,
+    ),
+    # Copied from `runs.trace_id` of the component that the kind is about.
+    Column("trace_id", Text, nullable=True),
+    Column("surface", Text, nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("target_type", Text, nullable=False),
+    # An internal id as text: `task_source_snapshot_id` for a document,
+    # `capability_run_id` for a run, `artefact_id` for a report, `unit_id` for a claim.
+    Column("target_id", Text, nullable=True),
+    Column("payload", JSONB, nullable=False),
+    Column("pa_version", Text, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # A toggle or an undo sets this. Rows are never deleted.
+    Column("retracted_at", DateTime(timezone=True), nullable=True),
+    CheckConstraint(_in_list("kind", FEEDBACK_KINDS), name="ck_feedback_event_kind"),
+    CheckConstraint(_in_list("surface", FEEDBACK_SURFACES), name="ck_feedback_event_surface"),
+    CheckConstraint(
+        _in_list("target_type", FEEDBACK_TARGET_TYPES), name="ck_feedback_event_target_type"
+    ),
+    CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_feedback_event_payload_object"),
+    Index("ix_feedback_event_run", "capability_run_id"),
+    Index("ix_feedback_event_user", "user_id"),
+    Index("ix_feedback_event_kind_created", "kind", "created_at"),
+    Index("ix_feedback_event_target", "target_type", "target_id"),
+    # Toggle idempotency: at most one active row per (user, target, kind).
+    Index(
+        "uq_feedback_event_active_toggle",
+        "user_id",
+        "target_type",
+        "target_id",
+        "kind",
+        unique=True,
+        postgresql_where=text(
+            f"retracted_at IS NULL AND {_in_list('kind', FEEDBACK_TOGGLE_KINDS)}"
+        ),
+    ),
+)
+
+# One row per `missing_paper` event. `failure_stage` is NULL while the
+# resolver is still at work (the pending state).
+missing_paper_resolution = Table(
+    "missing_paper_resolution",
+    metadata,
+    Column(
+        "feedback_event_id",
+        UUID(as_uuid=True),
+        ForeignKey("feedback_event.feedback_event_id"),
+        primary_key=True,
+    ),
+    # The matched document: a `task_source_snapshot_id` when the paper is in
+    # the task, else the external id that the resolver found (OpenAlex id or DOI).
+    Column("resolved_id", Text, nullable=True),
+    Column("failure_stage", Text, nullable=True),
+    Column("resolver_confidence", Float, nullable=True),
+    Column("resolved_at", DateTime(timezone=True), nullable=True),
+    CheckConstraint(
+        _in_list("failure_stage", MISSING_PAPER_FAILURE_STAGES),
+        name="ck_missing_paper_resolution_failure_stage",
+    ),
+)
+
+# The onboarding profile. A profile, not a feedback event. A row exists from
+# the first "Skip for now" or the first completed form. The answers are NULL
+# until `completed_at` is set.
+user_profile = Table(
+    "user_profile",
+    metadata,
+    Column("user_id", Text, ForeignKey("app_user.user_id"), primary_key=True),
+    # Where the user works and the user's role: free text, as typed.
+    Column("department", Text, nullable=True),
+    Column("role", Text, nullable=True),
+    # The uses that the user picked: one or more codes from PROFILE_JOBS.
+    Column("jobs", ARRAY(Text), nullable=True),
+    Column("panel_opt_in", Boolean, nullable=True),
+    # How the user arrived. Nothing in the app knows this; ops supply it.
+    Column("source", Text, nullable=True),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+    Column("skipped_once_at", DateTime(timezone=True), nullable=True),
+    CheckConstraint(
+        f"jobs <@ ARRAY[{', '.join(repr(job) for job in PROFILE_JOBS)}]::text[]",
+        name="ck_user_profile_jobs",
+    ),
+    CheckConstraint(_in_list("source", PROFILE_SOURCES), name="ck_user_profile_source"),
+    # The first three questions are required to complete the profile. A CHECK
+    # passes on NULL, so `jobs IS NOT NULL` is necessary: cardinality(NULL)
+    # is NULL, not 0.
+    CheckConstraint(
+        "completed_at IS NULL OR (department IS NOT NULL AND role IS NOT NULL "
+        "AND jobs IS NOT NULL AND cardinality(jobs) > 0)",
+        name="ck_user_profile_completed_has_answers",
+    ),
 )

@@ -511,6 +511,13 @@ run_cdk() {
     PATH="$REPO_ROOT/infra/.venv/bin:$PATH" npx cdk@2.1133.0 "$@" --require-approval never
 }
 
+# The version that in-app feedback stores on each event: the nearest git tag,
+# else the short commit id. The API gets it as POLICY_ATLAS_VERSION and the
+# frontend build as VITE_PA_VERSION.
+pa_version() {
+    git -C "$REPO_ROOT" describe --tags --always --dirty
+}
+
 deploy_all_stacks() {
     local analytics_context=() ops_context
     if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
@@ -526,6 +533,7 @@ deploy_all_stacks() {
         # The `${array[@]+...}` form keeps an empty array safe under `set -u`
         # on the macOS bash 3.2 operators run this from.
         run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all \
+            -c "pa_version=$(pa_version)" \
             ${analytics_context[@]+"${analytics_context[@]}"} \
             ${ops_context[@]+"${ops_context[@]}"} --all
     )
@@ -855,6 +863,15 @@ resolve_frontend_publish_config() {
         export VITE_OPTIONS_SCOPING=1
         export VITE_THEORY_OF_CHANGE=1
     fi
+    # In-app feedback: the frontend shows the elements that the API has on.
+    # One value in infra/pa_config.json feeds both sides.
+    VITE_FEEDBACK="$(python3 -c '
+import json, sys
+config = json.load(open(sys.argv[1], encoding="utf-8"))
+print(config[sys.argv[2]]["policy_atlas_config"]["backend"].get("feedback", ""))
+' "$REPO_ROOT/infra/pa_config.json" "$ENV_NAME")"
+    VITE_PA_VERSION="$(pa_version)"
+    export VITE_FEEDBACK VITE_PA_VERSION
 }
 
 # Copy the licensed font files from their private bucket into the frontend's

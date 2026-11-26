@@ -779,6 +779,9 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert artefact["references"][0]["authorships"] == [
                 {"name": "Alex Sampleton", "institutions": ["Acme Institute"]}
             ]
+            # In-app feedback: a reference names its document, so that a
+            # citation flag on the reference list has a target.
+            assert artefact["references"][0]["source_id"] == cited_source["source_id"]
             dossier = client.get(
                 f"/api/v1/tasks/{task_id}/sources/{cited_source['source_id']}", headers=owner
             )

@@ -14,7 +14,7 @@ color: blue
 maxTurns: 150
 ---
 
-You are the frontend design and polish subagent. Follow AGENTS.md.
+You are the frontend design and polish subagent.
 
 Before you read or change any code, load the craft, in this order, with the Skill
 tool: `impeccable:impeccable` (and the references it names),
