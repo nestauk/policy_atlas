@@ -1243,6 +1243,60 @@ block to the `prod` section and deploy.
 **Cost.** Nil beyond today's Essentials plan. The certificate and the custom
 domain are free.
 
+### Announcement email from the ops pages (task 068a)
+
+ADR 0051. An operator writes an email on the ops pages and the ops server sends it
+through SES (Amazon Simple Email Service) to people who have an account. Three switches
+in the `email` block of `infra/pa_config.json` turn the parts on:
+
+```json
+"email": {"enabled": true, "announcements": false, "pictures": false,
+          "reply_to": "discoveryhub@nesta.org.uk", "...": "..."}
+```
+
+| Key | What it does |
+|---|---|
+| `enabled` | It exists already (Cognito's email through SES). It now also adds the DMARC record `_dmarc.<sender domain>` with `v=DMARC1; p=none`. DMARC is the DNS entry that tells other mail servers what to do with email that falsely claims to come from our domain; `p=none` only asks for reports and blocks nothing. |
+| `pictures` | A private bucket for announcement pictures. The site's CloudFront distribution serves it at `/email-images/*`. Anyone with a picture's link can open it. |
+| `announcements` | The ops server may send from `updates@<sender domain>` and read the SES suppression list (the addresses that bounced or marked our email as spam). The ops container gets `ANNOUNCEMENT_FROM_ADDRESS`, `ANNOUNCEMENT_REPLY_TO`, `PUBLIC_SITE_URL` and `PUBLIC_API_URL`. With `pictures` also true it may add pictures and gets `ANNOUNCEMENT_IMAGE_BUCKET`. |
+| `reply_to` | Where a reply to an announcement goes. Every recipient sees this address. |
+
+With `announcements` false the send routes answer 503 and the ops pages cannot send.
+Nothing sends a real email before the switch is on. No address at the product domain
+receives email: a reply goes to `reply_to`.
+
+**Order of steps, for staging first and then production.**
+
+1. Checks by hand. Stop if one fails.
+   ```bash
+   aws sesv2 get-account --region eu-west-2
+   aws sesv2 get-email-identity --email-identity <sender domain> --region eu-west-2
+   ```
+   - `ProductionAccessEnabled` is true.
+   - `SuppressionAttributes.SuppressedReasons` holds `BOUNCE` and `COMPLAINT`.
+   - `SendQuota.MaxSendRate` is at least 5 (the sender sends at most 5 emails a second).
+   - The identity shows `DkimAttributes.Status` as `SUCCESS`. DKIM is the signature that
+     lets a mail server check that an email really comes from our domain.
+2. Deploy the code and the migration with `announcements` and `pictures` false. Stop both
+   services, migrate, start, as for every migration (see § 4). This deploy adds the
+   DMARC record, because `enabled` is already true.
+3. Set `pictures` and `announcements` to true and deploy.
+4. Run the live checks of the task (contract § Acceptance checks, 1 to 4, 6, 7 and 9).
+   Check 2 uses the mail program's own Unsubscribe button: the mail provider's server
+   posts to `https://api.<domain>/api/v1/unsubscribe?token=…` with no sign-in, through
+   the firewall. If it fails, look in the firewall log group
+   `aws-waf-logs-policy-atlas-v3` for the blocked request before you change anything.
+
+**What an operator must know.**
+
+- "Sent" means SES accepted the email. There is no delivery or open tracking.
+- A row that shows "Not confirmed" belongs to an email that was in flight when the ops
+  server stopped. The server never sends it again, so nobody gets two copies. If it
+  matters, send a new announcement to that one person.
+- When the ops server starts, it finishes any send that still has waiting rows.
+- A product update leaves out people who unsubscribed or have not signed in yet. A
+  service notice reaches everyone chosen who is not deactivated.
+
 ## 5. Env & secret map
 
 Generated from `settings.py`'s required/optional calls plus the direct
@@ -1467,6 +1521,23 @@ the page itself.
   the point. Lowering `backup_retention_days` again discards the backups older
   than the new value. The 12-character password minimum cannot be undone for
   people who already set a longer password, which is harmless.
+- **Task 068a (announcement email):** four independent rollbacks, in the order of how
+  much they undo.
+  - *Stop sending:* set `email.announcements` false and deploy. Leave `email.pictures`
+    true, so pictures in emails already sent keep working. The send routes answer 503;
+    the tables and the record of sent announcements stay.
+  - *Picture hosting:* set `email.pictures` false and deploy. The CloudFront path goes
+    and pictures in sent emails break. The bucket is kept (not deleted), but switching
+    back on creates a new, empty bucket: the old pictures stay broken unless someone
+    copies the objects across. Do this only if the path itself is the problem.
+  - *DMARC:* the record follows `email.enabled`. To remove only the record, delete the
+    `TxtRecord` in `infra/infra/components/email.py` and deploy.
+  - *Schema (last resort):* stop both services, `alembic downgrade a3c9e1f7b2d4`
+    through the § 6 tunnel, deploy the image from before this task. The downgrade drops
+    the two tables and with them the record of every announcement, and drops everyone's
+    opt-out and unsubscribe token: links in emails already sent stop working, and after
+    a later upgrade people who unsubscribed are subscribed again. Tested on the test
+    database (`tests/core/test_migration_announcements.py`).
 - **Task 064b (firewall and CAPTCHA):** three levels, no data to restore.
   `waf.mode: count` undoes a block without removing anything; `waf.captcha:
   false` removes the CAPTCHA rule and the puzzle; `waf.enabled: false` removes
