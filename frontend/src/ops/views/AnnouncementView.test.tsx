@@ -149,7 +149,7 @@ describe("an announcement's result", () => {
     const user = userEvent.setup();
     renderOps(`/announcements/${opsMock.announcements[0].announcement_id}`);
     await screen.findByRole("region", { name: "Result" });
-    await user.click(screen.getByRole("button", { name: "Left out" }));
+    await user.click(screen.getByRole("button", { name: /^Left out \d+$/ }));
     expect(screen.getAllByRole("row").slice(1).map((each) => within(each).getAllByRole("cell")[0].textContent)).toEqual([
       "Kwame Osei",
       "Marta Nowak",

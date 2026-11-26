@@ -49,7 +49,7 @@ export function AnnouncementView() {
   if (detail.isError) {
     return (
       <>
-        <FormHeader back={back} title="" />
+        <FormHeader back={back} title="Announcement" />
         <FailedLine message="Could not load the announcement." onRetry={() => void detail.refetch()} />
       </>
     );
@@ -62,6 +62,15 @@ export function AnnouncementView() {
   const notConfirmed = isLive ? 0 : counts.sending;
   const myName = people.data?.find((person) => person.user_id === auth.user?.sub)?.display_name;
   const sentBy = data.sent_by_name === null ? null : data.sent_by_name === myName ? "Sent by you" : `Sent by ${data.sent_by_name}`;
+  // The counts are the server's; the page does not count people itself.
+  const total = counts.pending + counts.sending + counts.sent + counts.failed + counts.left_out;
+  const filterCounts: Record<Filter, number> = {
+    all: total,
+    sent: counts.sent,
+    failed: counts.failed,
+    left_out: counts.left_out,
+  };
+  const filters = FILTERS.map(({ key, label }) => ({ key, label: `${label} ${filterCounts[key]}` }));
   const rows = data.recipients
     .filter((row) => filter === "all" || row.status === filter)
     .sort((a, b) => resultRank(a, isLive) - resultRank(b, isLive) || a.name.localeCompare(b.name));
@@ -113,7 +122,7 @@ export function AnnouncementView() {
       </section>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <OutlineSwitch label="Show" choices={FILTERS} value={filter} onChange={setFilter} />
+        <OutlineSwitch label="Show" choices={filters} value={filter} onChange={setFilter} />
         <button type="button" onClick={() => setShowMessage(true)} className={cn(QUIET_CONTROL_CLASS, "text-body")}>
           Show the message that was sent
         </button>

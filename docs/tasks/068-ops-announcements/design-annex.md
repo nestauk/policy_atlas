@@ -161,11 +161,21 @@ No sign-in. The link alone changes nothing, because mail scanners open links.
 
 | Round | Phase | Date | Notes applied | Sign-off |
 |---|---|---|---|---|
-| 1 | build, agent pass | | | lead |
+| 1 | build, agent pass | 2026-11-26 | Field errors by the server's field name · result rows in attention-first order (failed, not confirmed, bounced, left out, waiting, sent) · counts on the result filter, as in the mock · full value on truncated cells · a fitting line on the failed-test dialog · title "Announcement" when the result fails to load · unsubscribe page: wrapped link aligned at 400 wide | lead |
 | 2 | build, owner pass | | | owner |
 | 3 | review, agent pass | | | lead |
 | 4 | review, owner pass | | | owner |
 
 ## Deferred polish
 
-None yet.
+For the owner's pass (round 2):
+
+- Compose: "Check and send" sits below the fold at 1280 by 900, because the preview
+  column is tall and pinned. Options: do not pin the column, or move the button above
+  the preview.
+- Unsubscribe page: no tab title of its own ("Product updates · Policy Atlas"?); the
+  busy button keeps the word "Unsubscribe"; the "again" state is a heading only.
+- Unsubscribe page, after Unsubscribe: the line "We still email you when…" shows, as in
+  the mock. The annex lists only the heading and the link for that state.
+- Words used where the annex is silent (load failures, empty filter, picture errors,
+  "N not confirmed"): listed in the build report; all plain, none changes a state.
