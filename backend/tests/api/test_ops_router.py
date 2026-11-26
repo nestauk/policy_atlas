@@ -248,7 +248,10 @@ def test_every_ops_route_refuses_without_a_token_or_the_role(
             (method, route.path)
             for route in _flatten_api_routes(client.app.routes)  # type: ignore[attr-defined]
             for method in route.methods or ()
+            # The announcement routes have their own gate test, which pins them
+            # (tests/api/test_ops_announcements_router.py).
             if route.path.startswith("/api/v1/ops")
+            and not route.path.startswith("/api/v1/ops/announcement")
         }
         assert routes == _OPS_ROUTES
         stranger = _principal(settings, tmp_path, "stranger")

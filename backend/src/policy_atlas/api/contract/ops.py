@@ -20,7 +20,9 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from policy_atlas.ops.mail import BODY_MAX, BUTTON_LABEL_MAX, IMAGE_ALT_MAX, SUBJECT_MAX
 
 from .tenancy import OrganisationRef
 from .waitlist import WaitlistSignup
@@ -373,3 +375,229 @@ class ApproveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     org_id: uuid.UUID
+
+
+# --- announcements ---------------------------------------------------------------------------
+
+#: ``product_update`` has an unsubscribe link and skips people who unsubscribed;
+#: ``service_notice`` has neither.
+AnnouncementKind = Literal["product_update", "service_notice"]
+#: Why a person on the preview does not get the email, in order of precedence.
+LeftOutReason = Literal[
+    "deactivated", "no_email", "suppressed_bounce", "suppressed_complaint", "not_signed_in",
+    "unsubscribed",
+]
+#: A link's size bound; whether a link is allowed is the email layout's rule.
+ANNOUNCEMENT_URL_MAX = 2000
+#: About 1 MB once decoded, with room for the route to answer with its own size message.
+ANNOUNCEMENT_IMAGE_BASE64_MAX = 2_000_000
+
+
+class AudienceIn(BaseModel):
+    """Who an announcement goes to: everyone, or any mix of cohorts, organisations and people.
+
+    With ``everyone`` true the three lists must be empty; with it false at least
+    one id is needed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    everyone: bool = False
+    cohort_ids: list[uuid.UUID] = Field(default_factory=list, max_length=OPS_BULK_MAX)
+    org_ids: list[uuid.UUID] = Field(default_factory=list, max_length=OPS_BULK_MAX)
+    user_ids: list[str] = Field(default_factory=list, max_length=OPS_BULK_MAX)
+
+    @model_validator(mode="after")
+    def _one_way(self) -> AudienceIn:
+        chosen = bool(self.cohort_ids or self.org_ids or self.user_ids)
+        if self.everyone and chosen:
+            raise ValueError("an audience of everyone takes no cohort, organisation or person")
+        if not self.everyone and not chosen:
+            raise ValueError("choose everyone, or at least one cohort, organisation or person")
+        return self
+
+
+class AnnouncementMessageIn(BaseModel):
+    """The fields the operator writes. The field rules live in the email layout (422)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str = Field(max_length=SUBJECT_MAX)
+    body: str = Field(max_length=BODY_MAX)
+    button_label: str | None = Field(default=None, max_length=BUTTON_LABEL_MAX)
+    button_url: str | None = Field(default=None, max_length=ANNOUNCEMENT_URL_MAX)
+    image_url: str | None = Field(default=None, max_length=ANNOUNCEMENT_URL_MAX)
+    image_alt: str | None = Field(default=None, max_length=IMAGE_ALT_MAX)
+
+
+class AnnouncementRecipientsIn(BaseModel):
+    """Body of ``POST /api/v1/ops/announcements/recipients``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: AnnouncementKind
+    audience: AudienceIn
+
+
+class AnnouncementTestIn(AnnouncementMessageIn):
+    """Body of ``POST /api/v1/ops/announcements/test``."""
+
+    kind: AnnouncementKind
+
+
+class AnnouncementSendIn(AnnouncementMessageIn):
+    """Body of ``POST /api/v1/ops/announcements``.
+
+    Args:
+        fingerprint: The ``fingerprint`` of the preview the operator confirmed.
+    """
+
+    kind: AnnouncementKind
+    audience: AudienceIn
+    fingerprint: str = Field(min_length=1, max_length=128)
+
+
+class AnnouncementRecipientOut(BaseModel):
+    """One person on the preview.
+
+    Args:
+        user_id: The account.
+        name: The display name.
+        email: The address, or ``None`` when the account has none.
+        organisation: The organisation's name, or ``None``.
+        status: ``pending`` (gets the email) or ``left_out``.
+        reason: Why they are left out, or ``None``.
+    """
+
+    user_id: str
+    name: str
+    email: str | None
+    organisation: str | None
+    status: Literal["pending", "left_out"]
+    reason: LeftOutReason | None
+
+
+class AnnouncementRecipientsOut(BaseModel):
+    """The preview: counts, each person, and the list's fingerprint.
+
+    Also the ``details`` of the 409 ``recipients_changed`` answer to a send.
+
+    Args:
+        chosen: How many people the audience gives.
+        will_get: How many of them get the email.
+        left_out: How many are left out, by reason (only reasons that occur).
+        recipients: Each person once, sorted by ``user_id``.
+        fingerprint: A hash of the list; the send must carry it back.
+    """
+
+    chosen: int
+    will_get: int
+    left_out: dict[LeftOutReason, int]
+    recipients: list[AnnouncementRecipientOut]
+    fingerprint: str
+
+
+class AnnouncementImageIn(BaseModel):
+    """Body of ``POST /api/v1/ops/announcement-images``: a PNG or JPEG, base64, at most 1 MB."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content_type: Literal["image/png", "image/jpeg"]
+    data_base64: str = Field(min_length=1, max_length=ANNOUNCEMENT_IMAGE_BASE64_MAX)
+
+
+class AnnouncementImageOut(BaseModel):
+    """The stored picture's public address, for ``image_url``."""
+
+    url: str
+
+
+class AnnouncementCreatedOut(BaseModel):
+    """Answer to a send: the new announcement's id."""
+
+    announcement_id: uuid.UUID
+
+
+class AnnouncementCounts(BaseModel):
+    """How many recipient rows are in each status."""
+
+    pending: int = 0
+    sending: int = 0
+    sent: int = 0
+    failed: int = 0
+    left_out: int = 0
+
+
+class AnnouncementSummaryOut(BaseModel):
+    """One announcement on the list.
+
+    Args:
+        announcement_id: The announcement.
+        subject: Its subject line.
+        kind: Product update or service notice.
+        audience_summary: The audience in words ("Everyone", or the names).
+        sent_by_name: The operator's display name, or ``None`` if unknown.
+        created_at: When it was sent.
+        counts: Recipient rows by status.
+    """
+
+    announcement_id: uuid.UUID
+    subject: str
+    kind: AnnouncementKind
+    audience_summary: str
+    sent_by_name: str | None
+    created_at: datetime
+    counts: AnnouncementCounts
+
+
+class AnnouncementsOut(BaseModel):
+    """Answer to ``GET /api/v1/ops/announcements``: newest first."""
+
+    items: list[AnnouncementSummaryOut]
+
+
+class AnnouncementResultOut(BaseModel):
+    """One person's result on an announcement.
+
+    Args:
+        user_id: The account.
+        name: The display name now.
+        email: The address the email went to (as it was at the send).
+        organisation: The organisation's name now, or ``None``.
+        status: ``pending``, ``sending`` (the page says "Not confirmed" once
+            the send has stopped), ``sent``, ``failed`` or ``left_out``.
+        reason: The left-out reason, a short failure code, or ``None``.
+        overlay: For a ``sent`` row whose address joined the suppression list
+            after the send: ``bounced`` or ``marked_as_spam``. Not stored.
+    """
+
+    user_id: str
+    name: str
+    email: str | None
+    organisation: str | None
+    status: Literal["pending", "sending", "sent", "failed", "left_out"]
+    reason: str | None
+    overlay: Literal["bounced", "marked_as_spam"] | None
+
+
+class AnnouncementDetailOut(AnnouncementSummaryOut):
+    """Answer to ``GET /api/v1/ops/announcements/{announcement_id}``.
+
+    Args:
+        body: The message text.
+        button_label: The button's words, or ``None``.
+        button_url: The button's link, or ``None``.
+        image_url: The picture's address, or ``None``.
+        image_alt: The picture's description, or ``None``.
+        recipients: Each person's result, by name.
+        suppression_unreadable: True when the suppression list could not be
+            read, so no row carries an overlay.
+    """
+
+    body: str
+    button_label: str | None
+    button_url: str | None
+    image_url: str | None
+    image_alt: str | None
+    recipients: list[AnnouncementResultOut]
+    suppression_unreadable: bool

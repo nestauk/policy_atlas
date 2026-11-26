@@ -108,6 +108,14 @@ def test_ops_mode_has_only_ops_and_health_api_routes(tmp_path: Path) -> None:
     assert "/healthz" in paths
     assert "/readyz" in paths
     assert "/api/v1/ops/organisations" in paths
+    assert {
+        "/api/v1/ops/announcements",
+        "/api/v1/ops/announcements/recipients",
+        "/api/v1/ops/announcements/test",
+        "/api/v1/ops/announcement-images",
+        "/api/v1/ops/announcements/{announcement_id}",
+        "/api/v1/ops/announcements/{announcement_id}/retry",
+    } <= paths
     assert "/api/v1/me" not in paths
     assert not any(path.startswith("/api/v1/tasks") for path in paths)
     assert not any(path.startswith("/api/v1/projects") for path in paths)
@@ -174,6 +182,33 @@ def test_ops_lifespan_does_not_start_api_work(
     with TestClient(api_app):
         pass
     sweep.assert_called_once()
+
+
+def test_api_mode_builds_no_mailer_even_with_the_sender_settings(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The public API never builds a mailer and never starts an announcement sender."""
+    del engine
+    import boto3
+
+    from policy_atlas.ops import announcements
+
+    client = MagicMock()
+    resume = MagicMock()
+    monkeypatch.setattr(boto3, "client", client)
+    monkeypatch.setattr(announcements, "resume_all", resume)
+    settings = replace(
+        _settings(tmp_path, service_role="api", ops_ui_dir=None),
+        announcement_from_address="Policy Atlas <updates@example.test>",
+        announcement_reply_to="team@example.test",
+        public_site_url="https://site.example.test",
+        public_api_url="https://api.example.test",
+    )
+    app = create_app(settings=settings)
+    with TestClient(app):
+        assert getattr(app.state, "mailer", None) is None
+    assert not any(call.args[:1] == ("sesv2",) for call in client.call_args_list)
+    resume.assert_not_called()
 
 
 @pytest.mark.parametrize("enabled", [False, True])

@@ -4,6 +4,135 @@
  */
 
 export interface paths {
+    "/api/v1/ops/announcement-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Image
+         * @description Store a PNG or JPEG of at most 1 MB under a random name; return its public address.
+         */
+        post: operations["add_image_api_v1_ops_announcement_images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/announcements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Announcements
+         * @description Every announcement, newest first, with its recipient counts by status.
+         */
+        get: operations["list_announcements_api_v1_ops_announcements_get"];
+        put?: never;
+        /**
+         * Send Announcement
+         * @description Record the announcement and its recipients; the sender starts after the commit.
+         */
+        post: operations["send_announcement_api_v1_ops_announcements_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/announcements/recipients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Recipients
+         * @description Who the announcement would go to, and who is left out and why. Writes nothing.
+         */
+        post: operations["preview_recipients_api_v1_ops_announcements_recipients_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/announcements/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Test
+         * @description Send one test email to the operator's own address, subject prefixed ``[Test] ``.
+         */
+        post: operations["send_test_api_v1_ops_announcements_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/announcements/{announcement_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Announcement
+         * @description One announcement and each person's result.
+         *
+         *     A ``sent`` row whose address joined the suppression list after the send
+         *     shows ``bounced`` or ``marked_as_spam`` as its overlay; nothing is stored.
+         *     Without a mailer, or when the list cannot be read, no row has an overlay
+         *     and ``suppression_unreadable`` is true.
+         */
+        get: operations["get_announcement_api_v1_ops_announcements__announcement_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/announcements/{announcement_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Announcement
+         * @description Put the failed rows back to pending and start the sender after the commit.
+         */
+        post: operations["retry_announcement_api_v1_ops_announcements__announcement_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/cohorts": {
         parameters: {
             query?: never;
@@ -469,6 +598,320 @@ export interface components {
             user_id: string;
         };
         /**
+         * AnnouncementCounts
+         * @description How many recipient rows are in each status.
+         */
+        AnnouncementCounts: {
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /**
+             * Left Out
+             * @default 0
+             */
+            left_out: number;
+            /**
+             * Pending
+             * @default 0
+             */
+            pending: number;
+            /**
+             * Sending
+             * @default 0
+             */
+            sending: number;
+            /**
+             * Sent
+             * @default 0
+             */
+            sent: number;
+        };
+        /**
+         * AnnouncementCreatedOut
+         * @description Answer to a send: the new announcement's id.
+         */
+        AnnouncementCreatedOut: {
+            /**
+             * Announcement Id
+             * Format: uuid
+             */
+            announcement_id: string;
+        };
+        /**
+         * AnnouncementDetailOut
+         * @description Answer to ``GET /api/v1/ops/announcements/{announcement_id}``.
+         *
+         *     Args:
+         *         body: The message text.
+         *         button_label: The button's words, or ``None``.
+         *         button_url: The button's link, or ``None``.
+         *         image_url: The picture's address, or ``None``.
+         *         image_alt: The picture's description, or ``None``.
+         *         recipients: Each person's result, by name.
+         *         suppression_unreadable: True when the suppression list could not be
+         *             read, so no row carries an overlay.
+         */
+        AnnouncementDetailOut: {
+            /**
+             * Announcement Id
+             * Format: uuid
+             */
+            announcement_id: string;
+            /** Audience Summary */
+            audience_summary: string;
+            /** Body */
+            body: string;
+            /** Button Label */
+            button_label: string | null;
+            /** Button Url */
+            button_url: string | null;
+            counts: components["schemas"]["AnnouncementCounts"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Image Alt */
+            image_alt: string | null;
+            /** Image Url */
+            image_url: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "product_update" | "service_notice";
+            /** Recipients */
+            recipients: components["schemas"]["AnnouncementResultOut"][];
+            /** Sent By Name */
+            sent_by_name: string | null;
+            /** Subject */
+            subject: string;
+            /** Suppression Unreadable */
+            suppression_unreadable: boolean;
+        };
+        /**
+         * AnnouncementImageIn
+         * @description Body of ``POST /api/v1/ops/announcement-images``: a PNG or JPEG, base64, at most 1 MB.
+         */
+        AnnouncementImageIn: {
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "image/png" | "image/jpeg";
+            /** Data Base64 */
+            data_base64: string;
+        };
+        /**
+         * AnnouncementImageOut
+         * @description The stored picture's public address, for ``image_url``.
+         */
+        AnnouncementImageOut: {
+            /** Url */
+            url: string;
+        };
+        /**
+         * AnnouncementRecipientOut
+         * @description One person on the preview.
+         *
+         *     Args:
+         *         user_id: The account.
+         *         name: The display name.
+         *         email: The address, or ``None`` when the account has none.
+         *         organisation: The organisation's name, or ``None``.
+         *         status: ``pending`` (gets the email) or ``left_out``.
+         *         reason: Why they are left out, or ``None``.
+         */
+        AnnouncementRecipientOut: {
+            /** Email */
+            email: string | null;
+            /** Name */
+            name: string;
+            /** Organisation */
+            organisation: string | null;
+            /** Reason */
+            reason: ("deactivated" | "no_email" | "suppressed_bounce" | "suppressed_complaint" | "not_signed_in" | "unsubscribed") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "left_out";
+            /** User Id */
+            user_id: string;
+        };
+        /**
+         * AnnouncementRecipientsIn
+         * @description Body of ``POST /api/v1/ops/announcements/recipients``.
+         */
+        AnnouncementRecipientsIn: {
+            audience: components["schemas"]["AudienceIn"];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "product_update" | "service_notice";
+        };
+        /**
+         * AnnouncementRecipientsOut
+         * @description The preview: counts, each person, and the list's fingerprint.
+         *
+         *     Also the ``details`` of the 409 ``recipients_changed`` answer to a send.
+         *
+         *     Args:
+         *         chosen: How many people the audience gives.
+         *         will_get: How many of them get the email.
+         *         left_out: How many are left out, by reason (only reasons that occur).
+         *         recipients: Each person once, sorted by ``user_id``.
+         *         fingerprint: A hash of the list; the send must carry it back.
+         */
+        AnnouncementRecipientsOut: {
+            /** Chosen */
+            chosen: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Left Out */
+            left_out: {
+                [key: string]: number;
+            };
+            /** Recipients */
+            recipients: components["schemas"]["AnnouncementRecipientOut"][];
+            /** Will Get */
+            will_get: number;
+        };
+        /**
+         * AnnouncementResultOut
+         * @description One person's result on an announcement.
+         *
+         *     Args:
+         *         user_id: The account.
+         *         name: The display name now.
+         *         email: The address the email went to (as it was at the send).
+         *         organisation: The organisation's name now, or ``None``.
+         *         status: ``pending``, ``sending`` (the page says "Not confirmed" once
+         *             the send has stopped), ``sent``, ``failed`` or ``left_out``.
+         *         reason: The left-out reason, a short failure code, or ``None``.
+         *         overlay: For a ``sent`` row whose address joined the suppression list
+         *             after the send: ``bounced`` or ``marked_as_spam``. Not stored.
+         */
+        AnnouncementResultOut: {
+            /** Email */
+            email: string | null;
+            /** Name */
+            name: string;
+            /** Organisation */
+            organisation: string | null;
+            /** Overlay */
+            overlay: ("bounced" | "marked_as_spam") | null;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "sending" | "sent" | "failed" | "left_out";
+            /** User Id */
+            user_id: string;
+        };
+        /**
+         * AnnouncementSendIn
+         * @description Body of ``POST /api/v1/ops/announcements``.
+         *
+         *     Args:
+         *         fingerprint: The ``fingerprint`` of the preview the operator confirmed.
+         */
+        AnnouncementSendIn: {
+            audience: components["schemas"]["AudienceIn"];
+            /** Body */
+            body: string;
+            /** Button Label */
+            button_label?: string | null;
+            /** Button Url */
+            button_url?: string | null;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Image Alt */
+            image_alt?: string | null;
+            /** Image Url */
+            image_url?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "product_update" | "service_notice";
+            /** Subject */
+            subject: string;
+        };
+        /**
+         * AnnouncementSummaryOut
+         * @description One announcement on the list.
+         *
+         *     Args:
+         *         announcement_id: The announcement.
+         *         subject: Its subject line.
+         *         kind: Product update or service notice.
+         *         audience_summary: The audience in words ("Everyone", or the names).
+         *         sent_by_name: The operator's display name, or ``None`` if unknown.
+         *         created_at: When it was sent.
+         *         counts: Recipient rows by status.
+         */
+        AnnouncementSummaryOut: {
+            /**
+             * Announcement Id
+             * Format: uuid
+             */
+            announcement_id: string;
+            /** Audience Summary */
+            audience_summary: string;
+            counts: components["schemas"]["AnnouncementCounts"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "product_update" | "service_notice";
+            /** Sent By Name */
+            sent_by_name: string | null;
+            /** Subject */
+            subject: string;
+        };
+        /**
+         * AnnouncementTestIn
+         * @description Body of ``POST /api/v1/ops/announcements/test``.
+         */
+        AnnouncementTestIn: {
+            /** Body */
+            body: string;
+            /** Button Label */
+            button_label?: string | null;
+            /** Button Url */
+            button_url?: string | null;
+            /** Image Alt */
+            image_alt?: string | null;
+            /** Image Url */
+            image_url?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "product_update" | "service_notice";
+            /** Subject */
+            subject: string;
+        };
+        /**
+         * AnnouncementsOut
+         * @description Answer to ``GET /api/v1/ops/announcements``: newest first.
+         */
+        AnnouncementsOut: {
+            /** Items */
+            items: components["schemas"]["AnnouncementSummaryOut"][];
+        };
+        /**
          * ApproveRequest
          * @description Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.
          */
@@ -478,6 +921,26 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+        };
+        /**
+         * AudienceIn
+         * @description Who an announcement goes to: everyone, or any mix of cohorts, organisations and people.
+         *
+         *     With ``everyone`` true the three lists must be empty; with it false at least
+         *     one id is needed.
+         */
+        AudienceIn: {
+            /** Cohort Ids */
+            cohort_ids?: string[];
+            /**
+             * Everyone
+             * @default false
+             */
+            everyone: boolean;
+            /** Org Ids */
+            org_ids?: string[];
+            /** User Ids */
+            user_ids?: string[];
         };
         /**
          * BulkCohort
@@ -926,6 +1389,218 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    add_image_api_v1_ops_announcement_images_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementImageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementImageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_announcements_api_v1_ops_announcements_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementsOut"];
+                };
+            };
+        };
+    };
+    send_announcement_api_v1_ops_announcements_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementSendIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_recipients_api_v1_ops_announcements_recipients_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementRecipientsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementRecipientsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_api_v1_ops_announcements_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnnouncementTestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_announcement_api_v1_ops_announcements__announcement_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                announcement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnouncementDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_announcement_api_v1_ops_announcements__announcement_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                announcement_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_cohorts_api_v1_ops_cohorts_get: {
         parameters: {
             query?: never;

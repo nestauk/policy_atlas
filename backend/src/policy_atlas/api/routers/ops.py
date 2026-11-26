@@ -74,8 +74,14 @@ def require_ops(
 
 
 def after_commit(request: Request) -> Generator[None, None, None]:
-    """Emit queued action traces only after the request transaction commits."""
+    """Run queued work only after the request transaction commits.
+
+    Two queues: ``request.state.ops_log`` holds action traces, written first;
+    ``request.state.ops_after_commit`` holds callables (such as starting the
+    announcement sender), run next. A request that fails runs neither.
+    """
     request.state.ops_log = []
+    request.state.ops_after_commit = []
     try:
         yield
     except BaseException:
@@ -83,6 +89,8 @@ def after_commit(request: Request) -> Generator[None, None, None]:
     else:
         for line in request.state.ops_log:
             log.info("ops.action", **line)
+        for work in request.state.ops_after_commit:
+            work()
 
 
 router = APIRouter(
@@ -105,12 +113,13 @@ def _identity(identity: Identity) -> tuple[Any, str]:
 
 
 def _queue_log(
-    request: Request, *, actor: str, action: str, target: str, outcome: str, action_id: uuid.UUID
+    request: Request, *, actor: str, action: str, target: str, outcome: str, action_id: uuid.UUID,
+    **counts: int,
 ) -> None:
-    """Queue an email-free trace for :func:`after_commit`."""
+    """Queue an email-free trace for :func:`after_commit`; ``counts`` adds numbers only."""
     request.state.ops_log.append(
         {"actor": actor, "action": action, "target": target, "outcome": outcome,
-         "action_id": str(action_id)}
+         "action_id": str(action_id), **counts}
     )
 
 
