@@ -15,17 +15,26 @@ export type Requests = components["schemas"]["RequestsOut"];
 export type ActionResult = components["schemas"]["ActionResult"];
 export type Cohort = components["schemas"]["CohortOut"];
 export type CohortSave = components["schemas"]["CohortSave"];
+export type Audience = components["schemas"]["AudienceIn"];
+export type AnnouncementKind = components["schemas"]["AnnouncementTestIn"]["kind"];
+export type AnnouncementMessage = Omit<components["schemas"]["AnnouncementTestIn"], "kind">;
+export type RecipientPreview = components["schemas"]["AnnouncementRecipientsOut"];
+export type AnnouncementSummary = components["schemas"]["AnnouncementSummaryOut"];
+export type AnnouncementDetail = components["schemas"]["AnnouncementDetailOut"];
+export type AnnouncementResult = components["schemas"]["AnnouncementResultOut"];
 
 /** A refused or failed ops call: the HTTP status (0 for no answer) and the
- *  error envelope's code and message. */
+ *  error envelope's code, message and details. */
 export class OpsApiError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly details: unknown;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -59,8 +68,13 @@ export async function unwrap<T>(
     throw new OpsApiError(0, "network", "");
   }
   if (!result.response.ok || result.data === undefined) {
-    const body = result.error as { error?: { code?: string; message?: string } } | undefined;
-    throw new OpsApiError(result.response.status, body?.error?.code ?? "", body?.error?.message ?? "");
+    const body = result.error as { error?: { code?: string; message?: string; details?: unknown } } | undefined;
+    throw new OpsApiError(
+      result.response.status,
+      body?.error?.code ?? "",
+      body?.error?.message ?? "",
+      body?.error?.details,
+    );
   }
   return result.data;
 }
@@ -82,6 +96,7 @@ const PEOPLE = [...OPS, "people"] as const;
 const ORGANISATIONS = [...OPS, "organisations"] as const;
 const REQUESTS = [...OPS, "requests"] as const;
 const COHORTS = [...OPS, "cohorts"] as const;
+const ANNOUNCEMENTS = [...OPS, "announcements"] as const;
 
 export function usePeople() {
   const client = useOpsClient();
@@ -157,6 +172,70 @@ export function useOpsAction<V, R>(run: (client: OpsClient, variables: V) => Pro
     mutationFn: (variables: V) => run(client, variables),
     onSettled: () => queryClient.invalidateQueries({ queryKey: OPS }),
   });
+}
+
+/** A call that changes no list (a preview, a test email, a picture upload), so nothing is refreshed after it. */
+export function useOpsCall<V, R>(run: (client: OpsClient, variables: V) => Promise<R>) {
+  const client = useOpsClient();
+  return useMutation({ mutationFn: (variables: V) => run(client, variables) });
+}
+
+export function useAnnouncements() {
+  const client = useOpsClient();
+  return useQuery({ queryKey: ANNOUNCEMENTS, queryFn: () => unwrap(client.GET("/api/v1/ops/announcements")) });
+}
+
+/**
+ * One announcement and each person's result.
+ *
+ * Args:
+ *   id: The announcement.
+ *   refreshEvery: Given the latest answer, the milliseconds to the next read,
+ *     or false to stop reading.
+ */
+export function useAnnouncement(id: string, refreshEvery: (data: AnnouncementDetail | undefined) => number | false) {
+  const client = useOpsClient();
+  return useQuery({
+    queryKey: [...ANNOUNCEMENTS, id],
+    queryFn: () =>
+      unwrap(client.GET("/api/v1/ops/announcements/{announcement_id}", { params: { path: { announcement_id: id } } })),
+    refetchInterval: (query) => refreshEvery(query.state.data),
+  });
+}
+
+/** Who an announcement would go to; writes nothing. */
+export function useRecipientPreview() {
+  return useOpsCall((client, body: { kind: AnnouncementKind; audience: Audience }) =>
+    unwrap(client.POST("/api/v1/ops/announcements/recipients", { body })),
+  );
+}
+
+export function useSendTest() {
+  return useOpsCall((client, body: AnnouncementMessage & { kind: AnnouncementKind }) =>
+    unwrapEmpty(client.POST("/api/v1/ops/announcements/test", { body })),
+  );
+}
+
+export function useUploadImage() {
+  return useOpsCall((client, body: { content_type: "image/png" | "image/jpeg"; data_base64: string }) =>
+    unwrap(client.POST("/api/v1/ops/announcement-images", { body })),
+  );
+}
+
+/** Send: on 409 `recipients_changed` the error's `details` is the new preview. */
+export function useSendAnnouncement() {
+  return useOpsAction(
+    (client, body: AnnouncementMessage & { kind: AnnouncementKind; audience: Audience; fingerprint: string }) =>
+      unwrap(client.POST("/api/v1/ops/announcements", { body })),
+  );
+}
+
+export function useRetryAnnouncement() {
+  return useOpsAction((client, id: string) =>
+    unwrapEmpty(
+      client.POST("/api/v1/ops/announcements/{announcement_id}/retry", { params: { path: { announcement_id: id } } }),
+    ),
+  );
 }
 
 /** The bulk routes that take only the subjects. */

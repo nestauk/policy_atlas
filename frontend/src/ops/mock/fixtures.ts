@@ -13,6 +13,8 @@ export const POLICY_LAB = "00000000-0000-4000-8000-00000000000b";
 export const EMPTY_ORG = "00000000-0000-4000-8000-00000000000c";
 export const PANEL = "00000000-0000-4000-8000-00000000000d";
 export const PILOT = "00000000-0000-4000-8000-00000000000e";
+export const SPRING = "00000000-0000-4000-8000-00000000000f";
+export const TOMAS = "sub-tomas";
 
 const MINUTE = 60 * 1000;
 const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
@@ -70,6 +72,16 @@ export function cohortFixtures(): Cohort[] {
       links: [],
       created_at: iso(2 * 24 * 60 * MINUTE),
       people: 0,
+    },
+    {
+      cohort_id: SPRING,
+      name: "Spring pilot",
+      description: null,
+      starts_on: null,
+      ends_on: null,
+      links: [],
+      created_at: iso(20 * 24 * 60 * MINUTE),
+      people: 18,
     },
   ];
 }
@@ -193,7 +205,93 @@ export function peopleFixtures(): Person[] {
       limits: { task_quota_per_year: 100, runs_per_user: 3, task_quota_from: { kind: "organisation", name: "Nesta" }, runs_from: { kind: "default" } },
       cohorts: [],
     },
+    {
+      user_id: TOMAS,
+      display_name: "Tomás Ferreira",
+      email: "tomas.ferreira@example.org",
+      organisation: null,
+      is_admin: false,
+      is_ops: false,
+      created_at: iso(45 * 24 * 60 * MINUTE),
+      invited_at: null,
+      first_signed_in_at: iso(44 * 24 * 60 * MINUTE),
+      task_quota_per_year: null,
+      runs_per_user: null,
+      tasks_this_year: 2,
+      limits: { task_quota_per_year: 50, runs_per_user: 3, task_quota_from: { kind: "default" }, runs_from: { kind: "default" } },
+      cohorts: [],
+    },
   ];
+}
+
+/*
+ * The announcements' example (design annex § Fixed example data): the
+ * cohort Spring pilot (18 people), the organisation Nesta (64) and the
+ * person Tomás Ferreira, one person in both groups: 82 chosen. Two
+ * unsubscribed from product updates and one deactivated, so a product
+ * update reaches 79 and a service notice 81. The People list does not show
+ * these 82; the announcement routes alone read them.
+ */
+
+/** One person the announcement routes can choose. */
+export interface ExamplePerson {
+  user_id: string;
+  name: string;
+  email: string;
+  organisation: string;
+  spring: boolean;
+  nesta: boolean;
+  deactivated: boolean;
+  unsubscribed: boolean;
+}
+
+const FIRST = ["Alex", "Bea", "Cal", "Dana", "Eli", "Fay", "Gus", "Hana", "Ivo", "Jade"];
+const LAST = ["Abbott", "Barker", "Carver", "Dunn", "Ellery", "Frost", "Garner", "Hollis", "Irving"];
+
+/** The person who unsubscribes when the mock's list changes before a send. */
+export const LATE_UNSUBSCRIBER = "sub-ex-nesta-50";
+/** The person who subscribes again then. */
+export const RESUBSCRIBER = "sub-kwame";
+
+export function exampleAudience(): ExamplePerson[] {
+  const generated = (index: number) => {
+    const first = FIRST[index % FIRST.length];
+    const last = LAST[Math.floor(index / FIRST.length) % LAST.length];
+    return { name: `${first} ${last}`, email: `${first}.${last}@example.org`.toLowerCase() };
+  };
+  const person = (user_id: string, name: string, email: string, organisation: string, more: Partial<ExamplePerson>) => ({
+    user_id,
+    name,
+    email,
+    organisation,
+    spring: false,
+    nesta: false,
+    deactivated: false,
+    unsubscribed: false,
+    ...more,
+  });
+  const people: ExamplePerson[] = [
+    person(TOMAS, "Tomás Ferreira", "tomas.ferreira@example.org", "Example Trust", {}),
+    person("sub-sofia", "Sofia Lindqvist", "sofia.lindqvist@example.org", "Example Council", { spring: true, unsubscribed: true }),
+    person("sub-marta", "Marta Nowak", "marta.nowak@example.org", "Example Council", { spring: true, deactivated: true }),
+    person("sub-imogen", "Imogen Hale", "imogen.hale@example.org", "Nesta", { nesta: true }),
+    person("sub-dev", "Dev Raman", "dev.raman@example.org", "Nesta", { nesta: true }),
+    person(RESUBSCRIBER, "Kwame Osei", "kwame.osei@example.org", "Nesta", { nesta: true, unsubscribed: true }),
+    person("sub-ana", "Ana Ruiz", "ana.ruiz@example.org", "Nesta", { nesta: true }),
+  ];
+  let index = 0;
+  // 15 more in Spring pilot only, one in both, and 59 more in Nesta only.
+  for (let n = 0; n < 15; n++, index++) {
+    const { name, email } = generated(index);
+    people.push(person(`sub-ex-spring-${n}`, name, email, "Example Council", { spring: true }));
+  }
+  const both = generated(index++);
+  people.push(person("sub-ex-both", both.name, both.email, "Nesta", { spring: true, nesta: true }));
+  for (let n = 0; n < 59; n++, index++) {
+    const { name, email } = generated(index);
+    people.push(person(`sub-ex-nesta-${n + 1}`, name, email, "Nesta", { nesta: true }));
+  }
+  return people;
 }
 
 export function requestFixtures(): Requests {

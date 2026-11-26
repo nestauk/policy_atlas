@@ -1,6 +1,29 @@
 import type { AuthApi } from "../../auth/types";
-import type { ActionResult, Cohort, Organisation, Person, Requests } from "../api";
-import { cohortFixtures, OPS_ME, organisationFixtures, peopleFixtures, requestFixtures } from "./fixtures";
+import type {
+  ActionResult,
+  AnnouncementDetail,
+  AnnouncementKind,
+  Audience,
+  Cohort,
+  Organisation,
+  Person,
+  RecipientPreview,
+  Requests,
+} from "../api";
+import {
+  cohortFixtures,
+  exampleAudience,
+  LATE_UNSUBSCRIBER,
+  NESTA,
+  OPS_ME,
+  organisationFixtures,
+  peopleFixtures,
+  requestFixtures,
+  RESUBSCRIBER,
+  SPRING,
+  TOMAS,
+  type ExamplePerson,
+} from "./fixtures";
 
 /*
  * The ops routes in memory, for `VITE_MOCK=1` and the vitest tests. Like the
@@ -14,6 +37,18 @@ interface OpsMockState {
   organisations: Organisation[];
   cohorts: Cohort[];
   requests: Requests;
+  /** The people the announcement routes choose from (the annex's 82). */
+  example: ExamplePerson[];
+  /** Sent announcements, newest first, as the detail route answers them (counts are worked out on reading). */
+  announcements: Array<Omit<AnnouncementDetail, "counts" | "suppression_unreadable">>;
+  /**
+   * The 409 `recipients_changed` trigger: when true, the next send finds
+   * the list changed (Kwame Osei subscribes again and one other Nesta person
+   * unsubscribes, so a product update to Nesta still reaches the same number
+   * of people) and answers 409 once. Off after a reset; a test sets it, and
+   * `?mock=list-changes` in the address sets it in the browser.
+   */
+  listChangesOnNextSend: boolean;
   /** Answer before the in-memory routes; return undefined to fall through. */
   override?: (method: string, path: string, body: unknown) => Response | undefined;
   /** Every write the pages sent, in order. */
@@ -25,6 +60,9 @@ export const opsMock: OpsMockState = {
   organisations: [],
   cohorts: [],
   requests: requestFixtures(),
+  example: [],
+  announcements: [],
+  listChangesOnNextSend: false,
   writes: [],
 };
 
@@ -34,6 +72,9 @@ export function resetOpsMock() {
   opsMock.organisations = organisationFixtures();
   opsMock.cohorts = cohortFixtures();
   opsMock.requests = requestFixtures();
+  opsMock.example = exampleAudience();
+  opsMock.announcements = announcementFixtures();
+  opsMock.listChangesOnNextSend = false;
   opsMock.override = undefined;
   opsMock.writes = [];
 }
@@ -75,7 +116,270 @@ function bulk(ids: string[], run: (subject: Person) => ActionResult["outcome"] |
   });
 }
 
+/* Announcements: the recipient rules, the record and the routes, in memory. */
+
+type Stored = OpsMockState["announcements"][number];
+type Reason = NonNullable<RecipientPreview["recipients"][number]["reason"]>;
+
+/** Like the server: the first reason that applies, or null when the person gets the email. */
+function leftOutReason(
+  person: { deactivated: boolean; email: string | null; signedIn: boolean; unsubscribed: boolean },
+  kind: AnnouncementKind,
+): Reason | null {
+  if (person.deactivated) return "deactivated";
+  if (person.email == null) return "no_email";
+  if (kind === "product_update" && !person.signedIn) return "not_signed_in";
+  if (kind === "product_update" && person.unsubscribed) return "unsubscribed";
+  return null;
+}
+
+/** A short stand-in for the server's SHA-256 over the list. */
+function fingerprint(lines: string[]): string {
+  let hash = 0;
+  for (const char of lines.join("\n")) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) | 0;
+  return `fp-${(hash >>> 0).toString(16)}`;
+}
+
+/**
+ * The recipients route's answer: the example people the audience names,
+ * and any person from the People list chosen by name.
+ */
+function preview(kind: AnnouncementKind, audience: Audience): RecipientPreview {
+  const cohorts = audience.cohort_ids ?? [];
+  const orgs = audience.org_ids ?? [];
+  const users = audience.user_ids ?? [];
+  const candidates = opsMock.example
+    .filter(
+      (person) =>
+        audience.everyone ||
+        (person.spring && cohorts.includes(SPRING)) ||
+        (person.nesta && orgs.includes(NESTA)) ||
+        users.includes(person.user_id),
+    )
+    .map((person) => ({ ...person, signedIn: true as boolean, email: person.email as string | null }));
+  for (const userId of users) {
+    const own = opsMock.people.find((entry) => entry.user_id === userId);
+    if (own === undefined || candidates.some((person) => person.user_id === userId)) continue;
+    candidates.push({
+      user_id: own.user_id,
+      name: own.display_name,
+      email: own.email ?? null,
+      organisation: own.organisation?.name ?? "",
+      spring: false,
+      nesta: false,
+      deactivated: own.deactivated_at != null,
+      unsubscribed: false,
+      signedIn: own.first_signed_in_at != null,
+    });
+  }
+  const recipients = candidates
+    .map((person) => {
+      const reason = leftOutReason(person, kind);
+      return {
+        user_id: person.user_id,
+        name: person.name,
+        email: person.email,
+        organisation: person.organisation || null,
+        status: reason === null ? ("pending" as const) : ("left_out" as const),
+        reason,
+      };
+    })
+    .sort((a, b) => a.user_id.localeCompare(b.user_id));
+  const leftOut: Record<string, number> = {};
+  for (const person of recipients) if (person.reason !== null) leftOut[person.reason] = (leftOut[person.reason] ?? 0) + 1;
+  return {
+    chosen: recipients.length,
+    will_get: recipients.filter((person) => person.status === "pending").length,
+    left_out: leftOut,
+    recipients,
+    fingerprint: fingerprint(recipients.map((p) => `${p.user_id}|${p.email ?? ""}|${p.status}|${p.reason ?? ""}`)),
+  };
+}
+
+/** The audience in words, as the server writes it: "Everyone", or the names and "N people". */
+function audienceSummary(audience: Audience): string {
+  if (audience.everyone) return "Everyone";
+  const parts = [
+    ...(audience.cohort_ids ?? []).map((id) => opsMock.cohorts.find((entry) => entry.cohort_id === id)?.name ?? id),
+    ...(audience.org_ids ?? []).map((id) => opsMock.organisations.find((entry) => entry.org_id === id)?.name ?? id),
+  ];
+  const people = new Set(audience.user_ids ?? []).size;
+  if (people > 0) parts.push(`${people} ${people === 1 ? "person" : "people"}`);
+  return parts.join(", ");
+}
+
+/** The field rules the server applies to a message, as its 422 sentences. */
+function messageRule(body: Record<string, unknown>): string | null {
+  const text = (key: string) => (typeof body[key] === "string" ? (body[key] as string) : "");
+  if (text("subject").trim() === "") return "the subject is empty";
+  if (text("body").trim() === "") return "the message is empty";
+  if ((text("button_label") === "") !== (text("button_url") === "")) return "a button needs both its words and its link";
+  if (text("button_url") !== "" && !text("button_url").startsWith("https://")) {
+    return "the button link must start with https://";
+  }
+  if ((text("image_url") === "") !== (text("image_alt") === "")) {
+    return "a picture needs both its address and its description";
+  }
+  return null;
+}
+
+/** A sent announcement as stored: every recipient sent, but `failed` people, with the code the mail service gave. */
+function sentAnnouncement(
+  fields: Pick<Stored, "subject" | "kind" | "body" | "button_label" | "button_url" | "image_url" | "image_alt">,
+  audience: Audience,
+  sentBy: string,
+  createdAt: string,
+  failed: Record<string, string> = {},
+): Stored {
+  const built = preview(fields.kind, audience);
+  return {
+    ...fields,
+    announcement_id: newId(),
+    audience_summary: audienceSummary(audience),
+    sent_by_name: sentBy,
+    created_at: createdAt,
+    recipients: built.recipients
+      .map((person) => {
+        const code = failed[person.user_id];
+        if (person.status === "left_out") return { ...person, status: "left_out" as const, overlay: null };
+        return { ...person, status: code === undefined ? ("sent" as const) : ("failed" as const), reason: code ?? null, overlay: null };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
+
+const EXAMPLE_AUDIENCE: Audience = { everyone: false, cohort_ids: [SPRING], org_ids: [NESTA], user_ids: [TOMAS] };
+
+/** The list's three sent announcements (the annex's scene 1), newest first. */
+function announcementFixtures(): Stored[] {
+  const day = 24 * 60 * 60 * 1000;
+  const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
+  const me = opsMock.people.find((person) => person.user_id === OPS_ME)?.display_name ?? "";
+  const none = { button_label: null, button_url: null, image_url: null, image_alt: null };
+  return [
+    sentAnnouncement(
+      {
+        subject: "What's new: theory of change maps",
+        kind: "product_update",
+        body:
+          "You can now build a theory of change in Policy Atlas.\n\n" +
+          "- Start from a short description, or import a picture of a map you already have\n" +
+          "- Check each link in the map against the evidence\n" +
+          "- Download the map to edit it in draw.io\n\n" +
+          "Reply to this email if you have questions.",
+        button_label: "Open Policy Atlas",
+        button_url: "https://policyatlas.example",
+        image_url: "https://policyatlas.example/email-images/theory-of-change.png",
+        image_alt: "A theory of change map with five linked boxes",
+      },
+      EXAMPLE_AUDIENCE,
+      me,
+      iso(2 * day),
+      { "sub-imogen": "MessageRejected", "sub-dev": "Throttling" },
+    ),
+    sentAnnouncement(
+      { subject: "Your pilot starts on Monday", kind: "service_notice", body: "Your pilot starts on Monday.", ...none },
+      { everyone: false, cohort_ids: [SPRING], org_ids: [], user_ids: [] },
+      "Ana Ruiz",
+      iso(13 * day),
+    ),
+    sentAnnouncement(
+      {
+        subject: "Sign-in now needs an authenticator app",
+        kind: "service_notice",
+        body: "From Monday, signing in needs an authenticator app.",
+        ...none,
+      },
+      { everyone: true, cohort_ids: [], org_ids: [], user_ids: [] },
+      me,
+      iso(17 * day),
+    ),
+  ];
+}
+
+function withCounts(stored: Stored): AnnouncementDetail {
+  const counts = { pending: 0, sending: 0, sent: 0, failed: 0, left_out: 0 };
+  for (const person of stored.recipients) counts[person.status] += 1;
+  return { ...stored, counts, suppression_unreadable: false };
+}
+
+function announcementRoute(method: string, path: string, body: Record<string, unknown>): Response | undefined {
+  if (method === "GET" && path === "/api/v1/ops/announcements") {
+    return json({
+      items: opsMock.announcements.map((stored) => {
+        const { announcement_id, subject, kind, audience_summary, sent_by_name, created_at, counts } = withCounts(stored);
+        return { announcement_id, subject, kind, audience_summary, sent_by_name, created_at, counts };
+      }),
+    });
+  }
+  if (method === "POST" && path === "/api/v1/ops/announcements/recipients") {
+    return json(preview(body.kind as AnnouncementKind, body.audience as Audience));
+  }
+  if (method === "POST" && path === "/api/v1/ops/announcements/test") {
+    const rule = messageRule(body);
+    return rule === null ? new Response(null, { status: 204 }) : apiError(422, "validation_error", rule);
+  }
+  if (method === "POST" && path === "/api/v1/ops/announcement-images") {
+    const data = String(body.data_base64 ?? "");
+    if ((data.length * 3) / 4 > 1024 * 1024) return apiError(422, "upload_size", "The picture must be under 1 MB.");
+    const suffix = body.content_type === "image/png" ? "png" : "jpg";
+    return json({ url: `https://policyatlas.example/email-images/${newId()}.${suffix}` }, 201);
+  }
+  if (method === "POST" && path === "/api/v1/ops/announcements") {
+    const kind = body.kind as AnnouncementKind;
+    const audience = body.audience as Audience;
+    const rule = messageRule(body);
+    if (rule !== null) return apiError(422, "validation_error", rule);
+    if (opsMock.listChangesOnNextSend) {
+      opsMock.listChangesOnNextSend = false;
+      for (const person of opsMock.example) {
+        if (person.user_id === RESUBSCRIBER) person.unsubscribed = false;
+        if (person.user_id === LATE_UNSUBSCRIBER) person.unsubscribed = true;
+      }
+    }
+    const now = preview(kind, audience);
+    if (now.fingerprint !== body.fingerprint) {
+      return json({ error: { code: "recipients_changed", message: "the list of recipients changed", details: now } }, 409);
+    }
+    const me = opsMock.people.find((person) => person.user_id === OPS_ME)?.display_name ?? "";
+    const text = (key: string) => (typeof body[key] === "string" && body[key] !== "" ? (body[key] as string) : null);
+    const stored = sentAnnouncement(
+      {
+        subject: String(body.subject),
+        kind,
+        body: String(body.body),
+        button_label: text("button_label"),
+        button_url: text("button_url"),
+        image_url: text("image_url"),
+        image_alt: text("image_alt"),
+      },
+      audience,
+      me,
+      new Date().toISOString(),
+      { "sub-imogen": "MessageRejected", "sub-dev": "Throttling" },
+    );
+    opsMock.announcements = [stored, ...opsMock.announcements];
+    return json({ announcement_id: stored.announcement_id }, 201);
+  }
+  const one = /^\/api\/v1\/ops\/announcements\/([^/]+)(\/retry)?$/.exec(path);
+  if (one !== null) {
+    const stored = opsMock.announcements.find((entry) => entry.announcement_id === one[1]);
+    if (stored === undefined) return apiError(404, "not_found", "resource not found");
+    if (method === "GET" && one[2] === undefined) return json(withCounts(stored));
+    if (method === "POST" && one[2] !== undefined) {
+      // The retry sends the failed rows again; here they go through at once.
+      stored.recipients = stored.recipients.map((person) =>
+        person.status === "failed" ? { ...person, status: "sent" as const, reason: null } : person,
+      );
+      return new Response(null, { status: 202 });
+    }
+  }
+  return undefined;
+}
+
 function route(method: string, path: string, body: Record<string, unknown>, query = new URLSearchParams()): Response {
+  const announcement = announcementRoute(method, path, body);
+  if (announcement !== undefined) return announcement;
   const ids = (body.user_ids as string[] | undefined) ?? [];
   const now = new Date().toISOString();
 
@@ -329,13 +633,16 @@ export const mockOpsAuth: AuthApi = {
 /**
  * Answer `/api/v1/ops/*` from memory in the browser (`VITE_MOCK=1`). Add
  * `?mock=forbidden` to the address to see the page a person without the ops
- * role sees.
+ * role sees, or `?mock=list-changes` to have the first announcement sent
+ * find its list changed (the confirm dialog's 409).
  */
 export function installOpsMock() {
   resetOpsMock();
-  if (new URLSearchParams(window.location.search).get("mock") === "forbidden") {
+  const mock = new URLSearchParams(window.location.search).get("mock");
+  if (mock === "forbidden") {
     opsMock.override = () => apiError(403, "forbidden", "your account does not have the ops role");
   }
+  opsMock.listChangesOnNextSend = mock === "list-changes";
   (globalThis as typeof globalThis & { __policyAtlasMockAuth?: AuthApi }).__policyAtlasMockAuth = mockOpsAuth;
   const realFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {

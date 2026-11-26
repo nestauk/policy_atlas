@@ -95,7 +95,7 @@ describe("People", () => {
       "De-enrol",
       "Deactivate",
       "Reactivate",
-      "Select all 6 shown",
+      "Select all 7 shown",
       "Clear selection",
     ]) {
       expect(within(bar).getByRole("button", { name })).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("People", () => {
   it("ticks everyone shown from the header and clears the selection", async () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select everyone shown" }));
-    expect(selectionBar()).toHaveTextContent("6 selected");
+    expect(selectionBar()).toHaveTextContent("7 selected");
     await user.click(screen.getByRole("button", { name: "Clear selection" }));
     expect(document.querySelector("[data-selection-bar]")).toBeNull();
   });
@@ -276,7 +276,7 @@ describe("People, after the review", () => {
     const user = await openPeople();
     const slot = screen.getByRole("table", { name: "People" }).parentElement?.previousElementSibling as HTMLElement;
     // With nothing ticked the room holds only "Select all".
-    expect(within(slot).getByRole("button", { name: "Select all 6 shown" })).toBeInTheDocument();
+    expect(within(slot).getByRole("button", { name: "Select all 7 shown" })).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     expect(slot).toContainElement(selectionBar());
   });

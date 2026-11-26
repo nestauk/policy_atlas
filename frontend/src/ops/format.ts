@@ -48,6 +48,12 @@ export function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`;
 }
 
+/** A command's refusal as a sentence: first letter up, a full stop at the end. */
+export function sentence(message: string): string {
+  const text = message.charAt(0).toUpperCase() + message.slice(1);
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 /**
  * The organisation an `enrolled_elsewhere` refusal names. The error envelope
  * carries only the command's sentence ("a@b is already in Nesta. Nothing was
