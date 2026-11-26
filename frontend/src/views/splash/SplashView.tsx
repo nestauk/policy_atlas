@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import { useAuth } from "../../auth";
@@ -14,16 +14,33 @@ import { WaitlistForm } from "./WaitlistForm";
 /** Set true once product screenshots replace the dashed placeholders. */
 const SHOW_SPLASH_FEATURE_STEPS = false;
 
+/** The code of an invite link (`/#invite=XXXX-XXXX-XXXX`), or null. */
+function readInviteCode(): string | null {
+  return /^#invite=(.+)$/.exec(window.location.hash)?.[1] ?? null;
+}
+
 /**
  * Logged-out marketing home — fold-mark constellation, Request-access
  * waitlist form, and Sign-in into Cognito (or the dev-token panel when
  * OIDC is unset). Feature steps 01–06 stay behind
  * {@link SHOW_SPLASH_FEATURE_STEPS} until screenshots are ready.
+ *
+ * An invite link carries its code in the fragment, which no server sees. The
+ * page keeps the code in memory, swaps the fragment for `#access` so the
+ * address bar no longer holds it, and scrolls to the form as `#access` does.
  */
 export function SplashView() {
   const auth = useAuth();
   const [showDevSignIn, setShowDevSignIn] = useState(false);
   const oidcConfigured = Boolean(import.meta.env.VITE_OIDC_AUTHORITY);
+  const [inviteCode] = useState(readInviteCode);
+
+  useEffect(() => {
+    if (inviteCode === null) return;
+    // Keep the router's history state; only the fragment changes.
+    window.history.replaceState(window.history.state, "", "#access");
+    document.getElementById("access")?.scrollIntoView();
+  }, [inviteCode]);
 
   const onSignIn = () => {
     if (!oidcConfigured) {
@@ -90,11 +107,12 @@ export function SplashView() {
               Request access
             </h2>
             <p className={`mt-3 ${SPLASH_PROSE} text-grey`}>
-              Tell us a little about yourself. We review requests and get in touch when a place opens
-              up.
+              Tell us a little about yourself. If your organisation already has access, we email
+              your sign-in details in a few minutes. If not, we review your request and get in
+              touch.
             </p>
             <div className="mt-8">
-              <WaitlistForm />
+              <WaitlistForm inviteCode={inviteCode} />
             </div>
           </div>
           {showDevSignIn && !oidcConfigured && (

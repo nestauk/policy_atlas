@@ -29,8 +29,13 @@ function overLimitMessage(length: number, max: number): string | null {
  *
  * Length limits mirror the API contract. Over-limit fields show a live
  * warning and block submit until shortened (do not silently truncate).
+ *
+ * Args:
+ *   inviteCode: the code of the invite link the page was opened with, sent as
+ *     `invite_code`. The form says only that a link is in use, never whether
+ *     the code is valid.
  */
-export function WaitlistForm() {
+export function WaitlistForm({ inviteCode = null }: { inviteCode?: string | null }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [organisation, setOrganisation] = useState("");
@@ -86,11 +91,15 @@ export function WaitlistForm() {
           organisation: orgTrim || null,
           role_or_reason: roleTrim,
           website: website || null,
+          ...(inviteCode !== null && { invite_code: inviteCode }),
         }),
       });
       if (response.status === 201) {
         setStatus("success");
-        setMessage("Thanks — you're on the list. We'll be in touch.");
+        setMessage(
+          "Thanks. Check your email in a few minutes. If nothing arrives, we are reviewing " +
+            "your request and will get in touch. Already have an account? Use Sign in.",
+        );
         return;
       }
       // The firewall refused the token (expired): a 405 alone is the generic error.
@@ -126,6 +135,9 @@ export function WaitlistForm() {
       className="flex w-full flex-col gap-5"
       noValidate
     >
+      {inviteCode !== null && (
+        <p className={cn(SPLASH_PROSE, "text-navy")}>You are using an invite link.</p>
+      )}
       <Field
         id="waitlist-email"
         label="Email"
