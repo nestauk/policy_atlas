@@ -96,16 +96,13 @@ function messageOf(draft: Draft) {
   };
 }
 
-type FieldName = "subject" | "body" | "picture" | "button_label" | "button_url" | "form";
+const FIELDS = ["subject", "body", "button_label", "button_url", "image_url", "image_alt"] as const;
+type FieldName = (typeof FIELDS)[number] | "form";
 
-/** Which field a 422's rule sentence is about. The error carries no field name, so its words decide. */
-function fieldOf(message: string): FieldName {
-  if (message.includes("subject")) return "subject";
-  if (message.includes("button words")) return "button_label";
-  if (message.includes("button")) return "button_url";
-  if (message.includes("picture")) return "picture";
-  if (message.includes("message")) return "body";
-  return "form";
+/** The field a 422 `invalid_message` names in its details; any other answer sits under the test button. */
+function fieldOf(details: unknown): FieldName {
+  const field = (details as { field?: unknown } | null)?.field;
+  return FIELDS.find((name) => name === field) ?? "form";
 }
 
 /** The picture at most 1200 pixels wide, PNG kept as PNG and JPEG as JPEG. */
@@ -207,6 +204,10 @@ export function ComposeAnnouncementView() {
   const [fieldError, setFieldError] = useState<{ field: FieldName; text: string } | null>(null);
   const [testFailed, setTestFailed] = useState<string | null>(null);
   const errorFor = (field: FieldName) => (fieldError?.field === field ? fieldError.text : null);
+  // The picture's description sits under its own field while a picture is in;
+  // its address, or a description with no picture, sits under the picture.
+  const altError = draft.image_url === "" ? null : errorFor("image_alt");
+  const pictureLineError = errorFor("image_url") ?? (draft.image_url === "" ? errorFor("image_alt") : null);
 
   const runTest = () => {
     setFieldError(null);
@@ -218,7 +219,7 @@ export function ComposeAnnouncementView() {
         onSuccess: () => setTested({ key, at: new Date() }),
         onError: (error) => {
           if (error instanceof OpsApiError && error.status === 422 && error.message !== "") {
-            setFieldError({ field: fieldOf(error.message), text: sentence(error.message) });
+            setFieldError({ field: fieldOf(error.details), text: sentence(error.message) });
           } else if (error instanceof OpsApiError && error.status === 409 && error.message !== "") {
             setTestFailed(sentence(error.message));
           } else {
@@ -445,7 +446,7 @@ export function ComposeAnnouncementView() {
                       id="ann-picture-alt"
                       label="Describe the picture"
                       help="People see these words when their mail program hides pictures."
-                      error={errorFor("picture")}
+                      error={altError}
                     >
                       {(describedBy) => (
                         <input
@@ -454,7 +455,7 @@ export function ComposeAnnouncementView() {
                           maxLength={200}
                           autoComplete="off"
                           value={draft.image_alt}
-                          aria-invalid={errorFor("picture") !== null}
+                          aria-invalid={altError !== null}
                           aria-describedby={describedBy}
                           onChange={(event) => update({ image_alt: event.target.value })}
                           className={INPUT_CLASS}
@@ -472,9 +473,7 @@ export function ComposeAnnouncementView() {
                   {pictureError}
                 </p>
               )}
-              {draft.image_url === "" && errorFor("picture") !== null && (
-                <p className="text-body text-red">{errorFor("picture")}</p>
-              )}
+              {pictureLineError !== null && <p className="text-body text-red">{pictureLineError}</p>}
               <p className="text-body text-yellow-deep">Anyone with the link can open this picture. Do not show private data.</p>
             </div>
             <div className="grid gap-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -586,7 +585,12 @@ export function ComposeAnnouncementView() {
       )}
 
       {testFailed !== null && (
-        <FailedDialog message={testFailed} onRetry={runTest} onClose={() => setTestFailed(null)} />
+        <FailedDialog
+          message={testFailed}
+          description="Nothing was sent. Check the message and try again."
+          onRetry={runTest}
+          onClose={() => setTestFailed(null)}
+        />
       )}
 
       {confirming && answer !== null && (

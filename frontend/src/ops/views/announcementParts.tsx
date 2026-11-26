@@ -70,6 +70,26 @@ export function resultWords(row: Pick<AnnouncementResult, "status" | "reason" | 
   }
 }
 
+/**
+ * Where a row stands in the result table: the rows that need attention first
+ * (Failed, Not confirmed, Bounced and Marked as spam), then Left out, then
+ * Waiting and Sending, then Sent.
+ */
+export function resultRank(row: Pick<AnnouncementResult, "status" | "overlay">, live: boolean): number {
+  switch (row.status) {
+    case "failed":
+      return 0;
+    case "sending":
+      return live ? 4 : 1;
+    case "left_out":
+      return 3;
+    case "pending":
+      return 4;
+    default:
+      return row.overlay === null ? 5 : 2;
+  }
+}
+
 /** A status as a mark and a word, never a colour alone. */
 export function Marked({ colour, children }: { colour: ToneColour; children: string }) {
   return (

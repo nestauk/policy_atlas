@@ -12,7 +12,7 @@ import { PageBackLink } from "../../ui/brand/PageHeader";
 import { useAnnouncement, usePeople, useRetryAnnouncement, type AnnouncementDetail } from "../api";
 import { facts } from "../format";
 import { Dialog, EmptyRows, FailedLine, FormHeader, Loading, TABLE_CLASS, TABLE_WRAP_CLASS, TD_CLASS, TH_CLASS } from "../ui";
-import { EmailPreview, KIND_WORDS, Marked, resultWords } from "./announcementParts";
+import { EmailPreview, KIND_WORDS, Marked, resultRank, resultWords } from "./announcementParts";
 import { LIVE_MS } from "./AnnouncementsView";
 
 /** How often the page reads again while rows wait. */
@@ -62,7 +62,9 @@ export function AnnouncementView() {
   const notConfirmed = isLive ? 0 : counts.sending;
   const myName = people.data?.find((person) => person.user_id === auth.user?.sub)?.display_name;
   const sentBy = data.sent_by_name === null ? null : data.sent_by_name === myName ? "Sent by you" : `Sent by ${data.sent_by_name}`;
-  const rows = data.recipients.filter((row) => filter === "all" || row.status === filter);
+  const rows = data.recipients
+    .filter((row) => filter === "all" || row.status === filter)
+    .sort((a, b) => resultRank(a, isLive) - resultRank(b, isLive) || a.name.localeCompare(b.name));
 
   return (
     <>
@@ -132,9 +134,15 @@ export function AnnouncementView() {
               const { colour, words } = resultWords(row, isLive);
               return (
                 <tr key={row.user_id} className="bg-paper">
-                  <td className={cn(TD_CLASS, "truncate pl-4 font-semibold text-navy")}>{row.name}</td>
-                  <td className={cn(TD_CLASS, "truncate")}>{row.email ?? "—"}</td>
-                  <td className={cn(TD_CLASS, "truncate")}>{row.organisation ?? "—"}</td>
+                  <td className={cn(TD_CLASS, "truncate pl-4 font-semibold text-navy")} title={row.name}>
+                    {row.name}
+                  </td>
+                  <td className={cn(TD_CLASS, "truncate")} title={row.email ?? undefined}>
+                    {row.email ?? "—"}
+                  </td>
+                  <td className={cn(TD_CLASS, "truncate")} title={row.organisation ?? undefined}>
+                    {row.organisation ?? "—"}
+                  </td>
                   <td className={TD_CLASS}>
                     <Marked colour={colour}>{words}</Marked>
                   </td>

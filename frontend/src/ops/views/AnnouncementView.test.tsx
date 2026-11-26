@@ -116,6 +116,35 @@ describe("an announcement's result", () => {
     expect(opsMock.writes.at(-1)?.path).toMatch(/\/retry$/);
   });
 
+  it("lists the people who need attention first, by name inside each group", async () => {
+    const answer = detail(
+      [
+        row("Ada", "sent"),
+        row("Ben", "left_out", "deactivated"),
+        row("Cy", "pending"),
+        row("Dee", "sent", null, "bounced"),
+        row("Eve", "failed", "Throttling"),
+        row("Abe", "failed", "MessageRejected"),
+        row("Fox", "sent", null, "marked_as_spam"),
+        row("Gil", "sending"),
+      ],
+      10,
+    );
+    opsMock.override = (method, path) => (method === "GET" && path === PATH ? json(answer) : undefined);
+    renderOps(`/announcements/${ID}`);
+    await screen.findByRole("heading", { name: "Planned downtime", level: 1 });
+    expect(screen.getAllByRole("row").slice(1).map((each) => within(each).getAllByRole("cell")[0].textContent)).toEqual([
+      "Abe",
+      "Eve",
+      "Gil",
+      "Dee",
+      "Fox",
+      "Ben",
+      "Cy",
+      "Ada",
+    ]);
+  });
+
   it("filters the table to one result", async () => {
     const user = userEvent.setup();
     renderOps(`/announcements/${opsMock.announcements[0].announcement_id}`);

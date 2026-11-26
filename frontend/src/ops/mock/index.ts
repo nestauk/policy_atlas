@@ -83,8 +83,8 @@ export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-export function apiError(status: number, code: string, message: string): Response {
-  return json({ error: { code, message } }, status);
+export function apiError(status: number, code: string, message: string, details?: unknown): Response {
+  return json({ error: { code, message, ...(details !== undefined && { details }) } }, status);
 }
 
 let nextId = 1;
@@ -208,17 +208,20 @@ function audienceSummary(audience: Audience): string {
   return parts.join(", ");
 }
 
-/** The field rules the server applies to a message, as its 422 sentences. */
-function messageRule(body: Record<string, unknown>): string | null {
+/** The field rules the server applies to a message, as its 422 `invalid_message` answer naming the field. */
+function messageRule(body: Record<string, unknown>): Response | null {
   const text = (key: string) => (typeof body[key] === "string" ? (body[key] as string) : "");
-  if (text("subject").trim() === "") return "the subject is empty";
-  if (text("body").trim() === "") return "the message is empty";
-  if ((text("button_label") === "") !== (text("button_url") === "")) return "a button needs both its words and its link";
+  const broken = (field: string, message: string) => apiError(422, "invalid_message", message, { field });
+  if (text("subject").trim() === "") return broken("subject", "the subject is empty");
+  if (text("body").trim() === "") return broken("body", "the message is empty");
+  if ((text("button_label") === "") !== (text("button_url") === "")) {
+    return broken("button_label", "a button needs both its words and its link");
+  }
   if (text("button_url") !== "" && !text("button_url").startsWith("https://")) {
-    return "the button link must start with https://";
+    return broken("button_url", "the button link must start with https://");
   }
   if ((text("image_url") === "") !== (text("image_alt") === "")) {
-    return "a picture needs both its address and its description";
+    return broken("image_alt", "a picture needs both its address and its description");
   }
   return null;
 }
@@ -316,8 +319,7 @@ function announcementRoute(method: string, path: string, body: Record<string, un
     return json(preview(body.kind as AnnouncementKind, body.audience as Audience));
   }
   if (method === "POST" && path === "/api/v1/ops/announcements/test") {
-    const rule = messageRule(body);
-    return rule === null ? new Response(null, { status: 204 }) : apiError(422, "validation_error", rule);
+    return messageRule(body) ?? new Response(null, { status: 204 });
   }
   if (method === "POST" && path === "/api/v1/ops/announcement-images") {
     const data = String(body.data_base64 ?? "");
@@ -329,7 +331,7 @@ function announcementRoute(method: string, path: string, body: Record<string, un
     const kind = body.kind as AnnouncementKind;
     const audience = body.audience as Audience;
     const rule = messageRule(body);
-    if (rule !== null) return apiError(422, "validation_error", rule);
+    if (rule !== null) return rule;
     if (opsMock.listChangesOnNextSend) {
       opsMock.listChangesOnNextSend = false;
       for (const person of opsMock.example) {
