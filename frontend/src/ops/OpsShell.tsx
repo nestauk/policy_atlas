@@ -31,10 +31,12 @@ function Frame({ sections, account, children }: { sections?: ReactNode; account?
           <Chip className="border-orange/50 bg-orange/10 text-orange">OPS</Chip>
         </div>
         {sections !== undefined && (
-          // On a phone the sections stay on one line and scroll sideways, as the lifecycle tabs do.
+          // On a phone the sections stay on one line and scroll sideways, as the lifecycle tabs do,
+          // from screen edge to screen edge with the bar's own side padding inside, so no word is cut at the ends.
           <div
             className={cn(
-              "flex items-center gap-5 whitespace-nowrap md:ml-auto max-md:order-last max-md:w-full max-md:overflow-x-auto",
+              "flex items-center gap-5 whitespace-nowrap md:ml-auto",
+              "max-md:order-last max-md:-mx-4 max-md:w-[calc(100%+2rem)] max-md:overflow-x-auto max-md:px-4",
               account !== undefined && "md:mr-5",
             )}
           >

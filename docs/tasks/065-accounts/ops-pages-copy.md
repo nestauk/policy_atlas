@@ -343,5 +343,11 @@ for the owner's polish pass.
   ("Still has 3 people and 1 invite link.") is open: the existing format has no singular
   forms for any of its counts.
 - **Public page.** The intro, the success message and the invite line are the annex words.
+- **Added after the review, waiting for the owner.** Add many: the counts line gains
+  " · <n> deactivated" only when a person was deactivated (a file run never turns one back
+  on); the not-added table's reason for them: "Deactivated. To turn this person back on, add
+  them with One person." The browser's question before moving to another page during a file
+  run *(proposal)*: "People are still being added. If you leave now, the rest are not added.
+  Leave this page?"
 - **Invitation email.** After "You set your own password the first time you sign in.": "You
   also set up an authenticator app on your phone."

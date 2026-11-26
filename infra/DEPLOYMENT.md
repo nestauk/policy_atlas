@@ -554,6 +554,11 @@ link gets an account without an operator. Things to know:
 - `max_per_hour` covers link accounts and listed-domain accounts together.
 - To stop one link, use Revoke on the page. To stop all of them, set
   `self_signup.enabled` to false and deploy.
+- A link is never deleted from the page. Delete organisation removes the
+  organisation's links that are revoked and have no uses; any other link makes
+  it refuse.
+- "Many from a file" on Add person never turns a deactivated person back on. It
+  lists them as not added; add such a person with "One person" if you mean it.
 
 **Rollback, one step at a time.**
 

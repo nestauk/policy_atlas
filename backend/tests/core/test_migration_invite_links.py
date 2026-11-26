@@ -44,6 +44,18 @@ def _ops_grants(conn: Connection) -> set[tuple[str, str]]:
     return {(str(table), str(privilege)) for table, privilege in rows}
 
 
+def _assert_partial_waitlist_indexes(conn: Connection) -> None:
+    """Both waitlist lookups are partial indexes over the rows that carry a value."""
+    definitions = {str(name): str(definition) for name, definition in conn.execute(text(
+        "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'waitlist_entry' "
+        "AND indexname IN ('ix_waitlist_entry_invite_code', 'ix_waitlist_entry_invite_link_id')"
+    ))}
+    for column in ("invite_code", "invite_link_id"):
+        definition = definitions[f"ix_waitlist_entry_{column}"]
+        assert f"({column})" in definition
+        assert definition.endswith(f"WHERE ({column} IS NOT NULL)")
+
+
 def test_invite_link_round_trip_restores_the_fresh_upgrade_schema(engine: Engine) -> None:
     """Downgrade removes the tables, columns, indexes and grants; upgrade restores them."""
     cfg = _alembic_cfg()
@@ -51,6 +63,7 @@ def test_invite_link_round_trip_restores_the_fresh_upgrade_schema(engine: Engine
         with engine.connect() as conn:
             before = _catalogue(conn)
             grants_before = _ops_grants(conn)
+            _assert_partial_waitlist_indexes(conn)
         assert grants_before
         command.downgrade(cfg, _PARENT)
         with engine.connect() as conn:
@@ -63,6 +76,7 @@ def test_invite_link_round_trip_restores_the_fresh_upgrade_schema(engine: Engine
         command.upgrade(cfg, "head")
         with engine.connect() as conn:
             assert _catalogue(conn) == before
+            _assert_partial_waitlist_indexes(conn)
             assert _ops_grants(conn) == grants_before
     finally:
         command.upgrade(cfg, "head")

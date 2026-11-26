@@ -1980,7 +1980,11 @@ def test_delete_organisation_refuses_while_anything_points_at_it(conn: Connectio
     sub = fresh_sub()
     ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("member"))
     make_task(conn, owner_user_id=sub, org_id=org.org_id)
-    with pytest.raises(OpsError, match="still has 1 people, 1 tasks"):
+    make_task(conn, owner_user_id=sub, org_id=org.org_id)
+    commands.add_domain(conn, domain=_domain(), org=org)
+    with pytest.raises(
+        OpsError, match=r"still has 1 person, 2 tasks and 1 domain\. Nothing was deleted\.$"
+    ):
         commands.delete_organisation(conn, org_id=org.org_id)
 
 

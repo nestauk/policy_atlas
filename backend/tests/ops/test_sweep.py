@@ -70,6 +70,10 @@ def _clean_sweep_rows(engine: Engine) -> None:
     """
     with engine.begin() as conn:
         conn.execute(delete(waitlist_entry).where(waitlist_entry.c.name == "Sweep Person"))
+        # Other modules leave waiting requests that carry a live link's code;
+        # the sweep would redeem them with no Cognito stub queued.
+        conn.execute(delete(waitlist_entry).where(
+            waitlist_entry.c.invite_code.is_not(None), waitlist_entry.c.account_user_id.is_(None)))
         conn.execute(delete(ops_action).where(ops_action.c.actor_user_id == "sweep"))
         links = select(invite_link.c.invite_link_id).where(invite_link.c.label == _LINK_LABEL)
         conn.execute(delete(invite_link_cohort).where(invite_link_cohort.c.invite_link_id.in_(links)))
@@ -620,6 +624,75 @@ def test_a_redeemable_code_in_a_listed_domain_gives_the_link_organisation(engine
         )
     assert _org_of(engine, sub) == org.org_id
     assert _request(engine, entry_id)["invite_link_id"] == link.invite_link_id
+
+
+def _uses(engine: Engine, link: commands.InviteLink) -> int:
+    """Count the requests a link has redeemed."""
+    with engine.connect() as conn:
+        return commands.invite_link_uses(conn, link.invite_link_id)
+
+
+def test_a_link_redeemed_by_a_member_of_its_organisation_sends_no_invitation(
+    engine: Engine,
+) -> None:
+    """An existing member joins the link's cohorts; the request records the link and one use."""
+    org, group = _org(engine), _cohort(engine)
+    link = _link(engine, org=org, cohorts=(group,))
+    email, sub = f"member@{_LINK_DOMAIN}", fresh_sub("member")
+    with engine.begin() as conn:
+        ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
+    entry_id = _entry(engine, email=email, invite_code=link.code)
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        expect_enabled(stubber, sub=sub)
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport(
+            enrolled=1
+        )
+        stubber.assert_no_pending_responses()  # no AdminCreateUser
+    assert _request(engine, entry_id)["invite_link_id"] == link.invite_link_id
+    assert _cohorts_of(engine, sub) == {group.cohort_id}
+    assert _uses(engine, link) == 1
+
+
+def test_a_link_request_from_a_member_of_another_organisation_becomes_a_check(
+    engine: Engine,
+) -> None:
+    """Enrolled elsewhere is terminal: no use counted and the request records no link."""
+    other = _org(engine)
+    link = _link(engine, org=_org(engine))
+    email, sub = f"elsewhere@{_LINK_DOMAIN}", fresh_sub("link-elsewhere")
+    with engine.begin() as conn:
+        ops_enrol(conn, user_id=sub, org_id=other.org_id, email=email)
+    entry_id = _entry(engine, email=email, invite_code=link.code)
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        expect_enabled(stubber, sub=sub)
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport(
+            elsewhere=1
+        )
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport()
+    assert _request(engine, entry_id)["invite_link_id"] is None
+    assert _uses(engine, link) == 0
+    with engine.connect() as conn:
+        requests = list_requests(conn, _settings())
+    assert next(item for item in requests.items if item.entry_id == entry_id).status == "check"
+
+
+def test_a_link_still_redeems_after_one_of_its_cohorts_is_deleted(engine: Engine) -> None:
+    """The deleted cohort leaves the link; the person joins the cohorts that remain."""
+    org, kept, gone = _org(engine), _cohort(engine), _cohort(engine)
+    link = _link(engine, org=org, cohorts=(kept, gone))
+    with engine.begin() as conn:
+        commands.delete_cohort(conn, cohort_id=gone.cohort_id)
+    email = f"cohort@{_LINK_DOMAIN}"
+    entry_id = _entry(engine, email=email, invite_code=link.code)
+    with cognito() as (client, stubber):
+        sub = _expect_invitation(stubber, email, "cohort")
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport(
+            invited=1
+        )
+    assert _request(engine, entry_id)["invite_link_id"] == link.invite_link_id
+    assert _cohorts_of(engine, sub) == {kept.cohort_id}
 
 
 def test_a_link_with_one_use_left_redeems_one_of_two_requests(engine: Engine) -> None:

@@ -107,7 +107,7 @@ export interface paths {
         put?: never;
         /**
          * Update Invite Link
-         * @description Change a link's label, use limit and end.
+         * @description Change a link's label, use limit or end; a value left out stays as stored.
          */
         post: operations["update_invite_link_api_v1_ops_invite_links__invite_link_id__post"];
         delete?: never;
@@ -760,6 +760,9 @@ export interface components {
          * @description Body of ``POST /api/v1/ops/invite-links``.
          *
          *     Args:
+         *         label: The operator's name for the link.
+         *         max_uses: How many requests the link may redeem.
+         *         expires_at: When it stops working, with its time zone.
          *         org_id: The organisation a redeemed request joins.
          *         allowed_domains: The email domains the link accepts, one each; the
          *             command lower-cases them and refuses none, more than ten or a repeat.
@@ -843,8 +846,9 @@ export interface components {
          * InviteLinkUpdate
          * @description Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.
          *
-         *     The command checks the use limit and the end against the link rules, so a
-         *     refusal reads as the pages word it.
+         *     Send only the values to change; a value left out keeps the stored one, and
+         *     a body with none is refused. The command checks a sent use limit or end
+         *     against the link rules, so a refusal reads as the pages word it.
          *
          *     Args:
          *         label: The operator's name for the link.
@@ -852,15 +856,12 @@ export interface components {
          *         expires_at: When it stops working, with its time zone.
          */
         InviteLinkUpdate: {
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
+            /** Expires At */
+            expires_at?: string | null;
             /** Label */
-            label: string;
+            label?: string | null;
             /** Max Uses */
-            max_uses: number;
+            max_uses?: number | null;
         };
         /**
          * LimitSourceOut
@@ -968,7 +969,9 @@ export interface components {
          *     never unenrolled. The route calls the ensure-account command, so an
          *     address that already has an unenrolled account is enrolled without a
          *     second invitation. The person joins each cohort in ``cohort_ids``. The
-         *     address and name follow :func:`validate_person_fields`.
+         *     address and name follow :func:`validate_person_fields`. With
+         *     ``reactivate`` false (a people-file run) a deactivated person is refused
+         *     with the ``deactivated`` code, not turned back on.
          */
         PersonCreate: {
             /** Cohort Ids */
@@ -982,6 +985,11 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+            /**
+             * Reactivate
+             * @default true
+             */
+            reactivate: boolean;
         };
         /**
          * PersonCreatedOut

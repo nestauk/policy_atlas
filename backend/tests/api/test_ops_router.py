@@ -29,6 +29,8 @@ from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import (
     app_user,
     cohort_member,
+    invite_link,
+    invite_link_cohort,
     ops_action,
     organisation,
     organisation_domain,
@@ -662,7 +664,7 @@ def test_delete_organisation_refuses_a_used_one_and_deletes_an_empty_one(ops: Ha
     _seed_person(ops, org_id=used, label="member")
     refused = ops.client.delete(f"/api/v1/ops/organisations/{used}", headers=ops.actor.headers)
     assert refused.status_code == 409
-    assert "still has 1 people" in refused.text
+    assert "still has 1 person. Nothing was deleted." in refused.text
     empty = _seed_org(ops)
     deleted = ops.client.delete(f"/api/v1/ops/organisations/{empty}", headers=ops.actor.headers)
     assert deleted.status_code == 204
@@ -944,6 +946,33 @@ def test_create_person_lower_cases_the_address_and_maps_a_cognito_refusal(ops: H
     assert lines == [] and _audit(ops) == []
 
 
+@pytest.mark.parametrize(
+    ("cognito_code", "status_code", "error_code"),
+    [("TooManyRequestsException", 503, "unavailable"),
+     ("UsernameExistsException", 409, "ops_refused")],
+)
+def test_create_person_answers_a_passing_cognito_failure_with_a_retryable_503(
+    ops: Harness, cognito_code: str, status_code: int, error_code: str
+) -> None:
+    """A throttle is a 503 the page can retry; a lasting refusal stays a 409. Neither writes."""
+    org_id = _seed_org(ops)
+    email = unique_email("throttled")
+    expect_lookup(ops.stubber, email=email, sub=None)
+    ops.stubber.add_client_error("admin_create_user", service_error_code=cognito_code)
+    response, lines = _post(
+        ops, "/api/v1/ops/people",
+        {"email": email, "display_name": "Throttled", "org_id": str(org_id)},
+    )
+    assert response.status_code == status_code, response.text
+    assert response.json()["error"]["code"] == error_code
+    assert lines == [] and _audit(ops) == []
+    with ops.engine.connect() as conn:
+        members = conn.execute(
+            select(func.count()).select_from(app_user).where(app_user.c.org_id == org_id)
+        ).scalar_one()
+    assert members == 0
+
+
 def test_quota_bodies_must_name_both_fields(ops: Harness) -> None:
     """Leaving a field out is a validation error, never a silent clear (review stack)."""
     org_id = _seed_org(ops)
@@ -1177,6 +1206,28 @@ def test_create_person_joins_the_chosen_cohorts_and_audits_each(ops: Harness) ->
     assert [line["action"] for line in lines] == ["person.create", "cohort.add", "cohort.add"]
 
 
+def test_create_person_without_reactivate_refuses_a_deactivated_person(ops: Harness) -> None:
+    """409 ``deactivated``; no Cognito enable call is queued, so one would fail the test."""
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    person = _seed_person(ops, org_id=org_id, label="gone", deactivated_at=datetime.now(UTC))
+    row = _user(ops, person)
+    assert row is not None
+    expect_lookup(ops.stubber, email=row["email"], sub=person)
+    response, lines = _post(ops, "/api/v1/ops/people", {
+        "email": row["email"], "display_name": "Gone", "org_id": str(org_id),
+        "cohort_ids": [group], "reactivate": False})
+    assert response.status_code == 409, response.text
+    assert response.json()["error"] == {
+        "code": "deactivated",
+        "message": f"{row['email']} is deactivated. Nothing was written. "
+                   "Reactivate them on People first."}
+    after = _user(ops, person)
+    assert after is not None and after["deactivated_at"] is not None
+    assert _members(ops, person) == set()
+    assert lines == [] and _cohort_adds(ops) == []
+    assert [row for row in _audit(ops) if row["action"] == "person.create"] == []
+
+
 def test_an_unknown_cohort_is_not_found_before_any_cognito_call(ops: Harness) -> None:
     """Nothing is queued on the Cognito double, so any call would fail the request."""
     org_id, known = _seed_org(ops), _new_cohort(ops)
@@ -1339,12 +1390,13 @@ _TOO_MANY = "email,name\n" + "".join(f"p{i}@example.org,P{i}\n" for i in range(5
         ("email,name\nnot-an-address,A\n", [(2, "this is not an email address")], []),
         ("email,name\na@example.org,  \n", [(2, "the name is empty")], []),
         ("email,name\na@example.org," + "n" * 201 + "\n", [(2, "longer than 200")], []),
+        ("email,name\na@example.org," + "n" * 150_000 + "\n", [(2, "longer than 200")], []),
         ("email,name\na@example.org,A,extra\n", [(2, "this line has 3 values")], []),
         ("email,name\n\na@example.org,A\n\n", [], [3]),
     ],
     ids=["other-column", "repeated-column", "missing-column", "bad-quoting", "line-break",
          "not-utf8", "repeated-email", "too-many", "too-large", "bad-email", "empty-name",
-         "long-name", "value-count", "blank-line"],
+         "long-name", "over-reader-limit", "value-count", "blank-line"],
 )
 def test_import_check_names_each_fault_with_its_line(
     ops: Harness, text: str, errors: list[tuple[int | None, str]], row_lines: list[int]
@@ -1490,11 +1542,52 @@ def test_a_revoked_invite_link_cannot_be_changed(ops: Harness) -> None:
         assert response.json()["error"]["message"] == "A revoked link cannot be changed."
 
 
-def test_delete_organisation_refuses_one_with_an_invite_link(ops: Harness) -> None:
-    org_id = uuid.UUID(_make_link(ops)["organisation"]["org_id"])
-    refused = ops.client.delete(f"/api/v1/ops/organisations/{org_id}", headers=ops.actor.headers)
+def test_delete_organisation_refuses_a_live_or_used_invite_link(ops: Harness) -> None:
+    active = _make_link(ops)
+    used = _make_link(ops)
+    _seed_request(ops, invite_link_id=uuid.UUID(used["invite_link_id"]))
+    _post(ops, f"/api/v1/ops/invite-links/{used['invite_link_id']}/revoke", {})
+    for link in (active, used):
+        org_id = link["organisation"]["org_id"]
+        refused = ops.client.delete(f"/api/v1/ops/organisations/{org_id}",
+                                    headers=ops.actor.headers)
+        assert refused.status_code == 409
+        assert "still has 1 invite link. Nothing was deleted." in refused.text
+
+
+def test_delete_organisation_removes_its_revoked_unused_invite_links(ops: Harness) -> None:
+    link = _make_link(ops, cohort_ids=[_new_cohort(ops)])
+    link_id = uuid.UUID(link["invite_link_id"])
+    _post(ops, f"/api/v1/ops/invite-links/{link_id}/revoke", {})
+    org_id = link["organisation"]["org_id"]
+    deleted = ops.client.delete(f"/api/v1/ops/organisations/{org_id}", headers=ops.actor.headers)
+    assert deleted.status_code == 204, deleted.text
+    with ops.engine.connect() as conn:
+        assert conn.execute(select(invite_link).where(
+            invite_link.c.invite_link_id == link_id)).all() == []
+        assert conn.execute(select(invite_link_cohort).where(
+            invite_link_cohort.c.invite_link_id == link_id)).all() == []
+
+
+def test_a_label_only_edit_keeps_an_expired_links_stored_values(ops: Harness) -> None:
+    link = _make_link(ops, max_uses=7)
+    link_id = uuid.UUID(link["invite_link_id"])
+    ended = datetime.now(UTC) - timedelta(days=1)
+    with seeded(ops.engine) as conn:
+        conn.execute(update(invite_link).where(invite_link.c.invite_link_id == link_id)
+                     .values(expires_at=ended))
+    response, _ = _post(ops, f"/api/v1/ops/invite-links/{link_id}", {"label": "Renamed"})
+    assert response.status_code == 200, response.text
+    with ops.engine.connect() as conn:
+        stored = conn.execute(select(invite_link).where(
+            invite_link.c.invite_link_id == link_id)).mappings().one()
+    assert (stored["label"], stored["max_uses"], stored["expires_at"]) == ("Renamed", 7, ended)
+    refused, _ = _post(ops, f"/api/v1/ops/invite-links/{link_id}",
+                       {"expires_at": _in_days(-1)})
     assert refused.status_code == 409
-    assert "still has 1 invite links" in refused.text
+    assert refused.json()["error"]["message"] == "Choose a date in the next 90 days."
+    empty, _ = _post(ops, f"/api/v1/ops/invite-links/{link_id}", {})
+    assert empty.status_code == 422
 
 
 def test_requests_list_says_why_a_request_with_a_code_has_no_account(ops: Harness) -> None:

@@ -176,7 +176,7 @@ Splash-page **Request access** intake. Public — no bearer token.
   organisation (task 065, `GET /api/v1/ops/requests`, `POST
   /api/v1/ops/requests/{entry_id}/approve`); the public API still has no list
   or export. Enrolment into Cognito is the ops CLI, the ops pages, or the
-  self-signup sweep below for listed domains only. Behind the firewall (task
+  self-signup sweep below, for listed domains and invite links only. Behind the firewall (task
   064b) the form sends a CAPTCHA token in the `x-aws-waf-token` request header,
   which CORS allows; the firewall checks it and the API never reads it.
 - `invite_code` is the code of an **invite link** (ADR 0046, the invite-link
@@ -199,8 +199,10 @@ whose address domain is in `organisation_domain` into accounts within about a
 minute, and stamps `account_user_id` and `account_created_at` on the row. The
 public route and its response are unchanged, and the honeypot stays. The
 sweep skips a row an operator has rejected (`rejected_at` set). The abuse
-ceiling: one invitation per address, `max_per_hour` invitations (sent or failed attempts) per hour, listed
-domains only, and a one-hour resend cooldown. Production turns the flag on only
+ceiling: one invitation per address, `max_per_hour` invitations (sent or failed attempts) per hour, only to
+addresses in a listed domain or in one of the domains of a valid invite link (at most
+`max_uses` accounts for each link), and a one-hour resend cooldown. A request whose last
+sweep attempt failed waits 15 minutes before the next try. Production turns the flag on only
 after the WAF (web application firewall) rate rule from task 064b is live.
 
 ### Tasks

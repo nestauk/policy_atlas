@@ -266,7 +266,12 @@ self-signup on for staging. Production keeps the flag false.
   address ever, at most `max_uses` for each link, at most `max_per_hour` each hour. A link
   holder can enter addresses of those domains that are not theirs, and can put the link's
   code on another person's waiting request; the result is an invitation to the mailbox
-  owner and nothing else.
+  owner and nothing else. A known limit (review, 2026-11-26, the owner accepted it): the
+  public route cannot tell a real code from a made-up one, so anyone who knows a person's
+  address can replace the valid code on that person's waiting request with a made-up one.
+  A request in a listed domain still gets its account. A request in an unlisted domain
+  then waits; the Waitlist page shows "code not recognised" and an operator approves it
+  by hand.
 - **One sweep tick at a time.** A tick holds one PostgreSQL advisory lock for its whole
   run; a second tick that finds it taken does nothing. Two ops tasks that overlap during a
   deploy cannot pass `max_per_hour` or `max_uses`. Operator actions do not take this lock.
@@ -279,13 +284,17 @@ self-signup on for staging. Production keeps the flag false.
   writes nothing, then the one-person route for each person; there is no bulk-create route.
 - **`pa_ops`** gains read and insert on `invite_link` and `invite_link_cohort`, update of
   `label`, `max_uses`, `expires_at` and `revoked_at` on `invite_link`, and update of
-  `waitlist_entry.invite_link_id`. It gets no delete right: a link is revoked, never
-  deleted.
+  `waitlist_entry.invite_link_id`, and delete on `invite_link`. No route deletes a link.
+  The delete right has one use (review, 2026-11-26, the owner's ruling): Delete
+  organisation removes the organisation's links that are revoked and have no uses, so a
+  link that made no account does not keep an organisation for good. A link that is not
+  revoked, or has a use, still blocks the delete.
 - **The ops service gets `PUBLIC_APP_ORIGIN`**, set from the environment's `domain_name`,
   to build the link's address. It is not a secret.
 - **Accepted limit.** Cognito is called before the database commit, as in the decisions
-  above. If the write fails after Cognito made the account, the next tick completes the
-  request with no second invitation. If the link became full, expired or revoked in
+  above. If the write fails after Cognito made the account, the sweep tries the
+  request again after the 15-minute wait for a failed request and completes it with no
+  second invitation. If the link became full, expired or revoked in
   between, the request stays on the Waitlist page with its reason and an operator approves
   it by hand.
 - **Rollback** is `self_signup.enabled` false and a deploy. The schema downgrade removes

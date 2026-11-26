@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { formatDate } from "../../lib/dates";
 import { Figures } from "../../lib/figures";
@@ -12,6 +12,7 @@ import { sentence } from "../format";
 import {
   ACTIONS_TD_CLASS,
   ACTIONS_TH_CLASS,
+  CHOOSE_ORGANISATION,
   CohortsField,
   DANGER_CLASS,
   Dialog,
@@ -50,6 +51,18 @@ function endOfDay(day: string): string {
   return `${day}T23:59:59${offset < 0 ? "-" : "+"}${pad(offset / 60)}:${pad(offset % 60)}`;
 }
 
+/** The page's primary and each row's menu button: where focus goes back to when a dialog closes. */
+const CREATE_LINK_ID = "create-link";
+const linkMenuId = (linkId: string) => `link-menu-${linkId}`;
+const createButton = () => document.getElementById(CREATE_LINK_ID);
+const COPY_LINK_ID = "copy-new-link";
+
+/** The id of a dialog's refusal line, for the field it is about. */
+const REFUSAL_ID = "link-refusal";
+
+/** Whether a refusal is about the email domains: each of those words names them. */
+const isDomainRefusal = (message: string | null) => message !== null && /domain/i.test(message);
+
 /** "14 Feb 2027", always with its year. */
 const expires = (iso: string) => formatDate(iso, "short", { now: new Date(0) });
 
@@ -85,7 +98,11 @@ export function InviteLinksView() {
     <>
       <PageHeader
         title="Invite links"
-        actions={<PagePrimary onClick={() => setCreating(true)}>Create link</PagePrimary>}
+        actions={
+          <PagePrimary id={CREATE_LINK_ID} onClick={() => setCreating(true)}>
+            Create link
+          </PagePrimary>
+        }
         filters={
           <p className="max-w-[44em] text-body text-grey">
             An invite link lets people from the email domains you choose request access and get an account without
@@ -151,6 +168,7 @@ export function InviteLinksView() {
                     </td>
                     <td className={cn(TD_CLASS, ACTIONS_TD_CLASS, "py-2 pr-2")}>
                       <RowMenu
+                        id={linkMenuId(link.invite_link_id)}
                         label={`Actions for ${link.label}`}
                         items={[
                           { label: "Copy link", onSelect: () => void copy(link) },
@@ -266,9 +284,10 @@ function LimitFields({
   );
 }
 
-function ErrorLine({ message, className }: { message: string | null; className?: string }) {
+/** A refused or failed save: full width in the dialog's footer, over its buttons, so it is never scrolled out of sight. */
+function ErrorLine({ message }: { message: string | null }) {
   return message === null ? null : (
-    <p role="alert" className={cn(className, "text-body text-red")}>
+    <p id={REFUSAL_ID} role="alert" className="w-full text-body text-red">
       {message}
     </p>
   );
@@ -280,6 +299,7 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
   const copy = useCopyLink();
   const [label, setLabel] = useState("");
   const [orgId, setOrgId] = useState("");
+  const [orgMissing, setOrgMissing] = useState(false);
   const [cohortIds, setCohortIds] = useState<string[]>([]);
   const [domains, setDomains] = useState("");
   const [maxUses, setMaxUses] = useState("");
@@ -289,33 +309,67 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
   const create = useOpsAction((client, body: Parameters<typeof createBody>[0]) =>
     unwrap(client.POST("/api/v1/ops/invite-links", { body: createBody(body) })),
   );
+  const domainRefused = isDomainRefusal(error);
+  // Once made, focus starts on Copy link. An effect, not `autoFocus`: the
+  // dialog takes focus back to itself when the submit button it held goes.
+  useEffect(() => {
+    if (made !== null) document.getElementById(COPY_LINK_ID)?.focus();
+  }, [made]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (orgId === "") {
+      setOrgMissing(true);
+      document.getElementById("link-org")?.focus();
+      return;
+    }
     setError(null);
     create.mutate(
       { label, orgId, cohortIds, domains, maxUses, day },
-      { onSuccess: setMade, onError: (failed) => setError(failure(failed)) },
+      {
+        onSuccess: setMade,
+        onError: (failed) => {
+          const message = failure(failed);
+          setError(message);
+          if (isDomainRefusal(message)) document.getElementById("link-domains")?.focus();
+        },
+      },
     );
   };
 
-  if (made !== null) {
-    return (
-      <Dialog
-        open
-        onOpenChange={(open) => !open && onClose()}
-        title="Invite link created"
-        footer={
+  // One dialog for both steps, so focus is not lost between them.
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={made === null ? "Create invite link" : "Invite link created"}
+      returnFocus={createButton}
+      footer={
+        made === null ? (
+          <>
+            <ErrorLine message={error} />
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="link-form" disabled={create.isPending}>
+              Create link
+            </Button>
+          </>
+        ) : (
           <>
             <Button variant="ghost" onClick={onClose}>
               Done
             </Button>
-            <Button onClick={() => void copy(made)}>Copy link</Button>
+            <Button id={COPY_LINK_ID} onClick={() => void copy(made)}>
+              Copy link
+            </Button>
           </>
-        }
-      >
+        )
+      }
+    >
+      {made !== null ? (
         <div className="flex flex-col gap-4">
-          <p className="break-all border border-line bg-ground px-3 py-2.5 text-body font-semibold text-navy">{made.url}</p>
+          <LinkAddress url={made.url} />
           <Fixed
             link={made}
             extra={[
@@ -329,68 +383,63 @@ function CreateDialog({ onClose }: { onClose: () => void }) {
           </p>
           <p className="text-body text-grey">You can copy the link again later from the list.</p>
         </div>
-      </Dialog>
-    );
-  }
-
-  return (
-    <Dialog
-      open
-      onOpenChange={(open) => !open && onClose()}
-      title="Create invite link"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" form="link-form" disabled={orgId === "" || create.isPending}>
-            Create link
-          </Button>
-        </>
-      }
-    >
-      <form id="link-form" onSubmit={submit} className="flex flex-col gap-5">
-        <LimitFields
-          {...{ label, setLabel, maxUses, setMaxUses, day, setDay }}
-          between={
-            <>
-              <Field id="link-org" label="Organisation">
-                {(describedBy) => (
-                  <OrganisationSelect
-                    id="link-org"
-                    label="Organisation"
-                    organisations={organisations.data ?? []}
-                    value={orgId}
-                    onChange={setOrgId}
-                    describedBy={describedBy}
-                  />
-                )}
-              </Field>
-              <CohortsField id="link-cohorts" values={cohortIds} onChange={setCohortIds} />
-              <Field
-                id="link-domains"
-                label="Email domains"
-                help="Only addresses at these domains can use the link. One domain on each line, for example dhsc.gov.uk. At most 10."
-              >
-                {(describedBy) => (
-                  <textarea
-                    id="link-domains"
-                    rows={3}
-                    required
-                    spellCheck={false}
-                    aria-describedby={describedBy}
-                    value={domains}
-                    onChange={(event) => setDomains(event.target.value)}
-                    className={cn(INPUT_CLASS, "h-auto py-2")}
-                  />
-                )}
-              </Field>
-            </>
-          }
-        />
-        <ErrorLine message={error} />
-      </form>
+      ) : (
+        <form id="link-form" onSubmit={submit} className="flex flex-col gap-5">
+          <LimitFields
+            {...{ label, setLabel, maxUses, setMaxUses, day, setDay }}
+            between={
+              <>
+                <Field id="link-org" label="Organisation" error={orgMissing && orgId === "" ? CHOOSE_ORGANISATION : null}>
+                  {(describedBy) => (
+                    <OrganisationSelect
+                      id="link-org"
+                      label="Organisation"
+                      organisations={organisations.data ?? []}
+                      value={orgId}
+                      onChange={setOrgId}
+                      describedBy={describedBy}
+                      invalid={orgMissing && orgId === ""}
+                    />
+                  )}
+                </Field>
+                <CohortsField id="link-cohorts" values={cohortIds} onChange={setCohortIds} />
+                <Field
+                  id="link-domains"
+                  label="Email domains"
+                  help="Only addresses at these domains can use the link. One domain on each line, for example dhsc.gov.uk. At most 10."
+                >
+                  {(describedBy) => (
+                    <textarea
+                      id="link-domains"
+                      rows={3}
+                      required
+                      spellCheck={false}
+                      aria-invalid={domainRefused || undefined}
+                      aria-describedby={domainRefused ? `${describedBy} ${REFUSAL_ID}` : describedBy}
+                      value={domains}
+                      onChange={(event) => setDomains(event.target.value)}
+                      className={cn(INPUT_CLASS, "h-auto py-2")}
+                    />
+                  )}
+                </Field>
+              </>
+            }
+          />
+        </form>
+      )}
     </Dialog>
+  );
+}
+
+/** A link's address, which may break before its code but never inside it. */
+function LinkAddress({ url }: { url: string }) {
+  const at = url.indexOf("#invite=") + "#invite=".length;
+  return (
+    <p className="border border-line bg-ground px-3 py-2.5 text-body font-semibold text-navy">
+      <span className="break-all">{url.slice(0, at)}</span>
+      <wbr />
+      <span className="whitespace-nowrap">{url.slice(at)}</span>
+    </p>
   );
 }
 
@@ -412,9 +461,10 @@ function EditDialog({ link, onClose }: { link: InviteLink; onClose: () => void }
   const toast = useRecordedToast();
   const [label, setLabel] = useState(link.label);
   const [maxUses, setMaxUses] = useState(String(link.max_uses));
-  const [day, setDay] = useState(localDay(new Date(link.expires_at)));
+  const shownDay = localDay(new Date(link.expires_at));
+  const [day, setDay] = useState(shownDay);
   const [error, setError] = useState<string | null>(null);
-  const save = useOpsAction((client, body: { label: string; max_uses: number; expires_at: string }) =>
+  const save = useOpsAction((client, body: { label?: string; max_uses?: number; expires_at?: string }) =>
     unwrap(
       client.POST("/api/v1/ops/invite-links/{invite_link_id}", {
         params: { path: { invite_link_id: link.invite_link_id } },
@@ -425,9 +475,20 @@ function EditDialog({ link, onClose }: { link: InviteLink; onClose: () => void }
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    // Only what the operator changed: a value left out stays as stored, so a
+    // colleague in another time zone does not move the end by saving a label.
+    const body = {
+      ...(label.trim() !== link.label && { label: label.trim() }),
+      ...(Number(maxUses) !== link.max_uses && { max_uses: Number(maxUses) }),
+      ...(day !== shownDay && { expires_at: endOfDay(day) }),
+    };
+    if (Object.keys(body).length === 0) {
+      onClose();
+      return;
+    }
     setError(null);
     save.mutate(
-      { label: label.trim(), max_uses: Number(maxUses), expires_at: endOfDay(day) },
+      body,
       {
         onSuccess: (saved) => {
           toast(`Saved ${saved.label}`);
@@ -443,8 +504,11 @@ function EditDialog({ link, onClose }: { link: InviteLink; onClose: () => void }
       open
       onOpenChange={(open) => !open && onClose()}
       title={`Edit ${link.label}`}
+      clampTitle
+      returnFocus={() => document.getElementById(linkMenuId(link.invite_link_id))}
       footer={
         <>
+          <ErrorLine message={error} />
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
@@ -460,7 +524,6 @@ function EditDialog({ link, onClose }: { link: InviteLink; onClose: () => void }
           <Fixed link={link} />
           <p className="text-body text-grey">To change these, revoke this link and create a new one.</p>
         </div>
-        <ErrorLine message={error} />
       </form>
     </Dialog>
   );
@@ -478,6 +541,7 @@ function RevokeDialog({ link, onClose }: { link: InviteLink; onClose: () => void
       open
       onOpenChange={(open) => !open && onClose()}
       title={`Revoke ${link.label}?`}
+      returnFocus={() => document.getElementById(linkMenuId(link.invite_link_id))}
       description={
         "People who use the link after this get no account through it." +
         (link.uses === 1
@@ -488,6 +552,7 @@ function RevokeDialog({ link, onClose }: { link: InviteLink; onClose: () => void
       }
       footer={
         <>
+          <ErrorLine message={error} />
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
@@ -508,8 +573,6 @@ function RevokeDialog({ link, onClose }: { link: InviteLink; onClose: () => void
           </Button>
         </>
       }
-    >
-      <ErrorLine message={error} className="mt-3" />
-    </Dialog>
+    />
   );
 }

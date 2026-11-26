@@ -14,7 +14,13 @@ from sqlalchemy import create_engine, select, text, update
 from sqlalchemy.engine import URL, Connection, Engine
 from sqlalchemy.exc import ProgrammingError
 
-from policy_atlas.core.schema import app_user, ops_action, organisation, waitlist_entry
+from policy_atlas.core.schema import (
+    app_user,
+    invite_link_cohort,
+    ops_action,
+    organisation,
+    waitlist_entry,
+)
 from policy_atlas.ops import commands
 from tests.api.org_support import make_org, make_project, make_task, make_user, seeded
 from tests.ops.support import (
@@ -365,7 +371,7 @@ _EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
     "project_membership": {"SELECT", "DELETE"},
     "cohort": {"SELECT", "INSERT", "DELETE"},
     "cohort_member": {"SELECT", "INSERT", "DELETE"},
-    "invite_link": {"SELECT", "INSERT"},
+    "invite_link": {"SELECT", "INSERT", "DELETE"},
     "invite_link_cohort": {"SELECT", "INSERT"},
 }
 _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
@@ -405,6 +411,36 @@ def test_pa_ops_creates_updates_and_revokes_an_invite_link(
                                     max_uses=5, expires_at=now + timedelta(days=9), now=now)
         revoked = commands.revoke_invite_link(conn, invite_link_id=link.invite_link_id, now=now)
         assert revoked.revoked_at == now
+        # Deleting a cohort removes it from the link, with no DELETE grant on the join table.
+        commands.delete_cohort(conn, cohort_id=target.cohort_id)
+        assert conn.execute(select(invite_link_cohort).where(
+            invite_link_cohort.c.invite_link_id == link.invite_link_id)).all() == []
+
+
+def test_pa_ops_deletes_an_organisation_with_a_revoked_unused_invite_link(
+    pa_ops_engine: Engine, engine: Engine
+) -> None:
+    """The link goes with the organisation, and its cohort rows by the cascade."""
+    from datetime import timedelta
+
+    from policy_atlas.core.schema import invite_link
+
+    org = _org(engine)
+    now = datetime.now(UTC)
+    with seeded(engine) as conn:
+        target = commands.save_cohort(conn, cohort_id=None, name=f"Dead {uuid.uuid4()}",
+                                      description=None, starts_on=None, ends_on=None, links=[])
+        link = commands.create_invite_link(
+            conn, label="Pilot", org=org, cohorts=[target], allowed_domains=["nhs.net"],
+            max_uses=3, expires_at=now + timedelta(days=7), created_by="operator", now=now,
+        )
+        commands.revoke_invite_link(conn, invite_link_id=link.invite_link_id, now=now)
+    with _as_pa_ops(pa_ops_engine) as conn:
+        commands.delete_organisation(conn, org_id=org.org_id)
+        assert conn.execute(select(invite_link).where(
+            invite_link.c.invite_link_id == link.invite_link_id)).all() == []
+        assert conn.execute(select(invite_link_cohort).where(
+            invite_link_cohort.c.invite_link_id == link.invite_link_id)).all() == []
 
 
 def test_pa_ops_sweep_redeems_a_request_through_an_invite_link(

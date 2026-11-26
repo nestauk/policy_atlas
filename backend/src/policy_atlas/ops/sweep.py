@@ -21,7 +21,12 @@ from policy_atlas.core.schema import (
     waitlist_entry,
 )
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import Deactivated, EnrolledElsewhere, OpsError
+from policy_atlas.ops.errors import (
+    TRANSIENT_COGNITO_CODES,
+    Deactivated,
+    EnrolledElsewhere,
+    OpsError,
+)
 
 log = structlog.get_logger()
 
@@ -31,12 +36,6 @@ log = structlog.get_logger()
 #: deterministic refusal (an address Cognito or the command rejects); retrying it
 #: every minute would only fill ``ops_action``.
 TERMINAL_OUTCOMES: tuple[str, ...] = ("enrolled_elsewhere", "refused", "deactivated")
-
-#: Cognito errors worth retrying next tick; any other ``ClientError`` is terminal.
-_TRANSIENT_COGNITO_CODES = frozenset(
-    {"TooManyRequestsException", "ThrottlingException", "InternalErrorException",
-     "ServiceUnavailable", "LimitExceededException"}
-)
 
 #: The most rows one tick looks at, so a backlog never makes a tick run for minutes.
 _CANDIDATES_PER_TICK = 200
@@ -308,5 +307,5 @@ def _is_transient(error: Exception) -> bool:
         return False
     if isinstance(error, ClientError):
         code = error.response.get("Error", {}).get("Code", "")
-        return code in _TRANSIENT_COGNITO_CODES
+        return code in TRANSIENT_COGNITO_CODES
     return True

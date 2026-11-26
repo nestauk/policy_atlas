@@ -1,5 +1,5 @@
-import { useEffect, useState, type ChangeEvent } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useBlocker, useNavigate } from "react-router";
 
 import { Figures } from "../../lib/figures";
 import { formatCount } from "../../lib/format";
@@ -33,6 +33,7 @@ type Outcome =
   | { kind: "invited" | "added" }
   | { kind: "elsewhere"; org: string | null }
   | { kind: "refused"; message: string }
+  | { kind: "deactivated" }
   | { kind: "failed"; status: number };
 
 /** The file check: not run, running, could not run, or its answer. */
@@ -41,6 +42,8 @@ type Check = "idle" | "checking" | "failed" | { rows: ImportRow[]; errors: Impor
 const EXAMPLE_CSV = 'email,name\nana.lopez@dhsc.example,Ana Lopez\nsam.lee@dhsc.example,"Lee, Sam"\n';
 const EXAMPLE_HREF = `data:text/csv;charset=utf-8,${encodeURIComponent(EXAMPLE_CSV)}`;
 const PREVIEW_ROWS = 10;
+/** The question before an in-app move away from a running file. */
+const LEAVE_WHILE_RUNNING = "People are still being added. If you leave now, the rest are not added. Leave this page?";
 
 /** Sort one call's answer or failure into its outcome. Only `failed` is tried again. */
 function outcomeOf(error: unknown): Outcome {
@@ -48,6 +51,7 @@ function outcomeOf(error: unknown): Outcome {
     return { kind: "failed", status: error instanceof OpsApiError ? error.status : 0 };
   }
   if (error.code === "enrolled_elsewhere") return { kind: "elsewhere", org: orgInRefusal(error.message) };
+  if (error.code === "deactivated") return { kind: "deactivated" };
   return { kind: "refused", message: error.message === "" ? "The address was refused." : sentence(error.message) };
 }
 
@@ -59,6 +63,7 @@ function reason(outcome: Outcome): string {
       : `Already in another organisation (${outcome.org}). Not tried again.`;
   }
   if (outcome.kind === "refused") return outcome.message;
+  if (outcome.kind === "deactivated") return "Deactivated. To turn this person back on, add them with One person.";
   if (outcome.kind === "failed" && outcome.status === 0) return "No answer from the server. You can try again.";
   return "The server had an error. You can try again.";
 }
@@ -67,9 +72,13 @@ function reason(outcome: Outcome): string {
  * Many people from a CSV file: the server checks the whole file, then the
  * page creates each person in file order through the one-person route, so
  * each keeps its own audit row and outcome. The file lives in this
- * component's state only.
+ * component's state only. A file run never turns a deactivated person back on.
+ *
+ * Args:
+ *   onRunningChange: Told when a run starts and ends, so the page can lock
+ *     what would leave it.
  */
-export function AddManyForm() {
+export function AddManyForm({ onRunningChange }: { onRunningChange?: (running: boolean) => void }) {
   const navigate = useNavigate();
   const client = useOpsClient();
   const refresh = useRefreshOps();
@@ -84,6 +93,20 @@ export function AddManyForm() {
   const [outcomes, setOutcomes] = useState<Record<number, Outcome>>({});
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const running = progress !== null;
+  // Only the latest file's check may answer; an older one that answers late is dropped.
+  const latestCheck = useRef(0);
+  // Set when the form goes away: a run stops before its next person.
+  const left = useRef(false);
+  const doneLine = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    left.current = false;
+    return () => {
+      left.current = true;
+    };
+  }, []);
+
+  useEffect(() => onRunningChange?.(running), [running, onRunningChange]);
 
   useEffect(() => {
     if (!running) return;
@@ -92,16 +115,26 @@ export function AddManyForm() {
     return () => window.removeEventListener("beforeunload", ask);
   }, [running]);
 
+  const blocker = useBlocker(running);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    if (window.confirm(LEAVE_WHILE_RUNNING)) blocker.proceed();
+    else blocker.reset();
+  }, [blocker]);
+
   const runCheck = async (chosen: File) => {
+    const mine = ++latestCheck.current;
     setCheck("checking");
     setOutcomes({});
     setRunWith(null);
+    let next: Check;
     try {
       const csv = await chosen.text();
-      setCheck(await unwrap(client.POST("/api/v1/ops/people/import-check", { body: { csv } })));
+      next = await unwrap(client.POST("/api/v1/ops/people/import-check", { body: { csv } }));
     } catch {
-      setCheck("failed");
+      next = "failed";
     }
+    if (mine === latestCheck.current) setCheck(next);
   };
 
   const onFile = (event: ChangeEvent<HTMLInputElement>) => {
@@ -115,11 +148,18 @@ export function AddManyForm() {
     setRunWith(settings);
     setProgress({ done: 0, total: people.length });
     for (const [index, row] of people.entries()) {
+      if (left.current) return;
       let outcome: Outcome;
       try {
         const created = await unwrap(
           client.POST("/api/v1/ops/people", {
-            body: { email: row.email, display_name: row.display_name, org_id: settings.orgId, cohort_ids: settings.cohortIds },
+            body: {
+              email: row.email,
+              display_name: row.display_name,
+              org_id: settings.orgId,
+              cohort_ids: settings.cohortIds,
+              reactivate: false,
+            },
           }),
         );
         outcome = { kind: created.invitation_sent ? "invited" : "added" };
@@ -137,11 +177,17 @@ export function AddManyForm() {
   const rows = result?.rows ?? [];
   const ready = result !== null && result.errors.length === 0 && rows.length > 0;
   const finished = !running && runWith !== null;
+  // From the first Create until the person leaves, the file and its settings stay as run.
+  const locked = runWith !== null;
   const outcomeList = rows.flatMap((row) => (outcomes[row.line] === undefined ? [] : [{ row, outcome: outcomes[row.line] }]));
   const count = (kind: Outcome["kind"]) => outcomeList.filter((entry) => entry.outcome.kind === kind).length;
   const notAdded = outcomeList.filter((entry) => entry.outcome.kind !== "invited" && entry.outcome.kind !== "added");
   const failed = notAdded.filter((entry) => entry.outcome.kind === "failed").map((entry) => entry.row);
   const orgName = organisations.data?.find((org) => org.org_id === orgId)?.name;
+
+  useEffect(() => {
+    if (finished) doneLine.current?.focus();
+  }, [finished]);
 
   const create = () => {
     if (orgId === "") {
@@ -171,7 +217,7 @@ export function AddManyForm() {
             id="many-file"
             type="file"
             accept=".csv,text/csv"
-            disabled={running}
+            disabled={locked || check === "checking"}
             aria-describedby={describedBy}
             // Choosing the same, corrected file again must check it again.
             onClick={(event) => {
@@ -182,6 +228,7 @@ export function AddManyForm() {
               "w-full min-w-0 text-body text-ink",
               "file:mr-3 file:h-10 file:cursor-pointer file:border file:border-line-2 file:bg-paper file:px-3.5",
               "file:text-meta file:font-semibold file:text-navy file:transition-colors file:duration-150 hover:file:bg-hover-fill",
+              "disabled:text-grey disabled:file:cursor-default disabled:file:bg-ground disabled:file:text-grey disabled:hover:file:bg-ground",
             )}
           />
         )}
@@ -196,6 +243,7 @@ export function AddManyForm() {
             onChange={setOrgId}
             describedBy={describedBy}
             invalid={orgMissing && orgId === ""}
+            disabled={locked}
           />
         )}
       </Field>
@@ -204,14 +252,9 @@ export function AddManyForm() {
         values={cohortIds}
         onChange={setCohortIds}
         help="Everyone in the file joins these cohorts."
-        disabled={running}
+        disabled={locked}
       />
 
-      {check === "checking" && (
-        <p role="status" className="text-body text-grey">
-          Checking the file…
-        </p>
-      )}
       {check === "failed" && file !== null && (
         <FailedLine message="Could not check the file." onRetry={() => void runCheck(file)} />
       )}
@@ -242,38 +285,43 @@ export function AddManyForm() {
         </div>
       )}
 
-      {progress !== null && (
-        <div className="flex flex-col gap-1">
-          <p role="status" className="text-body font-semibold text-navy">
-            <Figures text={`Adding people: ${formatCount(progress.done)} of ${formatCount(progress.total)}.`} />
-          </p>
-          <p className="text-body text-grey">Keep this page open until it finishes.</p>
-        </div>
-      )}
-
-      {finished && (
-        <div className="flex flex-col gap-3">
-          <p role="status" className="text-body font-semibold text-navy">
+      {/* One live region, always there, holding the current line; empty, it
+          gives back the card's gap so the form keeps its rhythm. */}
+      <div role="status" className="flex flex-col gap-1 empty:-mt-6">
+        {check === "checking" && <p className="text-body text-grey">Checking the file…</p>}
+        {progress !== null && (
+          <>
+            {/* Read once as it appears, not again for every person. */}
+            <p aria-live="off" className="text-body font-semibold text-navy">
+              <Figures text={`Adding people: ${formatCount(progress.done)} of ${formatCount(progress.total)}.`} />
+            </p>
+            <p className="text-body text-grey">Keep this page open until it finishes.</p>
+          </>
+        )}
+        {finished && (
+          <p ref={doneLine} tabIndex={-1} className="text-body font-semibold text-navy focus-visible:outline-none">
             <Figures
               text={facts(
                 `${formatCount(count("invited"))} invited`,
                 `${formatCount(count("added"))} added, no email`,
                 `${formatCount(count("elsewhere"))} already in another organisation`,
                 ...(count("refused") > 0 ? [`${formatCount(count("refused"))} refused`] : []),
+                ...(count("deactivated") > 0 ? [`${formatCount(count("deactivated"))} deactivated`] : []),
                 `${formatCount(count("failed"))} failed`,
               )}
             />
           </p>
-          {notAdded.length > 0 && (
-            <>
-              <h2 className="text-body font-semibold text-navy">People who were not added</h2>
-              <PeopleTable rows={notAdded.map((entry) => ({ row: entry.row, reason: reason(entry.outcome) }))} />
-            </>
-          )}
+        )}
+      </div>
+
+      {finished && notAdded.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-body font-semibold text-navy">People who were not added</h2>
+          <PeopleTable rows={notAdded.map((entry) => ({ row: entry.row, reason: reason(entry.outcome) }))} />
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+      <div className="flex flex-wrap items-center justify-end gap-3 pt-2 max-md:flex-col-reverse max-md:items-stretch">
         {finished ? (
           <>
             {failed.length > 0 && runWith !== null && (

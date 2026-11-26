@@ -3,6 +3,13 @@
 import uuid
 from datetime import datetime
 
+#: Cognito error codes for a passing failure (a throttle or an outage): worth
+#: another try later. Any other Cognito ``ClientError`` will not change on retry.
+TRANSIENT_COGNITO_CODES = frozenset(
+    {"TooManyRequestsException", "ThrottlingException", "InternalErrorException",
+     "ServiceUnavailable", "LimitExceededException"}
+)
+
 
 class OpsError(Exception):
     """A refusal the operator can act on.

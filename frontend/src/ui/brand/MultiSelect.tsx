@@ -28,9 +28,10 @@ import type { SelectOption } from "./Select";
  *   filterLabel: The filter field's name and placeholder.
  *   empty: What the list says when nothing matches the filter (or there is
  *     nothing to choose).
- *   disabled: Inert, in the field's disabled look (Ground, Grey words); the
- *     trigger reads `placeholder`, so the caller words why ("Choose a
- *     project first").
+ *   disabled: Inert, in the field's disabled look (Ground, Grey words). The
+ *     trigger reads `placeholder` while nothing is chosen, so the caller
+ *     words why ("Choose a project first"); chosen ones stay shown, their
+ *     chips without the ×.
  *   className: Width and placement of the trigger.
  */
 export function MultiSelect<V extends string>({
@@ -64,7 +65,7 @@ export function MultiSelect<V extends string>({
     .map((value) => options.find((option) => option.value === value))
     .filter((option): option is SelectOption<V> => option !== undefined);
   const shown =
-    disabled || chosen.length === 0
+    chosen.length === 0
       ? placeholder
       : chosen.length === 1
         ? chosen[0].label
@@ -150,11 +151,16 @@ export function MultiSelect<V extends string>({
           </ul>
         </PopoverContent>
       </Popover>
-      {!disabled && chosen.length > 0 && (
+      {chosen.length > 0 && (
         <ul aria-label={`${label}: chosen`} className="mt-2 flex flex-wrap gap-2">
           {chosen.map((option) => (
             <li key={option.value} className="flex min-w-0 max-w-full">
-              <FilterChip applied staticWords clearLabel={`Remove ${option.label}`} onClear={() => toggle(option.value)}>
+              <FilterChip
+                applied
+                staticWords
+                clearLabel={`Remove ${option.label}`}
+                onClear={disabled ? undefined : () => toggle(option.value)}
+              >
                 {option.label}
               </FilterChip>
             </li>

@@ -28,6 +28,8 @@ request that changes the code, and run `make okf-validate`.
 * [A tenancy predicate lives in its compiled SQL](tenancy-predicates-in-sql.md) - when you write organisation or ownership filters.
 * [FastAPI yield dependencies tear down in reverse order](yield-dependency-order-sets-teardown-order.md) - when a dependency must act after the commit.
 * [Trust forwarded headers from the VPC range only](forwarded-allow-ips-trust-the-vpc.md) - when you change uvicorn proxy settings.
+* [A constant-answer public write cannot check what it stores](constant-answer-write-route-cannot-vouch-for-what-it-overwrites.md) - when a public route may replace a stored value.
+* [A bulk loop over a one-item route inherits its powers](loop-over-a-single-item-route-inherits-its-powers.md) - when a page loops over a route built for one action.
 
 ## Runner, plans and Task Agent (`backend/src/policy_atlas/runtime`)
 
@@ -63,6 +65,8 @@ request that changes the code, and run `make okf-validate`.
 * [Every lossy downgrade refuses on its own data](lossy-downgrades-refuse-on-their-own-data.md) - when you write a lossy downgrade.
 * [An identifier sweep must also rename stored JSON keys](stored-json-keys-are-vocabulary-too.md) - when you rename vocabulary.
 * [A facet rename rewrites stored group-id prefixes](facet-key-rename-rewrites-stored-id-prefixes.md) - when you rename a grouping facet.
+* [A periodic job's advisory lock gets its own autocommit connection](periodic-job-advisory-lock-own-autocommit-connection.md) - when one run of a job must work at a time.
+* [A queue query filters dead rows before its limit](queue-candidate-filters-run-before-the-limit.md) - when a worker takes the oldest N rows.
 
 ## Model calls, prompts and tracing (`core`, `model_routes.toml`)
 
@@ -145,6 +149,7 @@ request that changes the code, and run `make okf-validate`.
 * [xyflow in this codebase](xyflow-in-this-codebase.md) - when you work on the canvas.
 * [Vite 8 wires the React Compiler through a babel plugin](vite8-react-compiler-wiring.md) - when you change the Vite config.
 * [The frontend's pnpm supply-chain settings](frontend-supply-chain-pnpm.md) - when you add a frontend dependency.
+* [An async loop outlives its unmounted component](async-loop-outlives-its-unmounted-component.md) - when a handler starts a loop of requests.
 
 ## Infrastructure and deployment (`infra/`, `scripts/deploy.sh`)
 
@@ -180,6 +185,7 @@ request that changes the code, and run `make okf-validate`.
 * [Some branches are reachable only live](live-only-reachability-coverage-class.md) - when you claim coverage of a live path.
 * [A guard keyed on stored state is weakest on day zero](state-keyed-guards-day-zero.md) - when you test a state-based guard.
 * [Before deleting a dead method, grep scripts and seeds](dead-surface-cuts-sweep-scripts-too.md) - when you delete code.
+* [Several suites on one Postgres run out of connections](several-suites-on-one-postgres-exhaust-connections.md) - when many unrelated tests fail at once.
 
 ## Scripts, evaluations and live checks (`scripts/`, `scripts/evals`)
 

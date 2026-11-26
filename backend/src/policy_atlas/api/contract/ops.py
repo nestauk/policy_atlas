@@ -280,7 +280,9 @@ class PersonCreate(CohortChoice):
     never unenrolled. The route calls the ensure-account command, so an
     address that already has an unenrolled account is enrolled without a
     second invitation. The person joins each cohort in ``cohort_ids``. The
-    address and name follow :func:`validate_person_fields`.
+    address and name follow :func:`validate_person_fields`. With
+    ``reactivate`` false (a people-file run) a deactivated person is refused
+    with the ``deactivated`` code, not turned back on.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -288,6 +290,7 @@ class PersonCreate(CohortChoice):
     email: str
     display_name: str
     org_id: uuid.UUID
+    reactivate: bool = True
 
     @model_validator(mode="after")
     def validate_person(self) -> PersonCreate:
@@ -514,8 +517,9 @@ INVITE_LABEL_MAX = 200
 class InviteLinkUpdate(BaseModel):
     """Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.
 
-    The command checks the use limit and the end against the link rules, so a
-    refusal reads as the pages word it.
+    Send only the values to change; a value left out keeps the stored one, and
+    a body with none is refused. The command checks a sent use limit or end
+    against the link rules, so a refusal reads as the pages word it.
 
     Args:
         label: The operator's name for the link.
@@ -525,15 +529,25 @@ class InviteLinkUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    label: str = Field(min_length=1, max_length=INVITE_LABEL_MAX)
-    max_uses: int
-    expires_at: AwareDatetime
+    label: str | None = Field(default=None, min_length=1, max_length=INVITE_LABEL_MAX)
+    max_uses: int | None = None
+    expires_at: AwareDatetime | None = None
+
+    @model_validator(mode="after")
+    def refuse_empty(self) -> InviteLinkUpdate:
+        """Refuse a body that changes nothing."""
+        if self.label is None and self.max_uses is None and self.expires_at is None:
+            raise ValueError("send at least one of label, max_uses and expires_at")
+        return self
 
 
-class InviteLinkCreate(InviteLinkUpdate, CohortChoice):
+class InviteLinkCreate(CohortChoice):
     """Body of ``POST /api/v1/ops/invite-links``.
 
     Args:
+        label: The operator's name for the link.
+        max_uses: How many requests the link may redeem.
+        expires_at: When it stops working, with its time zone.
         org_id: The organisation a redeemed request joins.
         allowed_domains: The email domains the link accepts, one each; the
             command lower-cases them and refuses none, more than ten or a repeat.
@@ -541,6 +555,9 @@ class InviteLinkCreate(InviteLinkUpdate, CohortChoice):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    label: str = Field(min_length=1, max_length=INVITE_LABEL_MAX)
+    max_uses: int
+    expires_at: AwareDatetime
     org_id: uuid.UUID
     allowed_domains: list[Annotated[str, Field(max_length=253)]] = Field(max_length=100)
 

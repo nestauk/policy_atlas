@@ -70,13 +70,33 @@ describe("Invite links", () => {
     expect(body.expires_at).toMatch(new RegExp(`^${day}T23:59:59[+-]\\d\\d:\\d\\d$`));
     const url = opsMock.inviteLinks.at(-1)?.url ?? "";
     expect(url).toMatch(/#invite=[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-    expect(within(created).getByText(url)).toBeInTheDocument();
+    expect(created).toHaveTextContent(url);
     expect(created).toHaveTextContent(
       "Anyone with this link and an address at one of these domains can get an account. Share it only with the group.",
     );
+    expect(within(created).getByRole("button", { name: "Copy link" })).toHaveFocus();
     await user.click(within(created).getByRole("button", { name: "Copy link" }));
     expect(await screen.findByText("Link copied")).toBeInTheDocument();
     expect(await navigator.clipboard.readText()).toBe(url);
+    await user.click(within(created).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create link" })).toHaveFocus());
+  });
+
+  it("asks for an organisation when none is chosen, at the organisation field", async () => {
+    const user = userEvent.setup();
+    renderOps("/invite-links");
+    await user.click(await screen.findByRole("button", { name: "Create link" }));
+    const dialog = await screen.findByRole("dialog", { name: "Create invite link" });
+    await user.type(within(dialog).getByLabelText("Label"), "Spring pilot");
+    await user.type(within(dialog).getByLabelText("Email domains"), "dhsc.example");
+    await user.type(within(dialog).getByLabelText("Maximum uses"), "120");
+    fireEvent.change(within(dialog).getByLabelText("Expires on"), { target: { value: dayFromToday(30) } });
+    await user.click(within(dialog).getByRole("button", { name: "Create link" }));
+    expect(within(dialog).getByRole("combobox", { name: "Organisation" })).toHaveAccessibleDescription(
+      "Choose an organisation.",
+    );
+    expect(within(dialog).getByRole("combobox", { name: "Organisation" })).toHaveFocus();
+    expect(opsMock.writes).toEqual([]);
   });
 
   it("shows the server's refusal in the create dialog", async () => {
@@ -93,6 +113,10 @@ describe("Invite links", () => {
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       "Line 2: enter a domain such as dhsc.gov.uk, with no @.",
     );
+    const domains = within(dialog).getByLabelText("Email domains");
+    expect(domains).toHaveAttribute("aria-invalid", "true");
+    expect(domains).toHaveAccessibleDescription(expect.stringContaining("Line 2: enter a domain"));
+    expect(domains).toHaveFocus();
   });
 
   it("copies a link from its row without the code in the toast", async () => {
@@ -123,11 +147,40 @@ describe("Invite links", () => {
     await user.type(maxUses, "200");
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Saved DHSC pilot")).toBeInTheDocument();
-    expect(opsMock.writes.at(-1)).toMatchObject({
+    expect(opsMock.writes.at(-1)).toEqual({
+      method: "POST",
       path: `/api/v1/ops/invite-links/${LINK_ACTIVE}`,
-      body: { label: "DHSC pilot", max_uses: 200 },
+      body: { max_uses: 200 },
     });
     await waitFor(() => expect(row("DHSC pilot")).toHaveTextContent("63 of 200"));
+    expect(screen.getByRole("button", { name: "Actions for DHSC pilot" })).toHaveFocus();
+  });
+
+  it("sends only a changed label, so the stored end of the link stays as it is", async () => {
+    const user = userEvent.setup();
+    renderOps("/invite-links");
+    await screen.findByRole("heading", { name: "Invite links" });
+    await openMenu(user, "DHSC pilot", "Edit…");
+    const dialog = await screen.findByRole("dialog", { name: "Edit DHSC pilot" });
+    await user.type(within(dialog).getByLabelText("Label"), " (wave 2)");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved DHSC pilot (wave 2)")).toBeInTheDocument();
+    expect(opsMock.writes.at(-1)?.body).toEqual({ label: "DHSC pilot (wave 2)" });
+  });
+
+  it("sends a new end when the day is changed", async () => {
+    const user = userEvent.setup();
+    renderOps("/invite-links");
+    await screen.findByRole("heading", { name: "Invite links" });
+    await openMenu(user, "DHSC pilot", "Edit…");
+    const dialog = await screen.findByRole("dialog", { name: "Edit DHSC pilot" });
+    const day = dayFromToday(30);
+    fireEvent.change(within(dialog).getByLabelText("Expires on"), { target: { value: day } });
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Saved DHSC pilot")).toBeInTheDocument();
+    const body = opsMock.writes.at(-1)?.body as Record<string, unknown>;
+    expect(Object.keys(body)).toEqual(["expires_at"]);
+    expect(body.expires_at).toMatch(new RegExp(`^${day}T23:59:59[+-]\\d\\d:\\d\\d$`));
   });
 
   it("revokes a link after a confirmation that the accounts it made stay", async () => {

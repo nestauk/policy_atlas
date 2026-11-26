@@ -24,6 +24,8 @@ import { AddManyForm } from "./AddManyForm";
 /** Add a person (ops-pages-copy.md § Add a person): one, or many from a file. */
 export function AddPersonView() {
   const [mode, setMode] = useState<"one" | "many">("one");
+  // A file run must finish here: the switch would drop it.
+  const [running, setRunning] = useState(false);
   return (
     <>
       <FormHeader back={<PageBackLink to="/people">People</PageBackLink>} title="Add a person" />
@@ -36,10 +38,11 @@ export function AddPersonView() {
           ]}
           value={mode}
           onChange={setMode}
+          disabled={running}
         />
       </div>
       <div className="mt-6 grid gap-8 md:grid-cols-[minmax(0,34rem)_minmax(0,22rem)]">
-        {mode === "one" ? <OnePersonForm /> : <AddManyForm />}
+        {mode === "one" ? <OnePersonForm /> : <AddManyForm onRunningChange={setRunning} />}
         <Panel title="What happens" className="self-start">
           <div className="flex flex-col gap-3 text-body text-ink">
             {mode === "one" ? (
@@ -83,7 +86,8 @@ function OnePersonForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const create = useOpsAction(
     (client, body: { email: string; display_name: string; org_id: string; cohort_ids: string[] }) =>
-      unwrap(client.POST("/api/v1/ops/people", { body })),
+      // The one-person form turns a deactivated person back on (the route's default).
+      unwrap(client.POST("/api/v1/ops/people", { body: { ...body, reactivate: true } })),
   );
 
   const submit = (event: FormEvent) => {

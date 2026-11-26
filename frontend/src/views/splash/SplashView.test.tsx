@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -91,7 +91,8 @@ describe("SplashView Request access", () => {
 
   it("with an invite link, says so, sends the code and clears it from the address", async () => {
     const scrollIntoView = vi.spyOn(HTMLElement.prototype, "scrollIntoView");
-    window.history.replaceState(null, "", "/#invite=K7Q2-M9XD-3FHP");
+    // As pasted in a chat: lower case, with the sentence's full stop.
+    window.history.replaceState(null, "", "/#invite=k7q2-m9xd-3fhp.");
     renderSplash();
 
     expect(screen.getByText(INVITE_LINE)).toBeInTheDocument();
@@ -100,6 +101,27 @@ describe("SplashView Request access", () => {
 
     const body = await sendRequest();
 
-    expect(body.invite_code).toBe("K7Q2-M9XD-3FHP");
+    expect(body.invite_code).toBe("K7Q2M9XD3FHP");
+  });
+
+  it("treats an address whose fragment is not a code as having none, and still clears it", async () => {
+    window.history.replaceState(null, "", `/#invite=${"A".repeat(80)}`);
+    renderSplash();
+
+    expect(screen.queryByText(INVITE_LINE)).not.toBeInTheDocument();
+    expect(window.location.hash).toBe("#access");
+
+    const body = await sendRequest();
+
+    expect(body).not.toHaveProperty("invite_code");
+  });
+
+  it("once sent, focuses the success message, whose Sign in starts the sign-in", async () => {
+    renderSplash();
+    await sendRequest();
+    const success = await screen.findByRole("status");
+    expect(success).toHaveFocus();
+    await userEvent.setup().click(within(success).getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText(/paste a dev-issuer token/i)).toBeInTheDocument();
   });
 });

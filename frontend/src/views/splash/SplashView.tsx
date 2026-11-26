@@ -14,9 +14,24 @@ import { WaitlistForm } from "./WaitlistForm";
 /** Set true once product screenshots replace the dashed placeholders. */
 const SHOW_SPLASH_FEATURE_STEPS = false;
 
-/** The code of an invite link (`/#invite=XXXX-XXXX-XXXX`), or null. */
+const INVITE_FRAGMENT = "#invite=";
+
+/**
+ * The code of an invite link (`/#invite=XXXX-XXXX-XXXX`), or null. A link
+ * pasted in a chat can come with trailing punctuation or encoding: the code
+ * is its letters and digits, upper case, and anything but 12 of them is no code.
+ */
 function readInviteCode(): string | null {
-  return /^#invite=(.+)$/.exec(window.location.hash)?.[1] ?? null;
+  const { hash } = window.location;
+  if (!hash.startsWith(INVITE_FRAGMENT)) return null;
+  let text = hash.slice(INVITE_FRAGMENT.length);
+  try {
+    text = decodeURIComponent(text);
+  } catch {
+    // A broken escape: read the characters as they are.
+  }
+  const code = text.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  return code.length === 12 ? code : null;
 }
 
 /**
@@ -36,11 +51,12 @@ export function SplashView() {
   const [inviteCode] = useState(readInviteCode);
 
   useEffect(() => {
-    if (inviteCode === null) return;
+    // Any invite fragment goes, a code or not.
+    if (!window.location.hash.startsWith(INVITE_FRAGMENT)) return;
     // Keep the router's history state; only the fragment changes.
     window.history.replaceState(window.history.state, "", "#access");
     document.getElementById("access")?.scrollIntoView();
-  }, [inviteCode]);
+  }, []);
 
   const onSignIn = () => {
     if (!oidcConfigured) {
@@ -112,7 +128,7 @@ export function SplashView() {
               touch.
             </p>
             <div className="mt-8">
-              <WaitlistForm inviteCode={inviteCode} />
+              <WaitlistForm inviteCode={inviteCode} onSignIn={onSignIn} />
             </div>
           </div>
           {showDevSignIn && !oidcConfigured && (

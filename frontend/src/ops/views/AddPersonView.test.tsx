@@ -52,6 +52,7 @@ describe("Add a person", () => {
       display_name: "Ana Lopez",
       org_id: NESTA,
       cohort_ids: [DHSC_PILOT],
+      reactivate: true,
     });
   });
 

@@ -1,8 +1,9 @@
-import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { apiBaseUrl } from "../../api/client";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
+import { PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
 import { SPLASH_PROSE } from "./splashTypography";
 import { useWafCaptcha } from "./wafCaptcha";
 
@@ -34,8 +35,16 @@ function overLimitMessage(length: number, max: number): string | null {
  *   inviteCode: the code of the invite link the page was opened with, sent as
  *     `invite_code`. The form says only that a link is in use, never whether
  *     the code is valid.
+ *   onSignIn: what "Sign in" in the success message does; without it the
+ *     words are plain text.
  */
-export function WaitlistForm({ inviteCode = null }: { inviteCode?: string | null }) {
+export function WaitlistForm({
+  inviteCode = null,
+  onSignIn,
+}: {
+  inviteCode?: string | null;
+  onSignIn?: () => void;
+}) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [organisation, setOrganisation] = useState("");
@@ -96,10 +105,6 @@ export function WaitlistForm({ inviteCode = null }: { inviteCode?: string | null
       });
       if (response.status === 201) {
         setStatus("success");
-        setMessage(
-          "Thanks. Check your email in a few minutes. If nothing arrives, we are reviewing " +
-            "your request and will get in touch. Already have an account? Use Sign in.",
-        );
         return;
       }
       // The firewall refused the token (expired): a 405 alone is the generic error.
@@ -122,6 +127,11 @@ export function WaitlistForm({ inviteCode = null }: { inviteCode?: string | null
 
   const done = status === "success";
   const disabled = done || status === "submitting";
+  // Focused once sent, so it scrolls into view and a screen reader reads it.
+  const successLine = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (done) successLine.current?.focus();
+  }, [done]);
 
   const emailOverMsg = overLimitMessage(email.length, WAITLIST_LIMITS.email);
   const nameOverMsg = overLimitMessage(name.length, WAITLIST_LIMITS.name);
@@ -256,11 +266,27 @@ export function WaitlistForm({ inviteCode = null }: { inviteCode?: string | null
       )}
 
       {message !== null && (
-        <p
-          role="status"
-          className={cn(SPLASH_PROSE, status === "error" ? "text-red" : "text-navy")}
-        >
+        <p role="status" className={cn(SPLASH_PROSE, "text-red")}>
           {message}
+        </p>
+      )}
+      {done && (
+        <p
+          ref={successLine}
+          tabIndex={-1}
+          role="status"
+          className={cn(SPLASH_PROSE, "text-navy focus-visible:outline-none")}
+        >
+          Thanks. Check your email in a few minutes. If nothing arrives, we are reviewing your
+          request and will get in touch. Already have an account? Use{" "}
+          {onSignIn === undefined ? (
+            "Sign in"
+          ) : (
+            <button type="button" onClick={onSignIn} className={cn(PROSE_LINK_CLASS, "cursor-pointer")}>
+              Sign in
+            </button>
+          )}
+          .
         </p>
       )}
       {!done && (

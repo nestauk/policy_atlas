@@ -17,6 +17,8 @@ because other checkouts ran their suites on the shared one at the same time.
 | Phase 6 full check | pass | 5,091 backend tests (the whole suite), then the non-frontend parts of `make verify`. |
 | Phases 7 and 8 frontend check | pass | 2,041 frontend tests (149 files); type check; lint (0 errors, 1 older warning in `SplashField.tsx`). |
 | `make verify` (exit, on the simplified code) | pass | On commit `c6a39a7f`: 5,091 backend tests, 173 infra tests, 2,041 frontend tests; type check, lint, build, drift check and the guards all green. |
+| `make verify` (review baseline, commit `467435f6`) | pass | 5,091 backend, 173 infra, 2,041 frontend tests. |
+| `make verify` (after the review fixes) | pass | 5,101 backend, 173 infra, 2,051 frontend tests; type check, lint, build, drift check and the guards green. The knowledge records were written during this run; `make okf-validate` was run again after them and is green. |
 
 Command for the exit run (the test database is the only non-default):
 
@@ -131,8 +133,164 @@ dialog's mutation; a shared "lock an unrevoked link" helper.
 
 ## Review findings
 
-Added by the review conversation (step 7). The owner approved one first Codex review run in
-the build session; its raw findings are in § Review handoff, not adjudicated.
+The review stack ran on 2026-11-26 in a fresh conversation, on commit `467435f6`, after a
+green baseline `make verify` (5,091 backend, 173 infra, 2,041 frontend tests). All product
+code was written by Claude agents, so the Codex review is the anchor (family flip). The
+review diff left out the generated files (`frontend/openapi*.json`, `frontend/src/api/gen`);
+`make drift-check` covers them.
+
+| Lane | Reader | Result |
+|---|---|---|
+| Contract verifier | `contract-verifier` (Opus) | No rubric row fails. 7 findings, 2 notes. |
+| Security | a fresh Opus agent with an audit brief. The `agent-skills:security-auditor` subagent was not available in the session. | No critical, high or medium. 2 low, 4 notes. |
+| Adversarial | Codex, read-only (thread `01a217bb-9750-7192-a2df-db1a64c8e1ab`), plus the first Codex run in § Review handoff | 4 findings and 1 test gap; 4 from the first run. |
+| Code review | `/code-review` at `medium`. It ran as one forked job, so the finder angles did not get their own pathspecs. | 10 findings. |
+| Design | `frontend-designer`, read-only, mock app at 1280 and 400 pixels | 11 fixes, 6 word proposals. |
+| Over-engineering | `ponytail-review` (Opus) | 7 items, about 45 lines. |
+| Re-review of the fixes | Codex, read-only, on the uncommitted fixes | 2 findings, both declined. |
+
+No live-trace lane: the task has no live run before part E.
+
+### Convergent findings (two lanes or more)
+
+- **A made-up code replaces a valid one** (security L1, code review 2). The public route
+  cannot tell a real code from a made-up one, so anyone who knows an address can replace the
+  code on that person's waiting request. Contract D11 said a code "cannot stop or delay an
+  account"; that is true for a listed domain only. **Owner ruling 15: the rule stays.** D11,
+  the ADR amendment and `web-api.md` now state the limit. Options are in `docs/deferred.md`.
+- **A file run goes on unseen when the form is left** (first Codex run 1, verifier 1,
+  design 1). Adopted: the switch is disabled during a run, a move inside the app asks first,
+  and a confirmed leave stops the run before the next person.
+- **A second file chosen quickly shows and creates the first file's people** (code review 9,
+  Codex 2). Adopted: only the latest check sets the result; the chooser is off during a check.
+- **A long value is reported as bad quoting** (first Codex run 2, verifier 5, code review 9).
+  Adopted: the reader's field limit is the route's limit, so the name rule answers.
+- **`PUBLIC_APP_ORIGIN` is not checked for host or port** (security N2, code review 10).
+  Declined: the infrastructure code is its only source. In `docs/deferred.md`.
+
+### Adopted, by lane
+
+**Code review (unique to it).**
+- Add many: a Cognito throttle answered 409 and was final. Passing Cognito failures now answer
+  503 on Add person and Approve, from the one list the sweep uses (`TRANSIENT_COGNITO_CODES`).
+- Add many turned deactivated people back on without a sign. **Owner ruling 16: a file run
+  never reactivates.** The route takes `reactivate` (default true); a file run sends false and
+  lists the person with the reason.
+- An organisation with any invite link could never be deleted. **Owner ruling 17: Delete
+  organisation removes its revoked links that have no uses.** This adds one grant outside the
+  first contract: `DELETE` on `invite_link` for `pa_ops`, and `ON DELETE CASCADE` from
+  `invite_link_cohort` to its link. The owner approved the gate in the review; contract D1 and
+  D9, the ADR amendment and the grant test carry it.
+- The edit dialog sent the end date again on every save, so a label-only edit could move the
+  end, or be refused on an expired link. The update route now takes any of the three values
+  and checks only a value the call changes (ruling 18); the page sends only what changed.
+- The public page sent the raw text after `#invite=`. The page now keeps letters and digits
+  only and treats anything that is not 12 characters as no code. The server rule is unchanged.
+
+**Contract verifier (unique to it).**
+- Three behaviours had no test: D5 rule 6 (a person who already has the account), D5 rule 7
+  through a link (another organisation), and the cohort cascade of D1. Added; no defect found.
+- The ADR amendment and D5 rule 4 said "the next tick completes" a write that failed after
+  Cognito. With rule 13 it is after the 15-minute wait. Both texts corrected.
+- `web-api.md` still said "listed domains only" in two places. Corrected.
+- A wrong comment in `core/schema.py`. Corrected.
+- No test asserted the running count of Add many. Added.
+
+**Codex (unique to it).**
+- The migration round-trip test compared the schema with itself, so a lost index would pass.
+  The test now asserts both partial indexes and their predicates by name.
+
+**Design lane.** All eleven adopted: the leave guard (above); the Waitlist table fits 1280
+pixels again with Status in view; a refusal in the link dialogs shows in the footer and marks
+the domain field; focus returns to the row menu or to "Create link" when a dialog closes; a
+disabled Cohorts field keeps its chips, and the file, organisation and cohorts lock from the
+first Create; the public success message takes focus and "Sign in" inside it is a link (the
+words did not change); one status region for the file run; "Create link" stays enabled and
+names the missing organisation; the Add many footer at 400 pixels; four small layout points.
+
+**Annex.** The Delete organisation refusal now has singular forms and a final "and"
+("DHSC still has 3 people and 1 invite link. Nothing was deleted."). Three older tests
+changed their expected sentence; the refusal itself is still asserted.
+
+**Over-engineering.** Adopted items 2 to 6 (a dead method, two reads made one, a simpler
+loop, a fixed code in the mock, a repeated model config).
+
+### Declined, with the reason
+
+- *Codex: the server accepts 91 days ahead* (deviation 2). The page sends the end of the
+  chosen day in the operator's zone, so day 90 needs up to one more day on the server. Only
+  operators can call the route.
+- *Codex: the file check accepts a header with spaces around a name.* It is the same column;
+  a strict reading helps no one.
+- *Security L2: a link may name a domain that is listed to another organisation.* This is the
+  precedence the contract asks for (D5 rule 3) and live check E3.7 tests it.
+- *Security N3: some non-ASCII letters upper-case into code characters.* They reach the same
+  code only.
+- *Verifier: the Requests line shows a dead link's reason on a listed-domain request; the
+  public route can wait for a redemption in progress.* Both are inside D8 and I1. The first
+  is in `docs/deferred.md`.
+- *Over-engineering 1 and 7.* The mock's file check stays, because the owner's polish pass
+  uses the mock app with a faulty file. `update_invite_link` keeps its return value.
+- *Re-review 1: a deadlock between Delete organisation and the sweep.* It needs the sweep to
+  enrol a person through a revoked link. The sweep checks the link again under its row lock
+  and stops, so it never asks for the organisation in that state.
+- *Re-review 2: `null` in a link edit counts as left out.* Nothing is cleared or changed.
+- *First Codex run 3 and 4:* the placeholder row was filled in the build; `docs/deferred.md`
+  is written now.
+
+### Deferred to `docs/deferred.md`
+
+The sweep's candidate query has no index path for a very large waitlist (Codex 3); the pages
+do not say when the sweep is off (code review 6); a request refused for good never redeems a
+new code (code review 7); a database error could carry the code (security N1); a link with a
+use keeps its organisation for good; the candidates listed in § Review handoff.
+
+### The thirteen deviations
+
+The verifier judged all thirteen inside the contract; the lead confirms each as built.
+Deviation 2 was contested by Codex and stays (above). Deviation 9 (no length bounds in the
+generated schema of Add person) is a small change of the ops interface; the 422 stays.
+Deviation 12 is closed: `docs/deferred.md` is written. Deviation 3 (a second revoke is
+refused) and deviation 6 (one `invite` row plus one `cohort.add` row for each membership)
+are adopted as the reading of the contract.
+
+### Handoff points
+
+- *Any text after `#invite=` counts as a code:* changed (above).
+- *Leaving during a file run:* changed (above).
+- *Public page at 400 pixels, and "Use Sign in":* changed (design lane).
+- *Codex had not read the several-domains change:* both Codex runs read it and found no defect.
+- *Words written during the build and the review:* they wait for the owner, in
+  `docs/tasks/065-accounts/ops-pages-copy.md`. Three were added in the review: " · <n>
+  deactivated" in the finished line, the reason for a deactivated person, and the question
+  before leaving a run.
+
+### Fake-done checks
+
+No test was deleted or skipped. Changed expectations: three tests of the Delete organisation
+sentence (the new words); `test_delete_organisation_refuses_one_with_an_invite_link` became
+two tests for the new rule (a live or used link refuses; a revoked unused link is deleted);
+one `MultiSelect` test now uses an empty disabled field and a new test covers a disabled
+field with chosen items, because the old expectation (chips hidden when disabled) was the
+fault; the sweep test fixture also removes waiting requests with a code that other test
+files leave. No swallowed error and no stub was added.
+
+### Not covered by any lane
+
+The lock time of the migration on a live staging database, and the downgrade with data
+(Codex gave no report; the build rehearsed the downgrade on a scratch database). A real
+screen reader. The firewall puzzle on the public form. These go to the live checks of part E.
+
+### Open for the owner
+
+- The polish pass on the pages (second round) and the words above.
+- Design proposals that change words or direction, not built: a styled file chooser
+  ("Choose a file"); "Already have an account? Sign in." as an alternative; zero counts in
+  the finished line; the colour of the REVOKED chip (red today; red means failed elsewhere);
+  "Approve 1 requests" (older code).
+
+Screenshots of the changed surfaces after the fixes are in the session scratch folder
+(`design-fixes/`, mock data only); they are not committed.
 
 ## Rubric status
 
@@ -169,9 +327,9 @@ Build-side rows. Rows 2 (live checks), 8, 41 and 42 belong to the review and par
 | 37 | `test_ops_mode_requires_a_public_app_origin_and_the_api_ignores_it` (10 cases); `infra/tests/unit/test_service_wiring.py` |
 | 38 | `InviteLinksView.test.tsx`, six tests |
 | 39 | `test_requests_list_says_why_a_request_with_a_code_has_no_account`; `RequestsView.test.tsx` "shows under the organisation why a request's invite link made no account yet" |
-| 40 | `test_delete_organisation_refuses_one_with_an_invite_link`; `OrganisationsView.test.tsx` |
+| 40 | `test_delete_organisation_refuses_a_live_or_used_invite_link`; `test_delete_organisation_removes_its_revoked_unused_invite_links`; `OrganisationsView.test.tsx` |
 | 43 | § Checks beyond the build, rollback rehearsal |
-| 44 | Done, except `docs/deferred.md` (deviation 12). |
+| 44 | Done; `docs/deferred.md` written in the review. |
 | Polish row | Agent pass done inside phase 8 (two screenshot rounds against the annex and mock). **Owner pass: open.** |
 
 ## Intent & assumptions
@@ -304,4 +462,5 @@ brief), so those are not covered by this run.
 
 ## Deferred work
 
-Seams left open → [docs/deferred.md](../../deferred.md), written at step 8 from the list above.
+Written: [docs/deferred.md](../../deferred.md) § Accounts, organisations and administration
+(Decisions put off, and Limits in the code).

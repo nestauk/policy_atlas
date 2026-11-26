@@ -300,12 +300,12 @@ export function RequestsView() {
                       onChange={(on) => (on ? selectAll() : setSelected(new Set()))}
                     />
                   </th>
-                  <SortTh {...th} sortKey="name" label="Name" className="w-48" />
-                  <SortTh {...th} sortKey="email" label="Email" className="w-64" />
-                  <SortTh {...th} sortKey="organisation" label="Organisation" className="w-72" />
+                  <SortTh {...th} sortKey="name" label="Name" className="w-40" />
+                  <SortTh {...th} sortKey="email" label="Email" className="w-52" />
+                  <SortTh {...th} sortKey="organisation" label="Organisation" className="w-56" />
                   <SortTh {...th} sortKey="requested" label="Requested" className="w-32" />
-                  <SortTh {...th} sortKey="status" label="Status" className="w-60" />
-                  <th className={cn(TH_CLASS, ACTIONS_TH_CLASS, "w-52")}>
+                  <SortTh {...th} sortKey="status" label="Status" className="w-40" />
+                  <th className={cn(TH_CLASS, ACTIONS_TH_CLASS, "w-48")}>
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>

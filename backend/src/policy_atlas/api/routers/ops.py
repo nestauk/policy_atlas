@@ -70,7 +70,14 @@ from policy_atlas.core.schema import (
     waitlist_entry,
 )
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
+from policy_atlas.ops.errors import (
+    TRANSIENT_COGNITO_CODES,
+    Deactivated,
+    EnrolledElsewhere,
+    NotFound,
+    OpsError,
+    ResendTooSoon,
+)
 from policy_atlas.ops.sweep import RETRY_WAIT, TERMINAL_OUTCOMES
 
 log = structlog.get_logger()
@@ -101,6 +108,10 @@ def after_commit(request: Request) -> Generator[None, None, None]:
             log.info("ops.action", **line)
 
 
+# The reader's own field limit (131,072 characters) would call a long value bad
+# quoting; the file's character cap and the name rule are the limits that answer.
+csv.field_size_limit(IMPORT_CHARACTERS_MAX)
+
 router = APIRouter(
     prefix="/api/v1/ops",
     tags=["ops"],
@@ -130,10 +141,16 @@ def _queue_log(
     )
 
 
-def _cognito_refusal(error: ClientError) -> str:
-    """Name a Cognito refusal by its code only (no address, no request detail)."""
+def _cognito_failure(error: ClientError) -> Exception:
+    """Turn a Cognito error into the response to raise, named by its code only.
+
+    A passing failure (a throttle, an outage) is a 503 the page may retry;
+    any other code is a 409 refusal. Neither names the address or request.
+    """
     code = error.response.get("Error", {}).get("Code", "") or "ClientError"
-    return f"Cognito refused the request ({code}). Nothing was written."
+    if code in TRANSIENT_COGNITO_CODES:
+        return HTTPException(503, f"Cognito is busy or down ({code}). Nothing was written.")
+    return ApiConflict("ops_refused", f"Cognito refused the request ({code}). Nothing was written.")
 
 
 def _not_self(actor: AuthenticatedUser, user_id: str) -> str:
@@ -437,14 +454,16 @@ def create_person(
     try:
         enrolled = commands.ensure_account_enrolled(
             conn, cognito, pool_id=pool_id, email=body.email,
-            display_name=body.display_name, org=org, reactivate=True,
+            display_name=body.display_name, org=org, reactivate=body.reactivate,
         )
     except EnrolledElsewhere as exc:
         raise ApiConflict("enrolled_elsewhere", str(exc)) from None
+    except Deactivated as exc:
+        raise ApiConflict("deactivated", str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
     except ClientError as exc:
-        raise ApiConflict("ops_refused", _cognito_refusal(exc)) from None
+        raise _cognito_failure(exc) from None
     outcome = "invited" if enrolled.invitation_sent else "enrolled"
     if enrolled.reactivated:
         outcome = f"reactivated, {outcome}"
@@ -526,16 +545,16 @@ def check_people_file(text: str) -> ImportCheckOut:
     first_line: dict[str, int] = {}
     for line, values in people:
         checked = _people_file_line(values, header)
-        problem = checked if isinstance(checked, str) else None
-        if not isinstance(checked, str):
-            email, name = checked
-            if email in first_line:
-                problem = f"this email is already on line {first_line[email]}."
-            else:
-                first_line[email] = line
-                rows.append(ImportRow(line=line, email=email, display_name=name))
-        if problem is not None:
-            errors.append(ImportProblem(line=line, message=problem))
+        if isinstance(checked, str):
+            errors.append(ImportProblem(line=line, message=checked))
+            continue
+        email, name = checked
+        if email in first_line:
+            errors.append(ImportProblem(
+                line=line, message=f"this email is already on line {first_line[email]}."))
+            continue
+        first_line[email] = line
+        rows.append(ImportRow(line=line, email=email, display_name=name))
     return ImportCheckOut(rows=rows, errors=errors)
 
 
@@ -902,7 +921,7 @@ def approve_request(
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
     except ClientError as exc:
-        raise ApiConflict("ops_refused", _cognito_refusal(exc)) from None
+        raise _cognito_failure(exc) from None
     outcome = "invited" if approved.enrolment.invitation_sent else "enrolled"
     action_id = commands.record_action(
         conn, actor=actor.user_id, action="request.approve", target=str(entry_id), outcome=outcome
@@ -1005,7 +1024,7 @@ def update_invite_link(
     conn: Annotated[Connection, Depends(get_conn)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> InviteLinkOut:
-    """Change a link's label, use limit and end."""
+    """Change a link's label, use limit or end; a value left out stays as stored."""
     _invite_link_refusal(lambda: commands.update_invite_link(
         conn, invite_link_id=invite_link_id, label=body.label, max_uses=body.max_uses,
         expires_at=body.expires_at, now=_now(),

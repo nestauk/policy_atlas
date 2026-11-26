@@ -484,7 +484,7 @@
       },
       "InviteLinkCreate": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/invite-links``.\n\nArgs:\n    org_id: The organisation a redeemed request joins.\n    allowed_domains: The email domains the link accepts, one each; the\n        command lower-cases them and refuses none, more than ten or a repeat.",
+        "description": "Body of ``POST /api/v1/ops/invite-links``.\n\nArgs:\n    label: The operator's name for the link.\n    max_uses: How many requests the link may redeem.\n    expires_at: When it stops working, with its time zone.\n    org_id: The organisation a redeemed request joins.\n    allowed_domains: The email domains the link accepts, one each; the\n        command lower-cases them and refuses none, more than ten or a repeat.",
         "properties": {
           "allowed_domains": {
             "items": {
@@ -627,29 +627,45 @@
       },
       "InviteLinkUpdate": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.\n\nThe command checks the use limit and the end against the link rules, so a\nrefusal reads as the pages word it.\n\nArgs:\n    label: The operator's name for the link.\n    max_uses: How many requests the link may redeem.\n    expires_at: When it stops working, with its time zone.",
+        "description": "Body of ``POST /api/v1/ops/invite-links/{invite_link_id}``: the fields that may change.\n\nSend only the values to change; a value left out keeps the stored one, and\na body with none is refused. The command checks a sent use limit or end\nagainst the link rules, so a refusal reads as the pages word it.\n\nArgs:\n    label: The operator's name for the link.\n    max_uses: How many requests the link may redeem.\n    expires_at: When it stops working, with its time zone.",
         "properties": {
           "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           },
           "label": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Label",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           },
           "max_uses": {
-            "title": "Max Uses",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Uses"
           }
         },
-        "required": [
-          "label",
-          "max_uses",
-          "expires_at"
-        ],
         "title": "InviteLinkUpdate",
         "type": "object"
       },
@@ -826,7 +842,7 @@
       },
       "PersonCreate": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation. The person joins each cohort in ``cohort_ids``. The\naddress and name follow :func:`validate_person_fields`.",
+        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation. The person joins each cohort in ``cohort_ids``. The\naddress and name follow :func:`validate_person_fields`. With\n``reactivate`` false (a people-file run) a deactivated person is refused\nwith the ``deactivated`` code, not turned back on.",
         "properties": {
           "cohort_ids": {
             "items": {
@@ -849,6 +865,11 @@
             "format": "uuid",
             "title": "Org Id",
             "type": "string"
+          },
+          "reactivate": {
+            "default": true,
+            "title": "Reactivate",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1628,7 +1649,7 @@
     },
     "/api/v1/ops/invite-links/{invite_link_id}": {
       "post": {
-        "description": "Change a link's label, use limit and end.",
+        "description": "Change a link's label, use limit or end; a value left out stays as stored.",
         "operationId": "update_invite_link_api_v1_ops_invite_links__invite_link_id__post",
         "parameters": [
           {

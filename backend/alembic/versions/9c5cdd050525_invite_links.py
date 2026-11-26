@@ -1,9 +1,11 @@
 """Add invite links, and record on a request the code it came with and the link it used.
 
 An invite link carries a 12-character code, the organisation a redeemed request
-joins, the email domains it accepts, a use limit and an end date. A link is
-never deleted, so the ops role gets no delete right on it. ``invite_link_cohort``
-lists the cohorts a redeemed person joins; deleting a cohort removes its rows.
+joins, the email domains it accepts, a use limit and an end date. The ops role
+may delete a link: deleting an organisation removes its revoked links that made
+no account. ``invite_link_cohort`` lists the cohorts a redeemed person joins;
+deleting a cohort or a link removes its rows (a cascade, so the ops role needs
+no delete right on that table).
 ``waitlist_entry.invite_code`` is the code a request arrived with and
 ``waitlist_entry.invite_link_id`` the link that redeemed it.
 
@@ -59,7 +61,7 @@ def upgrade() -> None:
         "invite_link_cohort",
         sa.Column(
             "invite_link_id", postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("invite_link.invite_link_id"), primary_key=True,
+            sa.ForeignKey("invite_link.invite_link_id", ondelete="CASCADE"), primary_key=True,
         ),
         sa.Column(
             "cohort_id", postgresql.UUID(as_uuid=True),
@@ -83,7 +85,7 @@ def upgrade() -> None:
         "ix_waitlist_entry_invite_link_id", "waitlist_entry", ["invite_link_id"],
         postgresql_where=sa.text("invite_link_id IS NOT NULL"),
     )
-    op.execute("GRANT SELECT, INSERT ON invite_link TO pa_ops")
+    op.execute("GRANT SELECT, INSERT, DELETE ON invite_link TO pa_ops")
     op.execute("GRANT UPDATE (label, max_uses, expires_at, revoked_at) ON invite_link TO pa_ops")
     op.execute("GRANT SELECT, INSERT ON invite_link_cohort TO pa_ops")
     op.execute("GRANT UPDATE (invite_link_id) ON waitlist_entry TO pa_ops")

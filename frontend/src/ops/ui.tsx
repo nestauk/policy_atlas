@@ -146,6 +146,7 @@ export function SearchSelect({
   invalid,
   className,
   create,
+  disabled,
 }: {
   id?: string;
   label: string;
@@ -159,6 +160,7 @@ export function SearchSelect({
   invalid?: boolean;
   className?: string;
   create?: { noun: string; pending: boolean; error: string | null; run: (name: string, close: () => void) => void; clearError: () => void };
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -216,9 +218,10 @@ export function SearchSelect({
           aria-label={label}
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
+          disabled={disabled}
           className={cn(
             "relative inline-flex h-10 w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-body text-ink",
-            "transition-colors duration-150",
+            "transition-colors duration-150 disabled:cursor-default disabled:bg-ground disabled:text-grey",
             open ? "border-navy" : invalid ? "border-red" : "border-line-2",
             className,
           )}
@@ -321,6 +324,7 @@ export function OrganisationSelect({
   onChange,
   describedBy,
   invalid,
+  disabled,
 }: {
   id: string;
   label: string;
@@ -329,6 +333,7 @@ export function OrganisationSelect({
   onChange: (orgId: string) => void;
   describedBy?: string;
   invalid?: boolean;
+  disabled?: boolean;
 }) {
   const toast = useRecordedToast();
   const [error, setError] = useState<string | null>(null);
@@ -353,6 +358,7 @@ export function OrganisationSelect({
       empty="No organisations yet. Type a name to create one."
       describedBy={describedBy}
       invalid={invalid}
+      disabled={disabled}
       create={{
         noun: "organisation",
         pending: create.isPending,
@@ -589,6 +595,8 @@ export const DANGER_CLASS = "bg-red hover:bg-red/90";
  *     consequence (a field's help that sits under its control).
  *   returnFocus: Where focus goes when it closes, when its opener is gone
  *     (a menu item, a row's button); null leaves Radix's return to the opener.
+ *   clampTitle: Cut a title that carries a typed name at two lines; the
+ *     whole title stays the dialog's accessible name.
  */
 export function Dialog({
   open,
@@ -597,6 +605,7 @@ export function Dialog({
   description,
   describedBy,
   returnFocus,
+  clampTitle = false,
   children,
   footer,
 }: {
@@ -606,6 +615,7 @@ export function Dialog({
   description?: ReactNode;
   describedBy?: string;
   returnFocus?: () => HTMLElement | null;
+  clampTitle?: boolean;
   children?: ReactNode;
   footer: ReactNode;
 }) {
@@ -626,7 +636,9 @@ export function Dialog({
             "border border-line-2 bg-paper shadow-overlay focus-visible:outline-none",
           )}
         >
-          <DialogPrimitive.Title className="px-6 pt-5 font-sans text-lead font-bold text-navy">
+          <DialogPrimitive.Title
+            className={cn("px-6 pt-5 font-sans text-lead font-bold text-navy", clampTitle && "line-clamp-2 break-words")}
+          >
             {title}
           </DialogPrimitive.Title>
           <div className="min-h-0 overflow-y-auto px-6 pb-2 pt-3">

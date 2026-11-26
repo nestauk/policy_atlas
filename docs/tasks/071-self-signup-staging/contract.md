@@ -76,6 +76,15 @@ its live checks recorded in `verification.md`. Production self-signup stays off.
 13. A mock of the ops pages is made before the build (§ Design annex).
 14. The contract, the words of the annex, the mock and the plan are approved.
 
+Rulings in the review (2026-11-26):
+
+15. A made-up code can replace a valid code on a waiting request (D3 rule 4). The rule
+    stays; D11 states the limit.
+16. A file run never reactivates a deactivated person (C3).
+17. Delete organisation removes the organisation's revoked links that have no uses (D1, D9).
+    `pa_ops` gets the delete right on `invite_link` for this.
+18. An edit of a link may change one value and leave the others (D6).
+
 ## Part A — words on the public page
 
 **A1.** The intro above the form and the success message change to the annex text. They are
@@ -146,6 +155,9 @@ the same email and name rules as `PersonCreate`, from one place.
 **C3. Create.** The page creates the people one at a time through `POST /api/v1/ops/people`
 (B1), in file order, as the Requests page already approves many requests. Each person keeps
 their own audit row and their own outcome. There is no new bulk-create route.
+The page sends `reactivate: false` (a new optional field of the route, default true): a
+deactivated person in a file is not turned back on and is listed as not added, with the
+reason. An operator who means it adds the person with the one-person form.
 
 *Why not one bulk route:* 500 Cognito calls in one request would pass the load balancer's
 60-second limit, and a failure in the middle would leave the operator without a per-person
@@ -177,13 +189,15 @@ organisation gets no second invitation (the existing rule of `ensure_account_enr
   `ops_action.actor_user_id`).
 - `invite_link_cohort`: `invite_link_id`, `cohort_id`; the pair is the key. A deleted cohort
   removes its rows.
-- A link is never deleted. There is no delete route and `pa_ops` gets no delete right, so
-  the uses and the reasons on Requests keep their source.
+- A link with a use is never deleted, so the uses and the reasons on Requests keep their
+  source. There is no delete route. One exception (D9): Delete organisation removes the
+  organisation's links that are revoked and have no uses.
 - `waitlist_entry.invite_code` (text, null): the code a request arrived with.
 - `waitlist_entry.invite_link_id` (to `invite_link`, null): the link the sweep redeemed.
 - One partial index on each of the two new `waitlist_entry` columns (rows where it is set).
 - Grants to `pa_ops`: read and insert on both new tables; update of `label`, `max_uses`,
-  `expires_at` and `revoked_at` on `invite_link`; update of `waitlist_entry.invite_link_id`.
+  `expires_at` and `revoked_at` on `invite_link`; delete on `invite_link` (D9; the cohort
+  rows of a deleted link go by the foreign key); update of `waitlist_entry.invite_link_id`.
   Nothing else. The test that pins the grant list is updated to match.
 - The downgrade removes all of it.
 
@@ -233,8 +247,8 @@ without a code.
    `approve_request` with the link's organisation; add the person to each of the link's
    cohorts; set `invite_link_id`; write the sweep's audit row as today.
    *Accepted limit:* Cognito is called before the commit. If the database write fails after
-   Cognito made the account, the request stays waiting and the next tick completes it (the
-   account exists, so no second invitation). If the link became full, expired or revoked in
+   Cognito made the account, the request stays waiting and the sweep completes it after the wait of
+   rule 13 (the account exists, so no second invitation). If the link became full, expired or revoked in
    between, the request stays on Requests with its reason (D8) and an operator approves it
    by hand. No new mechanism is built for this rare case.
 5. Two redemptions at the same moment cannot pass `max_uses` (the lock in rule 4).
@@ -271,6 +285,8 @@ without a code.
   `max_uses`, `expires_at`. Audit `invite_link.create`.
 - `POST /api/v1/ops/invite-links/{id}` — change `label`, `max_uses`, `expires_at` only (the domains of a link do not change; an
   operator revokes the link and makes a new one).
+  A value that is left out does not change, and the limits are checked only for a value
+  the call changes (so a link that has expired can still get a new label).
   `max_uses` below the link's current uses is refused, checked under the link row lock. A
   revoked link cannot be changed. Audit `invite_link.update`.
 - `POST /api/v1/ops/invite-links/{id}/revoke` — set `revoked_at`. Accounts already made
@@ -294,8 +310,9 @@ with a confirmation). States and words: annex § Invite links.
 it was not redeemed: unknown code, wrong email domain, expired, full, revoked, or "waiting
 for the next run". `RequestOut` gains one optional field for this.
 
-**D9. Delete an organisation** (066 B7) also refuses while an invite link points at it, and
-its message counts the links.
+**D9. Delete an organisation** (066 B7) also refuses while an invite link that is not
+revoked, or that has a use, points at it, and its message counts those links. Links that are
+revoked and have no uses are deleted with the organisation.
 
 **D10. Where links work.** Only where the sweep runs. This task turns the sweep on for
 staging (part E). Production keeps `self_signup.enabled` false; turning it on for a pilot is
@@ -313,7 +330,15 @@ test against (D3 rule 2) and is useless without a mailbox in one of the link's d
 A link holder can also put the link's code on another person's **waiting** request, if the
 holder knows that person's address (D3 rule 4). The result is the same as a new request for
 that address: an invitation to the mailbox owner, in the link's domains only. It cannot stop
-or delay an account (D5 rule 3). A holder of two links for one domain can move a waiting
+or delay a listed-domain account (D5 rule 3).
+
+*A known limit, accepted by the owner (ruling 15).* The public route never reads a link (I2),
+so it cannot tell a real code from a made-up one. Anyone who knows a person's address, with
+or without a link, can replace the valid code on that person's waiting request with a
+made-up one. In an unlisted domain that request then waits. The Requests page shows "code
+not recognised" and an operator approves it by hand. The usual window is the time to the
+next tick (60 seconds); it is longer while the hourly cap is spent, the link is full, or
+the request waits after a failure. A holder of two links for one domain can move a waiting
 person from one link to the other; this is accepted.
 
 ## Part E — staging switch-on

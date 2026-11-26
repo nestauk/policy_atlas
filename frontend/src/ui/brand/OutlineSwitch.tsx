@@ -14,6 +14,8 @@ import { cn } from "./cn";
  *   value: The chosen view.
  *   onChange: Called with the view pressed.
  *   height: 40 (default) or 32 px.
+ *   disabled: Every button inert; the chosen one keeps its look, the others
+ *     take the disabled outline's Line 2 words and no hover.
  */
 export function OutlineSwitch<K extends string>({
   label,
@@ -21,12 +23,14 @@ export function OutlineSwitch<K extends string>({
   value,
   onChange,
   height = 40,
+  disabled = false,
 }: {
   label: string;
   choices: ReadonlyArray<{ key: K; label: string }>;
   value: K;
   onChange: (key: K) => void;
   height?: 40 | 32;
+  disabled?: boolean;
 }) {
   return (
     <div role="group" aria-label={label} className="flex">
@@ -37,12 +41,18 @@ export function OutlineSwitch<K extends string>({
             key={choice.key}
             type="button"
             aria-pressed={pressed}
+            disabled={disabled}
             onClick={() => onChange(choice.key)}
             className={cn(
               "pressable relative cursor-pointer border bg-paper text-meta font-semibold transition-colors duration-150",
               height === 40 ? "h-10 px-3.5" : "h-8 px-3",
               index > 0 && "-ml-px",
-              pressed ? "z-10 border-navy text-navy" : "border-line-2 text-grey hover:bg-hover-fill hover:text-navy",
+              "disabled:cursor-default",
+              pressed
+                ? "z-10 border-navy text-navy"
+                : disabled
+                  ? "border-line-2 text-line-2"
+                  : "border-line-2 text-grey hover:bg-hover-fill hover:text-navy",
             )}
           >
             {choice.label}

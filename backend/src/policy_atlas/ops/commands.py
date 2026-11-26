@@ -63,7 +63,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Literal, NoReturn
 
 from botocore.exceptions import ClientError
-from sqlalchemy import and_, case, delete, func, insert, or_, select, update
+from sqlalchemy import and_, case, delete, func, insert, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
@@ -595,7 +595,9 @@ def delete_organisation(conn: Connection, *, org_id: uuid.UUID) -> OrganisationD
     """Delete an organisation nothing points at any more.
 
     The foreign keys would refuse too; this check comes first so the refusal
-    says what is still there (contract 066 B7).
+    says what is still there (contract 066 B7). A revoked link that made no
+    account cannot be used again and does not count: it is deleted with the
+    organisation, and its cohort rows with it.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -606,23 +608,35 @@ def delete_organisation(conn: Connection, *, org_id: uuid.UUID) -> OrganisationD
 
     Raises:
         NotFound: If no organisation has that id.
-        OpsError: If any person, task, project, domain or invite link still points at it.
+        OpsError: If any person, task, project, domain or live or used invite
+            link still points at it.
     """
     name = conn.execute(
         select(organisation.c.name).where(organisation.c.org_id == org_id).with_for_update()
     ).scalar_one_or_none()
     if name is None:
         raise NotFound(f"no organisation {org_id}")
-    counts = {
-        label: int(conn.execute(
-            select(func.count()).select_from(table).where(table.c.org_id == org_id)
+    dead_link = and_(
+        invite_link.c.revoked_at.is_not(None),
+        ~select(waitlist_entry.c.entry_id)
+        .where(waitlist_entry.c.invite_link_id == invite_link.c.invite_link_id).exists(),
+    )
+    left = []
+    for one, many, table, where in (
+        ("person", "people", app_user, true()), ("task", "tasks", task, true()),
+        ("project", "projects", project, true()),
+        ("domain", "domains", organisation_domain, true()),
+        ("invite link", "invite links", invite_link, ~dead_link),
+    ):
+        count = int(conn.execute(
+            select(func.count()).select_from(table).where(table.c.org_id == org_id, where)
         ).scalar_one())
-        for label, table in (("people", app_user), ("tasks", task), ("projects", project),
-                             ("domains", organisation_domain), ("invite links", invite_link))
-    }
-    left = [f"{count} {label}" for label, count in counts.items() if count]
+        if count:
+            left.append(f"{count} {one if count == 1 else many}")
     if left:
-        raise OpsError(f"{name} still has {', '.join(left)}. Nothing was deleted.")
+        listed = left[0] if len(left) == 1 else f"{', '.join(left[:-1])} and {left[-1]}"
+        raise OpsError(f"{name} still has {listed}. Nothing was deleted.")
+    conn.execute(delete(invite_link).where(invite_link.c.org_id == org_id, dead_link))
     conn.execute(delete(organisation).where(organisation.c.org_id == org_id))
     return OrganisationDeletion(org_id=org_id, name=str(name))
 
@@ -2081,10 +2095,6 @@ class InviteLink(Record):
     revoked_at: datetime | None
     created_at: datetime
 
-    def summary(self) -> str:
-        """Render the link by its label and id, never its code."""
-        return f"invite link {self.label!r} ({self.invite_link_id})"
-
 
 def invite_link_state(link: InviteLink, uses: int, now: datetime) -> InviteLinkState:
     """Return whether a link can still make accounts, and if not, why.
@@ -2173,11 +2183,13 @@ def invite_link_uses(conn: Connection, invite_link_id: uuid.UUID) -> int:
     return invite_link_uses_by_id(conn, [invite_link_id]).get(invite_link_id, 0)
 
 
-def _require_invite_limits(*, max_uses: int, expires_at: datetime, now: datetime) -> None:
-    """Refuse a use limit or an end outside the link rules."""
-    if not 1 <= max_uses <= INVITE_USES_MAX:
+def _require_invite_limits(
+    *, max_uses: int | None, expires_at: datetime | None, now: datetime
+) -> None:
+    """Refuse a use limit or an end outside the link rules; ``None`` is not checked."""
+    if max_uses is not None and not 1 <= max_uses <= INVITE_USES_MAX:
         raise OpsError(f"Maximum uses must be from 1 to {INVITE_USES_MAX:,}.")
-    if not now < expires_at <= now + INVITE_AHEAD_MAX:
+    if expires_at is not None and not now < expires_at <= now + INVITE_AHEAD_MAX:
         raise OpsError("Choose a date in the next 90 days.")
 
 
@@ -2266,33 +2278,43 @@ def update_invite_link(
     conn: Connection,
     *,
     invite_link_id: uuid.UUID,
-    label: str,
-    max_uses: int,
-    expires_at: datetime,
+    label: str | None = None,
+    max_uses: int | None = None,
+    expires_at: datetime | None = None,
     now: datetime,
 ) -> InviteLink:
-    """Change a link's label, use limit and end; its organisation, cohorts and domains stay.
+    """Change a link's label, use limit or end; its organisation, cohorts and domains stay.
 
-    The uses are counted under the link's row lock, so a redemption cannot slip
-    between the count and the write.
+    A value left out (``None``) keeps the stored one and is not checked, so a
+    link whose end has passed can still be renamed. The uses are counted under
+    the link's row lock, so a redemption cannot slip between the count and the
+    write.
 
     Raises:
         NotFound: If no link has that id.
         OpsError: If the link is revoked, the limit is below its uses, or a
-            value is outside the link rules.
+            changed value is outside the link rules.
     """
     link = _lock_invite_link(conn, invite_link_id)
     if link.revoked_at is not None:
         raise OpsError("A revoked link cannot be changed.")
+    changed = replace(
+        link,
+        label=link.label if label is None else label.strip(),
+        max_uses=link.max_uses if max_uses is None else max_uses,
+        expires_at=link.expires_at if expires_at is None else expires_at,
+    )
+    # Check only what this call changes: a stored end in the past stays as it is.
     _require_invite_limits(max_uses=max_uses, expires_at=expires_at, now=now)
-    uses = invite_link_uses(conn, invite_link_id)
-    if max_uses < uses:
-        raise OpsError(f"This link already has {uses} uses. The maximum cannot be lower.")
+    if max_uses is not None:
+        uses = invite_link_uses(conn, invite_link_id)
+        if max_uses < uses:
+            raise OpsError(f"This link already has {uses} uses. The maximum cannot be lower.")
     conn.execute(
         update(invite_link).where(invite_link.c.invite_link_id == invite_link_id)
-        .values(label=label.strip(), max_uses=max_uses, expires_at=expires_at)
+        .values(label=changed.label, max_uses=changed.max_uses, expires_at=changed.expires_at)
     )
-    return replace(link, label=label.strip(), max_uses=max_uses, expires_at=expires_at)
+    return changed
 
 
 def revoke_invite_link(conn: Connection, *, invite_link_id: uuid.UUID, now: datetime) -> InviteLink:
@@ -2416,11 +2438,10 @@ def redeem_request(
         EnrolledElsewhere: If the address belongs to another organisation.
         Deactivated: If the account is deactivated.
     """
-    code = conn.execute(
-        select(waitlist_entry.c.invite_code).where(waitlist_entry.c.entry_id == entry_id)
-    ).scalar_one_or_none()
-    link_id = None if code is None else conn.execute(
-        select(invite_link.c.invite_link_id).where(invite_link.c.code == code)
+    link_id = conn.execute(
+        select(invite_link.c.invite_link_id)
+        .join(waitlist_entry, waitlist_entry.c.invite_code == invite_link.c.code)
+        .where(waitlist_entry.c.entry_id == entry_id)
     ).scalar_one_or_none()
     if link_id is None:
         return None

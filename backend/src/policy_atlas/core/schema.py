@@ -196,8 +196,10 @@ cohort_member = Table(
     Index("ix_cohort_member_user_id", "user_id"),
 )
 
-# Invite links: a code that lets a request from a listed email domain become an
-# account in one organisation without an operator. A link is never deleted.
+# Invite links: a code that lets a request from one of the link's own email
+# domains (``allowed_domains``, listed on the organisation or not) become an
+# account in one organisation without an operator. A link is deleted only with
+# its organisation, and only once it is revoked and has made no account.
 invite_link = Table(
     "invite_link",
     metadata,
@@ -227,8 +229,8 @@ invite_link_cohort = Table(
     "invite_link_cohort",
     metadata,
     Column(
-        "invite_link_id", UUID(as_uuid=True), ForeignKey("invite_link.invite_link_id"),
-        primary_key=True,
+        "invite_link_id", UUID(as_uuid=True),
+        ForeignKey("invite_link.invite_link_id", ondelete="CASCADE"), primary_key=True,
     ),
     Column(
         "cohort_id", UUID(as_uuid=True), ForeignKey("cohort.cohort_id", ondelete="CASCADE"),

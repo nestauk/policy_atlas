@@ -85,7 +85,6 @@ function bulk(ids: string[], run: (subject: Person) => ActionResult["outcome"] |
   });
 }
 
-const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** A link's state, worked out when read, as the server does. */
@@ -95,10 +94,13 @@ function linkState(link: InviteLink): InviteLink["state"] {
   return link.uses >= link.max_uses ? "full" : "active";
 }
 
-function limitsRefusal(maxUses: number, expiresAt: string): string | null {
-  if (!(maxUses >= 1 && maxUses <= 1000)) return "Maximum uses must be from 1 to 1,000.";
-  const end = Date.parse(expiresAt);
-  if (!(end > Date.now() && end <= Date.now() + 91 * DAY_MS)) return "Choose a date in the next 90 days.";
+/** The limits' refusal; a value not sent (an edit's) is not checked. */
+function limitsRefusal(maxUses: number | undefined, expiresAt: string | undefined): string | null {
+  if (maxUses !== undefined && !(maxUses >= 1 && maxUses <= 1000)) return "Maximum uses must be from 1 to 1,000.";
+  const end = expiresAt === undefined ? undefined : Date.parse(expiresAt);
+  if (end !== undefined && !(end > Date.now() && end <= Date.now() + 91 * DAY_MS)) {
+    return "Choose a date in the next 90 days.";
+  }
   return null;
 }
 
@@ -256,6 +258,16 @@ function route(method: string, path: string, body: Record<string, unknown>, quer
         cohort.people += 1;
       }
     };
+    if (existing?.deactivated_at != null) {
+      // A file run sends `reactivate: false` and is refused; the one-person form turns them back on.
+      if (body.reactivate === false) {
+        return apiError(409, "deactivated", `${email} is deactivated. Nothing was written. Reactivate them on People first.`);
+      }
+      existing.deactivated_at = null;
+      existing.organisation = org;
+      join(existing);
+      return json({ person: existing, invitation_sent: false, reactivated: true }, 201);
+    }
     if (existing !== undefined) {
       existing.organisation = org;
       join(existing);
@@ -292,9 +304,7 @@ function route(method: string, path: string, body: Record<string, unknown>, quer
     if (refusal !== null) return apiError(409, "ops_refused", refusal);
     const org = orgRef(String(body.org_id));
     if (org === undefined) return apiError(404, "not_found", "resource not found");
-    const code = Array.from({ length: 3 }, () =>
-      Array.from({ length: 4 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join(""),
-    ).join("-");
+    const code = "K7Q2-M9XD-3FHP";
     const created: InviteLink = {
       invite_link_id: newId(),
       label: String(body.label),
@@ -322,13 +332,23 @@ function route(method: string, path: string, body: Record<string, unknown>, quer
     if (linkPath[2] !== undefined) {
       link.revoked_at = now;
     } else {
-      const maxUses = Number(body.max_uses);
+      // As the route: only the values sent change; a body with none is refused.
+      const label = body.label == null ? undefined : String(body.label);
+      const maxUses = body.max_uses == null ? undefined : Number(body.max_uses);
+      const expiresAt = body.expires_at == null ? undefined : String(body.expires_at);
+      if (label === undefined && maxUses === undefined && expiresAt === undefined) {
+        return apiError(422, "validation_error", "send at least one of label, max_uses, expires_at");
+      }
       const refusal =
-        maxUses < link.uses
+        maxUses !== undefined && maxUses < link.uses
           ? `This link already has ${link.uses} uses. The maximum cannot be lower.`
-          : limitsRefusal(maxUses, String(body.expires_at));
+          : limitsRefusal(maxUses, expiresAt);
       if (refusal !== null) return apiError(409, "ops_refused", refusal);
-      Object.assign(link, { label: String(body.label), max_uses: maxUses, expires_at: String(body.expires_at) });
+      Object.assign(link, {
+        label: label ?? link.label,
+        max_uses: maxUses ?? link.max_uses,
+        expires_at: expiresAt ?? link.expires_at,
+      });
     }
     return json({ ...link, state: linkState(link) });
   }
@@ -406,14 +426,20 @@ function route(method: string, path: string, body: Record<string, unknown>, quer
     const org = opsMock.organisations.find((entry) => entry.org_id === orgPath[1]);
     if (org === undefined) return apiError(404, "not_found", "resource not found");
     const people = opsMock.people.filter((entry) => entry.organisation?.org_id === org.org_id).length;
-    const links = opsMock.inviteLinks.filter((link) => link.organisation.org_id === org.org_id).length;
-    const left = [
-      people && `${people} people`,
-      org.domains.length && `${org.domains.length} domains`,
-      links && `${links} invite links`,
-    ].filter(Boolean);
+    // As the server: a revoked link nobody used goes with the organisation.
+    const links = opsMock.inviteLinks.filter(
+      (link) => link.organisation.org_id === org.org_id && (link.revoked_at == null || link.uses > 0),
+    ).length;
+    const left = (
+      [
+        [people, "person", "people"],
+        [org.domains.length, "domain", "domains"],
+        [links, "invite link", "invite links"],
+      ] as const
+    ).flatMap(([count, one, many]) => (count > 0 ? [`${count} ${count === 1 ? one : many}`] : []));
     if (left.length > 0) {
-      return apiError(409, "ops_refused", `${org.name} still has ${left.join(", ")}. Nothing was deleted.`);
+      const listed = left.length === 1 ? left[0] : `${left.slice(0, -1).join(", ")} and ${left.at(-1)}`;
+      return apiError(409, "ops_refused", `${org.name} still has ${listed}. Nothing was deleted.`);
     }
     opsMock.organisations = opsMock.organisations.filter((entry) => entry !== org);
     return new Response(null, { status: 204 });

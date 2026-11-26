@@ -54,22 +54,24 @@ const PAGE_PRIMARY_CLASS = buttonVariants({ variant: "primary", size: "entry" })
 
 type PagePrimaryProps = {
   children: ReactNode;
+  /** For a dialog it opens to give focus back to it. */
+  id?: string;
 } & (
   | { to: string; onClick?: never; disabled?: never }
   | { to?: never; onClick: () => void; disabled?: boolean }
 );
 
 /** The header's primary action: a link ("New task") or a button ("New project"). */
-export function PagePrimary({ children, to, onClick, disabled }: PagePrimaryProps) {
+export function PagePrimary({ children, id, to, onClick, disabled }: PagePrimaryProps) {
   if (to !== undefined) {
     return (
-      <Link to={to} className={PAGE_PRIMARY_CLASS}>
+      <Link id={id} to={to} className={PAGE_PRIMARY_CLASS}>
         {children}
       </Link>
     );
   }
   return (
-    <button type="button" className={PAGE_PRIMARY_CLASS} onClick={onClick} disabled={disabled}>
+    <button type="button" id={id} className={PAGE_PRIMARY_CLASS} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );
