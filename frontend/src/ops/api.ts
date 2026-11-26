@@ -15,6 +15,9 @@ export type Requests = components["schemas"]["RequestsOut"];
 export type ActionResult = components["schemas"]["ActionResult"];
 export type Cohort = components["schemas"]["CohortOut"];
 export type CohortSave = components["schemas"]["CohortSave"];
+export type InviteLink = components["schemas"]["InviteLinkOut"];
+export type ImportRow = components["schemas"]["ImportRow"];
+export type ImportProblem = components["schemas"]["ImportProblem"];
 
 /** A refused or failed ops call: the HTTP status (0 for no answer) and the
  *  error envelope's code and message. */
@@ -43,7 +46,7 @@ export function createOpsApiClient(auth: AuthApi) {
 
 export type OpsClient = ReturnType<typeof createOpsApiClient>;
 
-function useOpsClient(): OpsClient {
+export function useOpsClient(): OpsClient {
   const auth = useAuth();
   return useMemo(() => createOpsApiClient(auth), [auth]);
 }
@@ -82,6 +85,7 @@ const PEOPLE = [...OPS, "people"] as const;
 const ORGANISATIONS = [...OPS, "organisations"] as const;
 const REQUESTS = [...OPS, "requests"] as const;
 const COHORTS = [...OPS, "cohorts"] as const;
+const INVITE_LINKS = [...OPS, "invite-links"] as const;
 
 export function usePeople() {
   const client = useOpsClient();
@@ -99,6 +103,11 @@ export function useOrganisations() {
 export function useCohorts() {
   const client = useOpsClient();
   return useQuery({ queryKey: COHORTS, queryFn: () => unwrap(client.GET("/api/v1/ops/cohorts")) });
+}
+
+export function useInviteLinks() {
+  const client = useOpsClient();
+  return useQuery({ queryKey: INVITE_LINKS, queryFn: () => unwrap(client.GET("/api/v1/ops/invite-links")) });
 }
 
 /** Create a cohort (no id) or replace one's details. */
@@ -157,6 +166,12 @@ export function useOpsAction<V, R>(run: (client: OpsClient, variables: V) => Pro
     mutationFn: (variables: V) => run(client, variables),
     onSettled: () => queryClient.invalidateQueries({ queryKey: OPS }),
   });
+}
+
+/** Refresh every ops list once, after a run of writes made without `useOpsAction`. */
+export function useRefreshOps() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: OPS });
 }
 
 /** The bulk routes that take only the subjects. */

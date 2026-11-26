@@ -43,6 +43,12 @@ export function limitWord(value: number | null | undefined): string {
   return value == null || value === 0 ? "no limit" : formatCount(value);
 }
 
+/** A command's refusal as a sentence: first letter up, a full stop at the end. */
+export function sentence(message: string): string {
+  const text = message.charAt(0).toUpperCase() + message.slice(1);
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 /** "1 task", "2 tasks". */
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${formatCount(n)} ${n === 1 ? one : many}`;

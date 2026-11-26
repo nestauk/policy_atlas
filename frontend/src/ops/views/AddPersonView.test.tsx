@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { apiError, opsMock } from "../mock";
+import { DHSC_PILOT, NESTA } from "../mock/fixtures";
 import { pick, renderOps, withOpsMock } from "../testing";
 
 withOpsMock();
@@ -19,14 +20,39 @@ async function fill(email: string, org = "Nesta") {
 }
 
 describe("Add a person", () => {
-  it("shows the fields and the three sentences of What happens", async () => {
+  it("shows the fields and the sentences of What happens", async () => {
     renderOps("/people/new");
     await screen.findByRole("heading", { name: "Add a person" });
     expect(within(screen.getByRole("main")).getByRole("link", { name: "People" })).toHaveAttribute("href", "/people");
     expect(screen.getByLabelText("Display name")).not.toHaveAccessibleDescription();
     expect(screen.getByRole("region", { name: "What happens" })).toHaveTextContent(
-      /temporary password\. It is valid for 30 days\..*No email is sent, because they can already sign in\.If the email already belongs to another organisation, nothing changes\.$/,
+      /temporary password\. It is valid for 30 days\..*No email is sent, because they can already sign in\.If the email already belongs to another organisation, nothing changes\.The person joins the cohorts you choose here\.$/,
     );
+  });
+
+  it("sends the chosen cohorts and names them in the toast", async () => {
+    const user = userEvent.setup();
+    renderOps("/people/new");
+    await screen.findByRole("heading", { name: "Add a person" });
+    await user.type(screen.getByLabelText("Email"), "ana.lopez@westbury.gov.uk");
+    await user.type(screen.getByLabelText("Display name"), "Ana Lopez");
+    await pick(user, "Organisation", "Nesta");
+    await user.click(screen.getByRole("button", { name: /^Cohorts/ }));
+    await user.click(await screen.findByRole("checkbox", { name: "Priority panel" }));
+    await user.click(screen.getByRole("checkbox", { name: "DHSC pilot 2027" }));
+    await user.keyboard("{Escape}");
+    const chosen = screen.getByRole("list", { name: "Cohorts: chosen" });
+    await user.click(within(chosen).getByRole("button", { name: "Remove Priority panel" }));
+    await user.click(screen.getByRole("button", { name: "Create and send invitation" }));
+    expect(
+      await screen.findByText("Invitation sent to ana.lopez@westbury.gov.uk. Added to DHSC pilot 2027."),
+    ).toBeInTheDocument();
+    expect(opsMock.writes.at(-1)?.body).toEqual({
+      email: "ana.lopez@westbury.gov.uk",
+      display_name: "Ana Lopez",
+      org_id: NESTA,
+      cohort_ids: [DHSC_PILOT],
+    });
   });
 
   it("asks for an organisation when none is chosen, and links the error to its field", async () => {

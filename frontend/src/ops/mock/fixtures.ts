@@ -1,4 +1,4 @@
-import type { AccessRequest, Cohort, Organisation, Person, Requests } from "../api";
+import type { AccessRequest, Cohort, InviteLink, Organisation, Person, Requests } from "../api";
 
 /*
  * The ops mock's fixtures: people with every flag and invitation time the
@@ -13,6 +13,9 @@ export const POLICY_LAB = "00000000-0000-4000-8000-00000000000b";
 export const EMPTY_ORG = "00000000-0000-4000-8000-00000000000c";
 export const PANEL = "00000000-0000-4000-8000-00000000000d";
 export const PILOT = "00000000-0000-4000-8000-00000000000e";
+export const DHSC = "00000000-0000-4000-8000-00000000000f";
+export const DHSC_PILOT = "00000000-0000-4000-8000-000000000010";
+export const LINK_ACTIVE = "00000000-0000-4000-8000-0000000000a1";
 
 const MINUTE = 60 * 1000;
 const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
@@ -46,6 +49,15 @@ export function organisationFixtures(): Organisation[] {
       runs_per_user: null,
       domains: ["westbury.gov.uk", "westbury.example"],
     },
+    {
+      org_id: DHSC,
+      name: "DHSC",
+      created_at: iso(20 * 24 * 60 * MINUTE),
+      people: 0,
+      task_quota_per_year: null,
+      runs_per_user: null,
+      domains: [],
+    },
   ];
 }
 
@@ -71,6 +83,72 @@ export function cohortFixtures(): Cohort[] {
       created_at: iso(2 * 24 * 60 * MINUTE),
       people: 0,
     },
+    {
+      cohort_id: DHSC_PILOT,
+      name: "DHSC pilot 2027",
+      description: null,
+      starts_on: null,
+      ends_on: null,
+      links: [],
+      created_at: iso(10 * 24 * 60 * MINUTE),
+      people: 0,
+    },
+  ];
+}
+
+const DAY = 24 * 60 * MINUTE;
+const dhsc = { org_id: DHSC, name: "DHSC" };
+
+/** One link in each state; the first is the design's example, "DHSC pilot". */
+export function inviteLinkFixtures(): InviteLink[] {
+  const link = (
+    id: string,
+    label: string,
+    code: string,
+    fields: Pick<InviteLink, "uses" | "max_uses" | "expires_at" | "state"> & Partial<InviteLink>,
+  ): InviteLink => ({
+    invite_link_id: id,
+    label,
+    organisation: dhsc,
+    cohorts: [],
+    allowed_domains: ["dhsc.example"],
+    revoked_at: null,
+    created_at: iso(20 * DAY),
+    url: `https://policy-atlas.example/#invite=${code}`,
+    ...fields,
+  });
+  return [
+    link(LINK_ACTIVE, "DHSC pilot", "K7Q2-M9XD-3FHP", {
+      cohorts: [{ cohort_id: DHSC_PILOT, name: "DHSC pilot 2027" }],
+      allowed_domains: ["dhsc.example", "ukhsa.example"],
+      uses: 63,
+      max_uses: 120,
+      expires_at: iso(-80 * DAY),
+      state: "active",
+    }),
+    link("00000000-0000-4000-8000-0000000000a2", "Treasury workshop", "T4WR-8KQN-2MZE", {
+      organisation: policyLab,
+      allowed_domains: ["hmt.example"],
+      uses: 40,
+      max_uses: 40,
+      expires_at: iso(-55 * DAY),
+      state: "full",
+    }),
+    link("00000000-0000-4000-8000-0000000000a3", "Autumn test", "A9TS-3XPV-7HRK", {
+      organisation: nesta,
+      allowed_domains: ["nesta.example"],
+      uses: 3,
+      max_uses: 10,
+      expires_at: iso(16 * DAY),
+      state: "expired",
+    }),
+    link("00000000-0000-4000-8000-0000000000a4", "Old pilot", "P2DX-6NWQ-4FTB", {
+      uses: 12,
+      max_uses: 50,
+      expires_at: iso(-6 * DAY),
+      revoked_at: iso(2 * DAY),
+      state: "revoked",
+    }),
   ];
 }
 
@@ -209,6 +287,7 @@ export function requestFixtures(): Requests {
       account_user_id: null,
       account_created_at: null,
       note: null,
+      invite: { label: "DHSC pilot", reason: "wrong_domain" },
     },
     {
       entry_id: "00000000-0000-4000-8000-0000000000e2",

@@ -7,7 +7,7 @@ import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { PageHeader, PagePrimary } from "../../ui/brand/PageHeader";
 import { OpsApiError, useCohorts, useDeleteCohort, useSaveCohort, type Cohort } from "../api";
-import { limitWord, plural } from "../format";
+import { limitWord, plural, sentence } from "../format";
 import {
   ACTIONS_TD_CLASS,
   ACTIONS_TH_CLASS,
@@ -355,10 +355,4 @@ function CohortDialog({
       </form>
     </Dialog>
   );
-}
-
-/** A command's refusal as a sentence: first letter up, a full stop at the end. */
-function sentence(message: string): string {
-  const text = message.charAt(0).toUpperCase() + message.slice(1);
-  return /[.!?]$/.test(text) ? text : `${text}.`;
 }

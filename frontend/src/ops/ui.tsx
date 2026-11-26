@@ -4,6 +4,7 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "rea
 import { Button } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { InfoHint } from "../ui/brand/InfoHint";
+import { MultiSelect } from "../ui/brand/MultiSelect";
 import { SortArrow, type SortOrder } from "../ui/brand/SortableColumnHeader";
 import { ChevronIcon, MoreIcon, SearchIcon, iconButtonClass, ICON_ROW } from "../ui/brand/icons";
 import { CAPTION_LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
@@ -13,7 +14,7 @@ import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { SHEET_SCRIM_CLASS } from "../ui/radix/Sheet";
 import { useToast } from "../ui/radix/Toast";
 import { portalContainer } from "../ui/radix/portal";
-import { OpsApiError, unwrap, useOpsAction, type Organisation } from "./api";
+import { OpsApiError, unwrap, useCohorts, useOpsAction, type Organisation } from "./api";
 
 /* The ops pages' own pieces, built from the shared design system. */
 
@@ -377,6 +378,53 @@ export function OrganisationSelect({
   );
 }
 
+/**
+ * "Cohorts (optional)": the shared multi-select over the cohorts, each
+ * chosen one a removable chip under it.
+ */
+export function CohortsField({
+  id,
+  values,
+  onChange,
+  help,
+  disabled,
+}: {
+  id: string;
+  values: readonly string[];
+  onChange: (values: string[]) => void;
+  help?: string;
+  disabled?: boolean;
+}) {
+  const cohorts = useCohorts();
+  return (
+    <Field id={id} label="Cohorts (optional)" help={help}>
+      <MultiSelect
+        id={id}
+        label="Cohorts"
+        options={(cohorts.data ?? []).map((cohort) => ({ value: cohort.cohort_id, label: cohort.name }))}
+        values={values}
+        onChange={onChange}
+        placeholder="Add a cohort"
+        filterLabel="Find a cohort"
+        empty="No cohorts yet."
+        disabled={disabled}
+      />
+    </Field>
+  );
+}
+
+/** The chosen cohorts' names, in the order chosen. */
+export function useCohortNames() {
+  const cohorts = useCohorts();
+  return (ids: readonly string[]) =>
+    ids.flatMap((id) => cohorts.data?.find((cohort) => cohort.cohort_id === id)?.name ?? []);
+}
+
+/** A toast's second sentence when cohorts were chosen: "<summary>. Added to A, B." */
+export function withCohorts(summary: string, names: readonly string[]): string {
+  return names.length === 0 ? summary : `${summary}. Added to ${names.join(", ")}.`;
+}
+
 /** A value a column sorts by; empty values always sort last. */
 export type SortValue = string | number | null | undefined;
 
@@ -509,6 +557,9 @@ export function FormHeader({ back, title, line }: { back: ReactNode; title: stri
     </header>
   );
 }
+
+/** A form page's card: Paper on the ground, a Line 2 hairline, the paper weight. */
+export const FORM_CARD_CLASS = "flex flex-col gap-6 border border-line-2 bg-paper p-6 shadow-paper max-md:p-4";
 
 /** A ruled panel beside or below a page's content, under a pane heading. */
 export function Panel({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
