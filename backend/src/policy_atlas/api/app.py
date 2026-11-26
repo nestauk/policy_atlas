@@ -540,14 +540,12 @@ def _ops_lifespan(
             image_store = LocalUploadStore(Path(os.environ.get(DIR_ENV, ".uploads")))
         app.state.announcement_image_store = image_store
         if mail_settings is not None:
-            import boto3
-
             from policy_atlas.ops.announcements import resume_all
-            from policy_atlas.ops.mail import SesMailer
+            from policy_atlas.ops.mail import SesMailer, ses_client
 
-            # Built like the Cognito client: credentials come from the task
-            # role; the region is the pool's (or the default when there is none).
-            mailer = SesMailer(boto3.client("sesv2", region_name=identity.region), mail_settings)
+            # Credentials come from the task role; the region is the pool's (or
+            # the default when there is none).
+            mailer = SesMailer(ses_client(identity.region), mail_settings)
             app.state.mailer = mailer
             # Finish any send a stop cut short.
             resume_all(engine, mailer, mail_settings)

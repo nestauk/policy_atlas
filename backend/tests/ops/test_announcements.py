@@ -16,7 +16,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import (
+    ClientError,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 from sqlalchemy import create_engine, event, func, select, text, update
 from sqlalchemy.engine import Connection, Engine
 from structlog.testing import capture_logs
@@ -396,21 +402,123 @@ def test_the_claim_waits_for_a_locked_account_and_decides_on_the_committed_value
     assert _rows(engine, announcement_id)[person] == ("left_out", "unsubscribed")
 
 
-def test_a_mailer_error_marks_the_row_failed_and_the_sender_goes_on(
-    engine: Engine, pa_ops: Engine
+def _ses_error(status: int, code: str, to: str) -> ClientError:
+    """An SES error answer; its message holds the address, so a test sees whether it leaks."""
+    response: Any = {
+        "Error": {"Code": code, "Message": f"refused {to}"},
+        "ResponseMetadata": {"HTTPStatusCode": status},
+    }
+    return ClientError(response, "SendEmail")
+
+
+NOT_SENT: list[tuple[Callable[[str], Exception], str]] = [
+    (lambda to: _ses_error(400, "MessageRejected", to), "MessageRejected"),
+    (lambda to: _ses_error(429, "TooManyRequestsException", to), "TooManyRequestsException"),
+    (lambda to: EndpointConnectionError(endpoint_url=to), "EndpointConnectionError"),
+    (lambda to: ConnectTimeoutError(endpoint_url=to), "ConnectTimeoutError"),
+]
+UNCLEAR: list[tuple[Callable[[str], Exception], str]] = [
+    (lambda to: ReadTimeoutError(endpoint_url=to), "ReadTimeoutError"),
+    (lambda to: ConnectionClosedError(endpoint_url=to), "ConnectionClosedError"),
+    (lambda to: _ses_error(500, "InternalFailure", to), "InternalFailure"),
+    (lambda to: RuntimeError(to), "RuntimeError"),
+]
+
+
+@pytest.mark.parametrize(("make_error", "code"), NOT_SENT, ids=[code for _, code in NOT_SENT])
+def test_an_error_that_proves_nothing_went_marks_failed_and_retry_sends_it(
+    engine: Engine, pa_ops: Engine, make_error: Callable[[str], Exception], code: str
 ) -> None:
-    rejected, other = _people(engine, 2)
-    announcement_id = _announce(pa_ops, Audience(user_ids=(rejected, other)))
+    refused, other = _people(engine, 2)
+    announcement_id = _announce(pa_ops, Audience(user_ids=(refused, other)))
     mailer = MemoryMailer(SETTINGS)
-    mailer.on_send = _reject(_email_of(engine, rejected))
+    mailer.on_send = _raise_for(make_error, _email_of(engine, refused))
 
     send_pending(pa_ops, mailer, SETTINGS, announcement_id, pause=0)
 
+    assert _rows(engine, announcement_id) == {refused: ("failed", code), other: ("sent", None)}
+    assert _sent_to(mailer) == [_email_of(engine, other)]
+
+    mailer.on_send = None
+    with pa_ops.begin() as conn:
+        assert retry_failed(conn, actor="ops-actor", announcement_id=announcement_id).moved == 1
+    send_pending(pa_ops, mailer, SETTINGS, announcement_id, pause=0)
+
+    assert _sent_to(mailer) == [_email_of(engine, other), _email_of(engine, refused)]
+    assert _rows(engine, announcement_id)[refused] == ("sent", None)
+
+
+@pytest.mark.parametrize(("make_error", "code"), UNCLEAR, ids=[code for _, code in UNCLEAR])
+def test_an_unclear_error_leaves_sending_and_neither_retry_nor_resume_sends_again(
+    engine: Engine, pa_ops: Engine, make_error: Callable[[str], Exception], code: str
+) -> None:
+    unclear, other = _people(engine, 2)
+    address = _email_of(engine, unclear)
+    announcement_id = _announce(pa_ops, Audience(user_ids=(unclear, other)))
+    mailer = MemoryMailer(SETTINGS)
+    calls: list[str] = []
+
+    def hook(to: str) -> None:
+        calls.append(to)
+        if to == address:
+            raise make_error(to)
+
+    mailer.on_send = hook
+    with capture_logs() as logs:
+        send_pending(pa_ops, mailer, SETTINGS, announcement_id, pause=0)
+
     assert _rows(engine, announcement_id) == {
-        rejected: ("failed", "MessageRejected"),
+        unclear: ("sending", None),
         other: ("sent", None),
     }
-    assert _sent_to(mailer) == [_email_of(engine, other)]
+    [line] = [entry for entry in logs if entry["event"] == "announcement.send_unconfirmed"]
+    assert (line["announcement_id"], line["user_id"], line["reason"]) == (
+        str(announcement_id), unclear, code,
+    )
+    [finished] = [entry for entry in logs if entry["event"] == "announcement.sender_finished"]
+    assert (finished["sent"], finished["failed"], finished["unconfirmed"]) == (1, 0, 1)
+    assert address not in repr(logs)
+
+    mailer.on_send = calls.append
+    with pa_ops.begin() as conn:
+        assert retry_failed(conn, actor="ops-actor", announcement_id=announcement_id).moved == 0
+    send_pending(pa_ops, mailer, SETTINGS, announcement_id, pause=0)
+    for thread in resume_all(pa_ops, mailer, SETTINGS):
+        thread.join(WAIT)
+
+    assert calls.count(address) == 1
+    assert _rows(engine, announcement_id)[unclear] == ("sending", None)
+
+
+def test_two_announcements_at_once_share_one_send_slot(engine: Engine, pa_ops: Engine) -> None:
+    pause = 0.02
+    first = _announce(pa_ops, Audience(user_ids=tuple(_people(engine, 3))))
+    second = _announce(pa_ops, Audience(user_ids=tuple(_people(engine, 3))))
+    mailer = MemoryMailer(SETTINGS)
+    spans: list[tuple[float, float]] = []
+
+    def hook(_to: str) -> None:
+        start = time.monotonic()
+        time.sleep(0.005)
+        spans.append((start, time.monotonic()))
+
+    mailer.on_send = hook
+    start = threading.Barrier(2)
+
+    def sender(announcement_id: uuid.UUID) -> None:
+        start.wait()
+        send_pending(pa_ops, mailer, SETTINGS, announcement_id, pause=pause)
+
+    threads = [threading.Thread(target=sender, args=(i,)) for i in (first, second)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(WAIT)
+
+    assert len(spans) == 6
+    spans.sort()
+    for (_, ended), (began, _) in zip(spans, spans[1:], strict=False):
+        assert began - ended >= pause
 
 
 def test_a_stop_after_the_mailer_accepted_leaves_sending_and_nothing_sends_again(
@@ -453,7 +561,10 @@ def test_retry_sends_the_failed_rows_and_leaves_sent_and_sending_alone(
     first, second, stuck, done = _people(engine, 4)
     announcement_id = _announce(pa_ops, Audience(user_ids=(first, second, stuck, done)))
     mailer = MemoryMailer(SETTINGS)
-    mailer.on_send = _reject(_email_of(engine, first), _email_of(engine, second))
+    mailer.on_send = _raise_for(
+        lambda to: _ses_error(400, "MessageRejected", to),
+        _email_of(engine, first), _email_of(engine, second),
+    )
     send_pending(pa_ops, mailer, SETTINGS, announcement_id, pause=0)
     with engine.begin() as conn:
         conn.execute(
@@ -518,7 +629,9 @@ def test_logs_and_audit_rows_of_a_send_hold_no_address_or_subject(
     rejected, other = _people(engine, 2)
     addresses = [_email_of(engine, rejected), _email_of(engine, other)]
     mailer = MemoryMailer(SETTINGS)
-    mailer.on_send = _reject(addresses[0])
+    mailer.on_send = _raise_for(
+        lambda to: _ses_error(400, "MessageRejected", to), addresses[0]
+    )
     actor = fresh_sub("operator")
 
     with capture_logs() as logs:
@@ -549,17 +662,12 @@ def _address(conn: Connection, user_id: str) -> str:
     return email
 
 
-def _reject(*addresses: str) -> Callable[[str], None]:
-    """An ``on_send`` hook that fails like SES does for the given addresses.
-
-    The error message holds the address, so a test sees whether it leaks.
-    """
+def _raise_for(make_error: Callable[[str], Exception], *addresses: str) -> Callable[[str], None]:
+    """An ``on_send`` hook that raises ``make_error(to)`` for the given addresses."""
 
     def hook(to: str) -> None:
         if to in addresses:
-            raise ClientError(
-                {"Error": {"Code": "MessageRejected", "Message": f"rejected {to}"}}, "SendEmail"
-            )
+            raise make_error(to)
 
     return hook
 

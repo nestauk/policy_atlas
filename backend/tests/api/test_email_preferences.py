@@ -167,7 +167,17 @@ def _access_line(path_with_query: str) -> str:
     return AccessFormatter("%(message)s", use_colors=False).format(record)
 
 
-@pytest.mark.parametrize("path", ["/api/v1/unsubscribe", "/api/v1/resubscribe"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/unsubscribe",
+        "/api/v1/resubscribe",
+        "/api/v1//unsubscribe",
+        "/API/V1/Unsubscribe",
+        "/api/v1/resubscribe//",
+        "/api/v1/%75nsubscribe",
+    ],
+)
 def test_access_log_line_holds_no_token(tmp_path: Path, path: str) -> None:
     create_app(settings=_settings(tmp_path))
     token = str(uuid.uuid4())

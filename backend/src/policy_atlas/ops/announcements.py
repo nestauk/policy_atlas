@@ -10,7 +10,8 @@ Four steps, in the order an announcement goes through them:
   one audit row, in the caller's transaction. It sends nothing.
 - :func:`send_pending` sends to each ``pending`` row, one at a time. It marks a
   row ``sending`` before it calls the mailer and never touches a ``sending`` row
-  again: if the server stops between the two, the person may or may not have the
+  again: if the server stops between the two, or the mailer fails in a way that
+  does not prove the email did not go, the person may or may not have the
   email, and the operator decides (at most one copy, never two).
 - :func:`retry_failed` puts the ``failed`` rows back to ``pending``.
 
@@ -52,10 +53,18 @@ from policy_atlas.ops.mail import (
     Message,
     Suppressed,
     failure_code,
+    proven_not_sent,
     render_announcement,
 )
 
 log = structlog.get_logger()
+
+# ponytail: one send slot for the whole process, held for "send one email, then
+# pause", so every sender thread together stays at about 5 emails a second.
+# The ceiling is one ops process: two ops tasks would each have their own slot
+# (the service runs one task), and one sender thread per announcement is fine up
+# to about 1,000 recipients. Beyond either, a queue and a separate worker.
+_SEND_SLOT = threading.Lock()
 
 Status = Literal["pending", "left_out"]
 
@@ -348,14 +357,21 @@ def send_pending(
 
     Each row is claimed in its own short transaction (so two senders never take
     the same row), the email goes out with no transaction open, and the result is
-    written in a second transaction. A ``sending`` row is never touched.
+    written in a second transaction. A ``sending`` row is never touched again.
+
+    A mailer error that proves the email did not go (see
+    :func:`~policy_atlas.ops.mail.proven_not_sent`) marks the row ``failed``, so
+    a retry can send it. Any other error leaves it ``sending`` ("Not
+    confirmed"): the email may have gone, and sending again could give the
+    person a second copy.
 
     Args:
         engine: The database; each step takes its own connection.
         mailer: Sends the emails.
         settings: The addresses the email layout uses.
         announcement_id: The announcement to send.
-        pause: Seconds to wait between emails.
+        pause: Seconds to wait after each email; every sender in the process
+            shares one slot, so the pause limits them all together.
 
     Raises:
         NotFound: No announcement has this id.
@@ -373,14 +389,13 @@ def send_pending(
     kind: Kind = row["kind"]
     message = Message(**{f.name: row[f.name] for f in fields(Message)})
     counts: Counter[str] = Counter()
-    # ponytail: one sender thread per announcement, a fixed pause for at most 5
-    # emails a second; fine up to about 1,000 recipients. Beyond that, a queue
-    # and a separate worker.
     while (claim := _claim(engine, announcement_id, kind)) is not None:
         user_id, status, email, token = claim
         if status == "left_out":
             counts["left_out"] += 1
             continue
+        error: Exception | None = None
+        unclear = False
         try:
             rendered = render_announcement(
                 message,
@@ -388,26 +403,37 @@ def send_pending(
                 unsubscribe_token=str(token) if kind == "product_update" else None,
                 settings=settings,
             )
-            mailer.send(
-                to=email, subject=rendered.subject, html=rendered.html, text=rendered.text,
-                headers=rendered.headers,
-            )
-        except Exception as error:
-            reason = failure_code(error)
-            _finish(engine, announcement_id, user_id, "failed", reason)
-            counts["failed"] += 1
-            log.warning(
-                "announcement.send_failed", announcement_id=str(announcement_id),
-                user_id=user_id, reason=reason,
-            )
+        except Exception as render_error:  # before the mailer: nothing went
+            error = render_error
         else:
+            with _SEND_SLOT:
+                try:
+                    mailer.send(
+                        to=email, subject=rendered.subject, html=rendered.html,
+                        text=rendered.text, headers=rendered.headers,
+                    )
+                except Exception as send_error:
+                    error, unclear = send_error, not proven_not_sent(send_error)
+                if pause:
+                    time.sleep(pause)
+        if error is None:
             _finish(engine, announcement_id, user_id, "sent", None)
             counts["sent"] += 1
-        if pause:
-            time.sleep(pause)
+            continue
+        reason = failure_code(error)
+        ids = {"announcement_id": str(announcement_id), "user_id": user_id, "reason": reason}
+        if unclear:
+            # Left ``sending``: nothing sends to this row again.
+            counts["unconfirmed"] += 1
+            log.warning("announcement.send_unconfirmed", **ids)
+        else:
+            _finish(engine, announcement_id, user_id, "failed", reason)
+            counts["failed"] += 1
+            log.warning("announcement.send_failed", **ids)
     log.info(
         "announcement.sender_finished", announcement_id=str(announcement_id),
-        sent=counts["sent"], failed=counts["failed"], left_out=counts["left_out"],
+        sent=counts["sent"], failed=counts["failed"], unconfirmed=counts["unconfirmed"],
+        left_out=counts["left_out"],
     )
 
 

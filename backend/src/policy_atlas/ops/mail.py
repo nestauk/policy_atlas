@@ -28,7 +28,13 @@ from importlib.resources import files
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 from urllib.parse import quote
 
-from botocore.exceptions import ClientError
+import boto3
+from botocore.config import Config
+from botocore.exceptions import (
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+)
 
 from policy_atlas.ops.errors import InvalidMessage
 
@@ -180,6 +186,31 @@ def build_message(
     return message
 
 
+def ses_client(region: str | None) -> SESV2Client:
+    """Build the SES client the ops server sends with.
+
+    The client tries each call once: an automatic retry after a lost answer
+    could send a second copy. A refusal for sending too fast (throttling) then
+    reaches the caller as an error instead of being retried. The timeouts are
+    short so a stuck call does not hold up the sender for long.
+
+    Args:
+        region: The AWS region; ``None`` takes the default.
+
+    Returns:
+        The client; credentials come from the environment (the task role).
+    """
+    return boto3.client(
+        "sesv2",
+        region_name=region,
+        config=Config(
+            retries={"total_max_attempts": 1, "mode": "standard"},
+            connect_timeout=5,
+            read_timeout=15,
+        ),
+    )
+
+
 class SesMailer:
     """Sends through Amazon SES (version 2 of its API) as raw email.
 
@@ -231,7 +262,7 @@ class MemoryMailer:
         sent: Every email accepted, in order.
         suppression: The suppression list a test fills, keyed by lower-cased address.
         on_send: Called with the recipient before an email is kept; a test makes
-            it raise to stand for a failed send.
+            it raise whatever error it needs to stand for a failed send.
     """
 
     def __init__(self, settings: MailSettings) -> None:
@@ -279,6 +310,33 @@ def failure_code(error: Exception) -> str:
         if code:
             return str(code)
     return type(error).__name__
+
+
+def proven_not_sent(error: Exception) -> bool:
+    """Whether a failed mailer call proves the email did not go.
+
+    True only when the message could not be built (:class:`InvalidMessage`, or
+    the ``ValueError`` the header guard raises), when no connection to SES was
+    made (``EndpointConnectionError``, ``ConnectTimeoutError``), or when SES
+    answered with a refusal of the request (an HTTP status from 400 to 499,
+    which includes throttling and ``MessageRejected``). Anything else, such as
+    an SES server error (5xx), a read timeout or a closed connection, is
+    unclear: SES may have accepted the email and the answer was lost.
+
+    Args:
+        error: What the mailer raised.
+
+    Returns:
+        ``True`` when sending again cannot give the person a second copy.
+    """
+    if isinstance(
+        error, InvalidMessage | ValueError | EndpointConnectionError | ConnectTimeoutError
+    ):
+        return True
+    if isinstance(error, ClientError):
+        status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        return isinstance(status, int) and 400 <= status < 500
+    return False
 
 
 @dataclass(frozen=True)

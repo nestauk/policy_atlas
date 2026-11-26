@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import pytest
+from botocore.exceptions import EndpointConnectionError
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.engine import Engine
@@ -611,7 +612,7 @@ def test_no_log_line_or_audit_row_holds_an_address_the_subject_or_the_body(
 
     def refuse_first(to: str) -> None:
         if to == addresses[0]:
-            raise ConnectionError(to)
+            raise EndpointConnectionError(endpoint_url=to)
 
     ops.mailer.on_send = refuse_first
     with capture_logs() as logs:

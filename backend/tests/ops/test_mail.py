@@ -9,6 +9,14 @@ from typing import Any
 
 import boto3
 import pytest
+from botocore.awsrequest import AWSResponse
+from botocore.exceptions import (
+    ClientError,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 from botocore.stub import ANY, Stubber
 
 from policy_atlas.ops.errors import InvalidMessage
@@ -18,7 +26,9 @@ from policy_atlas.ops.mail import (
     Message,
     Rendered,
     SesMailer,
+    proven_not_sent,
     render_announcement,
+    ses_client,
 )
 
 SETTINGS = MailSettings(
@@ -223,3 +233,62 @@ def test_ses_suppressed_reads_every_page_and_maps_reasons(
         "ana@example.com": "bounce",
         "bo@example.com": "complaint",
     }
+
+
+def _ses_error(status: int, code: str) -> ClientError:
+    response: Any = {"Error": {"Code": code}, "ResponseMetadata": {"HTTPStatusCode": status}}
+    return ClientError(response, "SendEmail")
+
+
+@pytest.mark.parametrize(
+    ("error", "not_sent"),
+    [
+        (InvalidMessage("the subject is empty", field="subject"), True),
+        (ValueError("Header values may not contain linefeed"), True),
+        (EndpointConnectionError(endpoint_url="https://email.example"), True),
+        (ConnectTimeoutError(endpoint_url="https://email.example"), True),
+        (_ses_error(400, "MessageRejected"), True),
+        (_ses_error(429, "TooManyRequestsException"), True),
+        (_ses_error(500, "InternalFailure"), False),
+        (_ses_error(503, "ServiceUnavailable"), False),
+        (ClientError({"Error": {"Code": "MessageRejected"}}, "SendEmail"), False),
+        (ReadTimeoutError(endpoint_url="https://email.example"), False),
+        (ConnectionClosedError(endpoint_url="https://email.example"), False),
+        (OSError("connection reset"), False),
+        (RuntimeError("anything else"), False),
+    ],
+)
+def test_only_an_error_that_proves_the_email_did_not_go_counts_as_not_sent(
+    error: Exception, not_sent: bool
+) -> None:
+    assert proven_not_sent(error) is not_sent
+
+
+class _Body:
+    def stream(self, **_: Any) -> Iterator[bytes]:
+        yield b'{"message": "internal failure"}'
+
+
+def test_the_ses_client_tries_a_send_once_and_has_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    client = ses_client("eu-west-2")
+    attempts: list[str] = []
+
+    def answer_500(request: Any, **_: Any) -> Any:
+        attempts.append(request.url)
+        no_headers: Any = {}
+        return AWSResponse(request.url, 500, no_headers, _Body())
+
+    client.meta.events.register("before-send.sesv2.SendEmail", answer_500)
+    with pytest.raises(ClientError):
+        SesMailer(client, SETTINGS).send(
+            to="ana@example.com", subject="News", html="<p>x</p>", text="x", headers={}
+        )
+
+    assert len(attempts) == 1
+    config: Any = client.meta.config
+    assert config.connect_timeout <= 10
+    assert config.read_timeout <= 30
