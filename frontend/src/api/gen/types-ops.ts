@@ -471,8 +471,12 @@ export interface components {
         /**
          * ApproveRequest
          * @description Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.
+         *
+         *     The person joins each cohort in ``cohort_ids``.
          */
         ApproveRequest: {
+            /** Cohort Ids */
+            cohort_ids?: string[];
             /**
              * Org Id
              * Format: uuid
@@ -719,9 +723,11 @@ export interface components {
          *     The organisation is required (contract B4): a browser-created account is
          *     never unenrolled. The route calls the ensure-account command, so an
          *     address that already has an unenrolled account is enrolled without a
-         *     second invitation.
+         *     second invitation. The person joins each cohort in ``cohort_ids``.
          */
         PersonCreate: {
+            /** Cohort Ids */
+            cohort_ids?: string[];
             /** Display Name */
             display_name: string;
             /** Email */

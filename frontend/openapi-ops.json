@@ -44,8 +44,17 @@
       },
       "ApproveRequest": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.",
+        "description": "Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.\n\nThe person joins each cohort in ``cohort_ids``.",
         "properties": {
+          "cohort_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Cohort Ids",
+            "type": "array"
+          },
           "org_id": {
             "format": "uuid",
             "title": "Org Id",
@@ -556,8 +565,17 @@
       },
       "PersonCreate": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation.",
+        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation. The person joins each cohort in ``cohort_ids``.",
         "properties": {
+          "cohort_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Cohort Ids",
+            "type": "array"
+          },
           "display_name": {
             "maxLength": 200,
             "minLength": 1,

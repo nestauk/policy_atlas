@@ -417,6 +417,7 @@ def create_person(
     """Ensure a person is invited and enrolled in the requested organisation."""
     cognito, pool_id = _identity(identity)
     org = _org(conn, body.org_id)
+    cohorts = [_cohort(conn, cohort_id) for cohort_id in body.cohort_ids]
     try:
         enrolled = commands.ensure_account_enrolled(
             conn, cognito, pool_id=pool_id, email=body.email,
@@ -435,6 +436,7 @@ def create_person(
                                        target=enrolled.user_id, outcome=outcome)
     _queue_log(request, actor=actor.user_id, action="person.create", target=enrolled.user_id,
                outcome=outcome, action_id=action_id)
+    _join_cohorts(request, conn, actor=actor.user_id, user_id=enrolled.user_id, cohorts=cohorts)
     row = conn.execute(
         select(app_user, organisation.c.org_id.label("organisation_id"),
                organisation.c.name.label("organisation_name"))
@@ -442,7 +444,8 @@ def create_person(
         .where(app_user.c.user_id == enrolled.user_id)
     ).mappings().one()
     return PersonCreatedOut(
-        person=_person_out(conn, row, settings=settings, task_counts={}),
+        person=_person_out(conn, row, settings=settings, task_counts={},
+                           cohorts=_cohorts_of(conn, [enrolled.user_id])),
         invitation_sent=enrolled.invitation_sent,
         reactivated=enrolled.reactivated,
     )
@@ -603,6 +606,21 @@ def _cohort(conn: Connection, cohort_id: uuid.UUID) -> commands.Cohort:
         raise HTTPException(404, str(exc)) from None
 
 
+def _join_cohorts(
+    request: Request, conn: Connection, *, actor: str, user_id: str,
+    cohorts: list[commands.Cohort],
+) -> None:
+    """Add a person to each cohort, auditing only the memberships that are new.
+
+    Runs on the caller's transaction after the enrolment: a failure here rolls
+    the enrolment back too.
+    """
+    for target in cohorts:
+        if commands.add_to_cohort(conn, target=target, user_id=user_id).changed:
+            _audit(request, conn, actor=actor, action="cohort.add",
+                   target=f"{user_id}/cohort/{target.cohort_id}")
+
+
 @router.post("/people/cohort-add", response_model=BulkOut)
 def add_people_to_cohort(
     body: BulkCohort, request: Request, actor: Annotated[AuthenticatedUser, Depends(require_ops)],
@@ -732,6 +750,7 @@ def approve_request(
     """Approve a waitlist request using the shared sweep command."""
     cognito, pool_id = _identity(identity)
     org = _org(conn, body.org_id)
+    cohorts = [_cohort(conn, cohort_id) for cohort_id in body.cohort_ids]
     try:
         approved = commands.approve_request(
             conn, cognito, pool_id=pool_id, entry_id=entry_id, org=org, now=_now()
@@ -750,6 +769,8 @@ def approve_request(
     )
     _queue_log(request, actor=actor.user_id, action="request.approve", target=str(entry_id),
                outcome=outcome, action_id=action_id)
+    _join_cohorts(request, conn, actor=actor.user_id, user_id=approved.enrolment.user_id,
+                  cohorts=cohorts)
     row = conn.execute(
         select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
     ).mappings().one()

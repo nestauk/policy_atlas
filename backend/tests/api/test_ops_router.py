@@ -28,6 +28,7 @@ from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import (
     app_user,
+    cohort_member,
     ops_action,
     organisation,
     organisation_domain,
@@ -1127,4 +1128,158 @@ def test_approving_a_rejected_request_reverses_the_decision(ops: Harness) -> Non
         assert conn.execute(
             select(waitlist_entry.c.rejected_at).where(waitlist_entry.c.entry_id == entry_id)
         ).scalar_one() is None
+
+
+# --- cohorts at Add person and Approve -------------------------------------
+
+
+def _new_cohort(h: Harness) -> str:
+    """Create one cohort through the route and return its id."""
+    response, _ = _post(h, "/api/v1/ops/cohorts", _cohort_body(f"Group {uuid.uuid4()}"))
+    return str(response.json()["cohort_id"])
+
+
+def _members(h: Harness, user_id: str) -> set[str]:
+    """The cohort ids one person is in."""
+    with h.engine.connect() as conn:
+        return {str(c) for c in conn.execute(
+            select(cohort_member.c.cohort_id).where(cohort_member.c.user_id == user_id)
+        ).scalars()}
+
+
+def _cohort_adds(h: Harness) -> list[str]:
+    """The targets of this caller's ``cohort.add`` audit rows, oldest first."""
+    return [row["target"] for row in _audit(h) if row["action"] == "cohort.add"]
+
+
+def test_create_person_joins_the_chosen_cohorts_and_audits_each(ops: Harness) -> None:
+    org_id, first, second = _seed_org(ops), _new_cohort(ops), _new_cohort(ops)
+    email, sub = unique_email("grouped"), f"grouped-{uuid.uuid4()}"
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    response, lines = _post(ops, "/api/v1/ops/people", {
+        "email": email, "display_name": "Grouped", "org_id": str(org_id),
+        "cohort_ids": [first, second]})
+    assert response.status_code == 201, response.text
+    assert {c["cohort_id"] for c in response.json()["person"]["cohorts"]} == {first, second}
+    assert _members(ops, sub) == {first, second}
+    assert _cohort_adds(ops) == [f"{sub}/cohort/{first}", f"{sub}/cohort/{second}"]
+    assert [line["action"] for line in lines] == ["person.create", "cohort.add", "cohort.add"]
+
+
+def test_an_unknown_cohort_is_not_found_before_any_cognito_call(ops: Harness) -> None:
+    """Nothing is queued on the Cognito double, so any call would fail the request."""
+    org_id, known = _seed_org(ops), _new_cohort(ops)
+    response, lines = _post(ops, "/api/v1/ops/people", {
+        "email": unique_email("lost"), "display_name": "Lost", "org_id": str(org_id),
+        "cohort_ids": [known, str(uuid.uuid4())]})
+    assert response.status_code == 404, response.text
+    assert lines == [] and _cohort_adds(ops) == []
+
+
+@pytest.mark.parametrize(("count", "repeat"), [(11, False), (2, True)])
+def test_cohort_ids_refuse_more_than_ten_or_a_repeat(
+    ops: Harness, count: int, repeat: bool
+) -> None:
+    ids = [str(uuid.uuid4()) for _ in range(count)]
+    if repeat:
+        ids[1] = ids[0]
+    for path, body in (
+        ("/api/v1/ops/people", {"email": unique_email("x"), "display_name": "X"}),
+        (f"/api/v1/ops/requests/{uuid.uuid4()}/approve", {}),
+    ):
+        response, _ = _post(ops, path, {**body, "org_id": str(uuid.uuid4()), "cohort_ids": ids})
+        assert response.status_code == 422, (path, response.text)
+
+
+def test_an_existing_membership_writes_no_audit_row(ops: Harness) -> None:
+    org_id, held, new = _seed_org(ops), _new_cohort(ops), _new_cohort(ops)
+    known = _seed_person(ops, org_id=org_id, label="member")
+    _post(ops, "/api/v1/ops/people/cohort-add", {"user_ids": [known], "cohort_id": held})
+    row = _user(ops, known)
+    assert row is not None
+    expect_lookup(ops.stubber, email=row["email"], sub=known)
+    expect_enabled(ops.stubber, sub=known)
+    response, _ = _post(ops, "/api/v1/ops/people", {
+        "email": row["email"], "display_name": "Member", "org_id": str(org_id),
+        "cohort_ids": [held, new]})
+    assert response.status_code == 201, response.text
+    assert _members(ops, known) == {held, new}
+    # The first row is the bulk add above; this call wrote only the new membership.
+    assert _cohort_adds(ops) == [f"{known}/cohort/{held}", f"{known}/cohort/{new}"]
+
+
+def test_a_refused_create_leaves_no_membership(ops: Harness) -> None:
+    here, there, group = _seed_org(ops), _seed_org(ops), _new_cohort(ops)
+    elsewhere = _seed_person(ops, org_id=there, label="elsewhere")
+    row = _user(ops, elsewhere)
+    assert row is not None
+    expect_lookup(ops.stubber, email=row["email"], sub=elsewhere)
+    expect_enabled(ops.stubber, sub=elsewhere)
+    response, _ = _post(ops, "/api/v1/ops/people", {
+        "email": row["email"], "display_name": "X", "org_id": str(here), "cohort_ids": [group]})
+    assert response.status_code == 409, response.text
+    assert _members(ops, elsewhere) == set() and _cohort_adds(ops) == []
+
+
+def test_a_failed_cohort_write_undoes_the_enrolment_and_a_retry_sends_no_second_invitation(
+    ops: Harness,
+) -> None:
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    email, sub = unique_email("retry"), f"retry-{uuid.uuid4()}"
+    body = {"email": email, "display_name": "Retry", "org_id": str(org_id),
+            "cohort_ids": [group]}
+    with ops.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text(
+            "CREATE FUNCTION pa_test_refuse_member() RETURNS trigger LANGUAGE plpgsql AS $$ "
+            "BEGIN RAISE EXCEPTION 'refused by test trigger'; END $$"))
+        conn.execute(text(
+            "CREATE TRIGGER trg_pa_test_refuse_member BEFORE INSERT ON cohort_member "
+            "FOR EACH ROW EXECUTE FUNCTION pa_test_refuse_member()"))
+    try:
+        expect_lookup(ops.stubber, email=email, sub=None)
+        expect_create(ops.stubber, email=email, sub=sub)
+        failed, lines = _post(ops, "/api/v1/ops/people", body)
+    finally:
+        with ops.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text("DROP TRIGGER IF EXISTS trg_pa_test_refuse_member ON cohort_member"))
+            conn.execute(text("DROP FUNCTION IF EXISTS pa_test_refuse_member()"))
+    assert failed.status_code == 500
+    assert _user(ops, sub) is None and lines == []
+    assert [row["action"] for row in _audit(ops)] == ["cohort.create"]
+    # Cognito kept the account; the second call finds it and creates nothing.
+    expect_lookup(ops.stubber, email=email, sub=sub)
+    expect_enabled(ops.stubber, sub=sub)
+    retried, _ = _post(ops, "/api/v1/ops/people", body)
+    assert retried.status_code == 201, retried.text
+    assert retried.json()["invitation_sent"] is False
+    assert _members(ops, sub) == {group}
+
+
+def test_approve_joins_the_chosen_cohorts(ops: Harness) -> None:
+    org_id, group = _seed_org(ops), _new_cohort(ops)
+    email, sub = unique_email("approved"), f"approved-{uuid.uuid4()}"
+    entry_id = _seed_request(ops, email=email)
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    response, _ = _post(ops, f"/api/v1/ops/requests/{entry_id}/approve",
+                        {"org_id": str(org_id), "cohort_ids": [group]})
+    assert response.status_code == 200, response.text
+    assert _members(ops, sub) == {group}
+    assert _cohort_adds(ops) == [f"{sub}/cohort/{group}"]
+
+
+def test_adding_the_same_person_again_sends_no_second_invitation(ops: Harness) -> None:
+    """A file run twice: the second create finds the account in the organisation."""
+    org_id = _seed_org(ops)
+    email, sub = unique_email("twice"), f"twice-{uuid.uuid4()}"
+    body = {"email": email, "display_name": "Twice", "org_id": str(org_id)}
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    assert _post(ops, "/api/v1/ops/people", body)[0].json()["invitation_sent"] is True
+    expect_lookup(ops.stubber, email=email, sub=sub)
+    expect_enabled(ops.stubber, sub=sub)
+    again, _ = _post(ops, "/api/v1/ops/people", body)
+    assert again.status_code == 201, again.text
+    assert again.json()["invitation_sent"] is False
 

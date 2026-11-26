@@ -29,6 +29,8 @@ from .waitlist import WaitlistSignup
 #: validate meaning, these only bound size.
 OPS_NAME_MAX = 200
 OPS_EMAIL_MAX = 320
+#: The most cohorts one Add person or Approve may name.
+OPS_COHORTS_MAX = 10
 #: The most subjects one bulk action takes. The people list is the whole
 #: user base (under a hundred people), so this is a sanity bound, not paging.
 OPS_BULK_MAX = 200
@@ -211,13 +213,33 @@ class PersonOut(BaseModel):
     cohorts: list[CohortRef]
 
 
-class PersonCreate(BaseModel):
+class CohortChoice(BaseModel):
+    """The optional cohorts an Add person or an Approve puts the person in.
+
+    Args:
+        cohort_ids: Up to :data:`OPS_COHORTS_MAX` cohorts, each named once.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cohort_ids: list[uuid.UUID] = Field(default_factory=list, max_length=OPS_COHORTS_MAX)
+
+    @field_validator("cohort_ids")
+    @classmethod
+    def refuse_repeats(cls, cohort_ids: list[uuid.UUID]) -> list[uuid.UUID]:
+        """Refuse a cohort named twice."""
+        if len(set(cohort_ids)) != len(cohort_ids):
+            raise ValueError("a cohort is named more than once")
+        return cohort_ids
+
+
+class PersonCreate(CohortChoice):
     """Body of ``POST /api/v1/ops/people``: create a person in an organisation.
 
     The organisation is required (contract B4): a browser-created account is
     never unenrolled. The route calls the ensure-account command, so an
     address that already has an unenrolled account is enrolled without a
-    second invitation.
+    second invitation. The person joins each cohort in ``cohort_ids``.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -367,9 +389,10 @@ class RequestsOut(BaseModel):
     self_signup: SelfSignupOut
 
 
-class ApproveRequest(BaseModel):
-    """Body of ``POST /api/v1/ops/requests/{entry_id}/approve``."""
+class ApproveRequest(CohortChoice):
+    """Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.
 
-    model_config = ConfigDict(extra="forbid")
+    The person joins each cohort in ``cohort_ids``.
+    """
 
     org_id: uuid.UUID
