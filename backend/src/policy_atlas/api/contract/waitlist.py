@@ -17,6 +17,7 @@ WAITLIST_NAME_MAX = 200
 WAITLIST_ORG_MAX = 200
 WAITLIST_ROLE_MAX = 1000
 WAITLIST_EMAIL_MAX = 320
+WAITLIST_INVITE_CODE_MAX = 64
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -30,6 +31,9 @@ class WaitlistSignup(BaseModel):
         organisation: Optional organisation or employer.
         role_or_reason: Free-text role and/or why they want access.
         website: Leave this field empty.
+        invite_code: The code of an invite link, if the page address held one.
+            Any text up to 64 characters; the route keeps it only when it is
+            well formed, and the answer is the same either way.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -44,6 +48,7 @@ class WaitlistSignup(BaseModel):
     website: str | None = Field(
         default=None, max_length=WAITLIST_ORG_MAX, description="Leave this field empty."
     )
+    invite_code: str | None = Field(default=None, max_length=WAITLIST_INVITE_CODE_MAX)
 
     @field_validator("email")
     @classmethod
