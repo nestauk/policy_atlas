@@ -16,6 +16,7 @@ request that changes the code, and run `make okf-validate`.
 * [Widening an auth boundary needs sweeps for both anonymous and signed-in outsiders](auth-boundary-widening-needs-both-caller-sweeps.md) - when a route becomes public or conditionally public.
 * [A read on the anonymous public leg carries no person's name](public-leg-reads-carry-no-names.md) - when you add a read model served without sign-in.
 * [PyJWT verifies `aud` by default whenever the claim is present](pyjwt-aud-verified-by-default.md) - when you change token verification.
+* [A request size limit in an ASGI middleware: order, disconnect, what tests prove](asgi-body-limit-middleware.md) - when you change the body limit or add a middleware that writes its own reply.
 * [An attacker-chosen cache key cannot bound outbound fetches](bound-the-fetch-not-the-key.md) - when you cache lookups keyed on token content (JWKS).
 * [Cross-process turn correctness lives in the database row](db-row-is-the-single-flight-authority.md) - when you add a guard against two concurrent turns or walks.
 * [A mutation that commits and then waits returns what it made](mutation-never-fails-after-its-commit.md) - when a route commits and then waits for async work.
@@ -98,6 +99,7 @@ request that changes the code, and run `make okf-validate`.
 * [Dispatch gated on a backend capability fails closed](capability-gated-dispatch-fails-closed.md) - when you dispatch on a backend feature.
 * [Server-side request forgery IP pinning lives in the network backend](httpcore-origin-pooling-pinned-ip.md) - when you change live fetching.
 * [A 403 from a document host is usually bot blocking](http-403-is-usually-bot-blocking.md) - when full-text fetches fail.
+* [The HTTP library decodes whatever Content-Encoding a reply names](http-client-decodes-any-content-encoding.md) - when you cap the size of a fetch from an outside host.
 * [Per-item isolation belts re-raise configuration errors](isolation-belts-reraise-config-errors.md) - when you add a per-item except.
 * [Byte budgets reserve then shrink](reserve-then-shrink-byte-budgets.md) - when you change ingest budgets.
 * [Full-text chunk hashes depend on a pymupdf4llm patch](fulltext-chunk-hash-determinism.md) - when you upgrade pymupdf4llm.

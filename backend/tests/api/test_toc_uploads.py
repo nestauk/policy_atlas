@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.deps import get_runner_backends, get_task_agent_backend, get_upload_store
+from policy_atlas.core import uploads
 from policy_atlas.core.uploads import LocalUploadStore
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.task_agent import StubTaskAgentBackend
@@ -133,3 +134,13 @@ def test_an_upload_after_the_draft_becomes_suggestions(engine: Engine, tmp_path:
         assert [offer["summary"] for offer in offers] == [
             "From your diagram (v2.png): 3 boxes and 2 connections the canvas does not have"
         ]
+
+
+def test_an_upload_of_the_largest_allowed_file_is_accepted(tmp_path: Path) -> None:
+    # The route checks only the file's opening bytes, so a PNG header padded to
+    # the size cap is the largest file it accepts.
+    largest = PNG + b"\x00" * (uploads.MAX_BYTES - len(PNG))
+    with api_client(tmp_path, _overrides(tmp_path / "store")) as (client, owner, _other):
+        task_id = _toc_task(client, owner)
+        response = _upload(client, owner, task_id, data=largest)
+        assert response.status_code == 201, response.text  # type: ignore[attr-defined]
