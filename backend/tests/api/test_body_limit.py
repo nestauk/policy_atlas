@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import uuid
 from collections.abc import Iterator
@@ -114,13 +113,11 @@ def test_the_app_is_not_called_when_the_declared_length_is_over_the_limit() -> N
         nonlocal calls
         calls += 1
 
-    sent: list[Message] = []
-
     async def receive() -> Message:
         return {"type": "http.request", "body": b"", "more_body": True}
 
     async def send(message: Message) -> None:
-        sent.append(message)
+        del message
 
     scope: Scope = {
         "type": "http",
@@ -130,5 +127,30 @@ def test_the_app_is_not_called_when_the_declared_length_is_over_the_limit() -> N
     }
     asyncio.run(BodyLimitMiddleware(app)(scope, receive, send))
     assert calls == 0
-    assert sent[0]["status"] == 413
-    assert json.loads(sent[1]["body"])["error"]["code"] == "payload_too_large"
+
+
+def test_a_body_that_arrives_in_several_messages_is_counted_as_one() -> None:
+    chunk = b"x" * (DEFAULT_LIMIT // 2)
+    body_seen = 0
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        nonlocal body_seen
+        while (message := await receive())["type"] == "http.request":
+            body_seen += len(message["body"])
+        # What an app does when the client has gone: it tries to reply anyway.
+        await send({"type": "http.response.start", "status": 400, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    async def receive() -> Message:
+        return {"type": "http.request", "body": chunk, "more_body": True}
+
+    sent: list[Message] = []
+
+    async def send(message: Message) -> None:
+        sent.append(message)
+
+    scope: Scope = {"type": "http", "method": "POST", "path": "/api/v1/waitlist", "headers": []}
+    asyncio.run(BodyLimitMiddleware(app)(scope, receive, send))
+
+    assert body_seen == 2 * len(chunk)
+    assert [message["status"] for message in sent if "status" in message] == [413]

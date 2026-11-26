@@ -430,19 +430,18 @@ def test_cookie_and_authorization_headers_never_ride_requests() -> None:
 
 
 def test_both_clients_ask_for_gzip_or_deflate_only() -> None:
-    fetcher, requests, _ = _fetcher(lambda _request: _ok_response())
+    fetcher, document_requests, _ = _fetcher(lambda _request: _ok_response())
     fetcher.fetch("https://example.com/doc")
+    pmc_requests: list[httpx.Request] = []
 
     def record(request: httpx.Request) -> httpx.Response:
-        requests.append(request)
+        pmc_requests.append(request)
         return httpx.Response(200, content=b"<article/>")
 
     fetch_europe_pmc_xml("PMC1", timeout=5.0, transport=httpx.MockTransport(record))
 
-    assert [request.headers["accept-encoding"] for request in requests] == [
-        "gzip, deflate",
-        "gzip, deflate",
-    ]
+    assert document_requests[0].headers["accept-encoding"] == "gzip, deflate"
+    assert pmc_requests[0].headers["accept-encoding"] == "gzip, deflate"
 
 
 def test_redact_url_and_logs_drop_query_strings() -> None:

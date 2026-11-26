@@ -430,6 +430,30 @@ def test_embed_unit_split_stops_after_three_calls_in_an_outage(error: Exception)
     assert embedder.call_sizes == [96, 48, 48]
 
 
+class _WrongSizeEmbedder:
+    mode = "stub"
+
+    def __init__(self) -> None:
+        self.call_sizes: list[int] = []
+
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
+        self.call_sizes.append(len(texts))
+        return [[0.0] * (EMBEDDING_DIMENSIONS - 1) for _text in texts]
+
+
+def test_embed_unit_split_treats_vectors_of_the_wrong_size_as_an_outage() -> None:
+    units = _units(96)
+    embedder = _WrongSizeEmbedder()
+
+    successes, failures = embeddings_module._embed_units_with_isolation(embedder, units)
+
+    assert successes == []
+    assert [unit for unit, _exc in failures] == units
+    assert embedder.call_sizes == [96, 48, 48]
+
+
 def test_embed_unit_split_keeps_the_half_that_works_after_an_outage() -> None:
     units = _units(96)
     outage = openai.APITimeoutError(request=_OPENAI_REQUEST)

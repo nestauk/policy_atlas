@@ -890,14 +890,21 @@ def _embed_units_with_isolation(
 def _embed_batch_once(
     embedder: EmbeddingBackend, units: list[_UnitWork]
 ) -> list[list[float]] | Exception:
-    """One provider call for the batch: its checked vectors, or the error it raised."""
+    """One provider call for the batch: its checked vectors, or the error it raised.
+
+    A reply with the wrong number of vectors, or with a vector that fails
+    :func:`validate_vector`, counts as a malformed reply (``ProviderProtocolError``).
+    """
     try:
         raw_vectors = embedder.embed_texts([unit.text for unit in units])
         if len(raw_vectors) != len(units):
-            raise ValueError(
+            raise ProviderProtocolError(
                 f"embedding backend returned {len(raw_vectors)} vectors for {len(units)} texts"
             )
-        return [validate_vector(vector) for vector in raw_vectors]
+        try:
+            return [validate_vector(vector) for vector in raw_vectors]
+        except ValueError as exc:
+            raise ProviderProtocolError(str(exc)) from exc
     except Throttled:
         raise  # the pool waits and resends the whole batch; never split for throttling
     except Exception as exc:
