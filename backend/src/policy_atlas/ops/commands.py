@@ -2079,6 +2079,44 @@ def invite_link_state(link: InviteLink, uses: int, now: datetime) -> InviteLinkS
     return "active"
 
 
+#: Why a waiting request that carries a code has no account yet.
+InviteRequestReason = Literal[
+    "unknown_code", "wrong_domain", "expired", "full", "revoked", "next_run"
+]
+
+
+def invite_request_reason(
+    *,
+    invite_code: str | None,
+    request_domain: str,
+    link: InviteLink | None,
+    uses: int,
+    now: datetime,
+) -> InviteRequestReason | None:
+    """Say why a waiting request's code has not made an account yet.
+
+    Args:
+        invite_code: The code the request carries, if any.
+        request_domain: The request's email domain, lower-cased.
+        link: The link with that code, or ``None`` when no link has it.
+        uses: How many requests the link has redeemed.
+        now: The time to judge the link at.
+
+    Returns:
+        ``None`` for a request with no code; ``unknown_code``; ``wrong_domain``;
+        the link's state when it is not active; else ``next_run`` (the sweep
+        redeems it at its next run).
+    """
+    if invite_code is None:
+        return None
+    if link is None:
+        return "unknown_code"
+    if request_domain not in link.allowed_domains:
+        return "wrong_domain"
+    state = invite_link_state(link, uses, now)
+    return "next_run" if state == "active" else state
+
+
 def invite_link_record(row: RowMapping) -> InviteLink:
     """Build the record from an ``invite_link`` row."""
     return InviteLink(
@@ -2307,6 +2345,85 @@ def approve_request(
         .values(account_user_id=enrolment.user_id, account_created_at=now, rejected_at=None)
     )
     return Approval(entry_id=entry_id, enrolment=enrolment, created_at=now)
+
+
+def redeem_request(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    entry_id: uuid.UUID,
+    now: datetime,
+) -> Approval | None:
+    """Turn a waiting request into an account through the invite link its code names.
+
+    Locks the link row first and the request row second, and checks again under
+    both locks that the link still accepts the request, so two redemptions at
+    once cannot pass the link's use limit. The person joins the link's cohorts
+    (a ``cohort.add`` audit row for each new membership) and the request records
+    the link, which counts the use.
+
+    Args:
+        conn: Open connection inside the sweep's per-request transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified Cognito user pool.
+        entry_id: The waiting request.
+        now: The time to judge the link at and to stamp the request with.
+
+    Returns:
+        The approval, or ``None`` when the request is not (or no longer)
+        redeemable; then nothing was written and Cognito was not called.
+
+    Raises:
+        EnrolledElsewhere: If the address belongs to another organisation.
+        Deactivated: If the account is deactivated.
+    """
+    code = conn.execute(
+        select(waitlist_entry.c.invite_code).where(waitlist_entry.c.entry_id == entry_id)
+    ).scalar_one_or_none()
+    link_id = None if code is None else conn.execute(
+        select(invite_link.c.invite_link_id).where(invite_link.c.code == code)
+    ).scalar_one_or_none()
+    if link_id is None:
+        return None
+    link = _lock_invite_link(conn, link_id)
+    row = conn.execute(
+        select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).with_for_update()
+    ).mappings().one()
+    email = str(row["email"])
+    # The sweep query's reading of the domain: split_part(email, '@', 2), lower-cased.
+    domain = email.split("@")[1].lower() if "@" in email else ""
+    if (
+        row["invite_code"] != link.code
+        or row["account_created_at"] is not None
+        or row["rejected_at"] is not None
+        or domain not in link.allowed_domains
+        or invite_link_state(link, invite_link_uses(conn, link_id), now) != "active"
+    ):
+        return None
+    name = conn.execute(
+        select(organisation.c.name).where(organisation.c.org_id == link.org_id)
+    ).scalar_one()
+    approved = approve_request(
+        conn, cognito, pool_id=pool_id, entry_id=entry_id,
+        org=Organisation(org_id=link.org_id, name=str(name)), now=now,
+    )
+    user_id = approved.enrolment.user_id
+    for cohort_id, cohort_name in conn.execute(
+        select(cohort.c.cohort_id, cohort.c.name)
+        .join(invite_link_cohort, invite_link_cohort.c.cohort_id == cohort.c.cohort_id)
+        .where(invite_link_cohort.c.invite_link_id == link_id)
+        .order_by(cohort.c.name)
+    ):
+        target = Cohort(cohort_id=cohort_id, name=str(cohort_name))
+        if add_to_cohort(conn, target=target, user_id=user_id).changed:
+            record_action(conn, actor="sweep", action="cohort.add",
+                          target=f"{user_id}/cohort/{cohort_id}", outcome="ok")
+    conn.execute(
+        update(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
+        .values(invite_link_id=link_id)
+    )
+    return approved
 
 
 def reject_request(conn: Connection, *, entry_id: uuid.UUID, now: datetime) -> None:

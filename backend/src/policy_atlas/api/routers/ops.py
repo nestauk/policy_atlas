@@ -46,6 +46,7 @@ from policy_atlas.api.contract.ops import (
     PersonCreatedOut,
     PersonOut,
     QuotaSet,
+    RequestInvite,
     RequestOut,
     RequestsOut,
     SelfSignupOut,
@@ -70,7 +71,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.ops import commands
 from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
-from policy_atlas.ops.sweep import TERMINAL_OUTCOMES
+from policy_atlas.ops.sweep import RETRY_WAIT, TERMINAL_OUTCOMES
 
 log = structlog.get_logger()
 
@@ -775,6 +776,11 @@ def list_requests(
         ops_action.c.outcome == "invited",
         ops_action.c.at >= func.now() - func.make_interval(0, 0, 0, 0, 1),
     )).scalar_one())
+    invites = _invite_reasons(conn, [
+        row for row in rows
+        if row["invite_code"] is not None and row["rejected_at"] is None
+        and str(row["entry_id"]) not in terminal
+    ])
     items: list[RequestOut] = []
     for row in rows:
         check = str(row["entry_id"]) in terminal
@@ -791,6 +797,7 @@ def list_requests(
             status="rejected" if row["rejected_at"] is not None else
             "check" if check else "waiting",
             note=note,
+            invite=invites.get(row["entry_id"]),
         ))
     return RequestsOut(
         items=items,
@@ -798,6 +805,54 @@ def list_requests(
                                  sent_this_hour=sent,
                                  max_per_hour=settings.self_signup_max_per_hour),
     )
+
+
+def _invite_reasons(
+    conn: Connection, rows: list[RowMapping]
+) -> dict[uuid.UUID, RequestInvite]:
+    """For waiting requests that carry a code: the link's label and why it has no account yet.
+
+    Three reads for the whole page, never one for each request.
+    """
+    if not rows:
+        return {}
+    links = {
+        str(row["code"]): commands.invite_link_record(row)
+        for row in conn.execute(select(invite_link).where(
+            invite_link.c.code.in_({row["invite_code"] for row in rows})
+        )).mappings()
+    }
+    uses = {link_id: int(count) for link_id, count in conn.execute(
+        select(waitlist_entry.c.invite_link_id, func.count())
+        .where(waitlist_entry.c.invite_link_id.in_([
+            link.invite_link_id for link in links.values()
+        ]))
+        .group_by(waitlist_entry.c.invite_link_id)
+    )} if links else {}
+    now = _now()
+    retrying = set(conn.execute(select(ops_action.c.target).where(
+        ops_action.c.actor_user_id == "sweep", ops_action.c.action == "invite",
+        ops_action.c.outcome == "failed", ops_action.c.at > now - RETRY_WAIT,
+        ops_action.c.target.in_([str(row["entry_id"]) for row in rows]),
+    )).scalars())
+    reasons: dict[uuid.UUID, RequestInvite] = {}
+    for row in rows:
+        link = links.get(str(row["invite_code"]))
+        email = str(row["email"])
+        reason = commands.invite_request_reason(
+            invite_code=row["invite_code"],
+            # The sweep's reading of the domain: split_part(email, '@', 2), lower-cased.
+            request_domain=email.split("@")[1].lower() if "@" in email else "",
+            link=link, uses=uses.get(link.invite_link_id, 0) if link else 0, now=now,
+        )
+        if reason is None:
+            continue
+        reasons[row["entry_id"]] = RequestInvite(
+            label=link.label if link else None,
+            reason="retry_wait" if reason == "next_run" and str(row["entry_id"]) in retrying
+            else reason,
+        )
+    return reasons
 
 
 @router.post("/requests/{entry_id}/reject", status_code=status.HTTP_204_NO_CONTENT)

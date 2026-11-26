@@ -1496,3 +1496,80 @@ def test_delete_organisation_refuses_one_with_an_invite_link(ops: Harness) -> No
     assert refused.status_code == 409
     assert "still has 1 invite links" in refused.text
 
+
+def test_requests_list_says_why_a_request_with_a_code_has_no_account(ops: Harness) -> None:
+    """Each waiting request with a code shows the link's label and the reason, never the code."""
+    from policy_atlas.core import invite_code
+    from policy_atlas.ops import commands
+
+    domain = f"req-{uuid.uuid4().hex[:8]}.test"
+    now = datetime.now(UTC)
+    org_id = _seed_org(ops)
+    with seeded(ops.engine) as conn:
+        org = commands.Organisation(org_id=org_id, name="Requests org")
+
+        def link(label: str, **values: Any) -> commands.InviteLink:
+            made = values.pop("made", now)
+            return commands.create_invite_link(
+                conn, label=label, org=org, cohorts=[], allowed_domains=[domain],
+                max_uses=values.pop("max_uses", 5),
+                expires_at=values.pop("expires_at", made + timedelta(days=30)),
+                created_by="operator", now=made,
+            )
+
+        active = link("Active")
+        expired = link("Expired", made=now - timedelta(days=40),
+                       expires_at=now - timedelta(days=1))
+        full = link("Full", max_uses=1)
+        revoked = link("Revoked")
+        commands.revoke_invite_link(conn, invite_link_id=revoked.invite_link_id, now=now)
+    _seed_request(ops, email=unique_email("used"), invite_link_id=full.invite_link_id,
+                  account_user_id="used", account_created_at=now)
+    unknown = invite_code.new_code()
+    cases: dict[uuid.UUID, Any] = {
+        _seed_request(ops, email=f"{uuid.uuid4().hex[:8]}@{domain}", invite_code=code): expected
+        for code, expected in (
+            (unknown, {"label": None, "reason": "unknown_code"}),
+            (expired.code, {"label": "Expired", "reason": "expired"}),
+            (full.code, {"label": "Full", "reason": "full"}),
+            (revoked.code, {"label": "Revoked", "reason": "revoked"}),
+            (active.code, {"label": "Active", "reason": "next_run"}),
+        )
+    }
+    cases[_seed_request(ops, invite_code=active.code)] = {
+        "label": "Active", "reason": "wrong_domain"}
+    retrying = _seed_request(ops, email=f"retry@{domain}", invite_code=active.code)
+    cases[retrying] = {"label": "Active", "reason": "retry_wait"}
+    cases[_seed_request(ops)] = None
+    with seeded(ops.engine) as conn:
+        conn.execute(insert(ops_action).values(
+            action_id=uuid.uuid4(), at=now, actor_user_id="sweep", action="invite",
+            target=str(retrying), outcome="failed",
+        ))
+    response = ops.client.get("/api/v1/ops/requests", headers=ops.actor.headers)
+    assert response.status_code == 200, response.text
+    items = {uuid.UUID(item["entry_id"]): item for item in response.json()["items"]}
+    assert {entry_id: items[entry_id]["invite"] for entry_id in cases} == cases
+    for code in (unknown, active.code, expired.code, full.code, revoked.code):
+        assert code not in response.text and invite_code.display(code) not in response.text
+
+
+def test_manual_approve_of_a_request_with_a_code_counts_no_use(ops: Harness) -> None:
+    """The operator's choice of organisation wins and the link's uses do not change."""
+    link = _make_link(ops)
+    org_id = _seed_org(ops)
+    email, sub = unique_email("coded"), f"coded-{uuid.uuid4()}"
+    entry_id = _seed_request(ops, email=email, invite_code=_code_of(link))
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    response, _ = _post(ops, f"/api/v1/ops/requests/{entry_id}/approve", {"org_id": str(org_id)})
+    assert response.status_code == 200, response.text
+    with ops.engine.connect() as conn:
+        assert conn.execute(select(waitlist_entry.c.invite_link_id).where(
+            waitlist_entry.c.entry_id == entry_id)).scalar_one() is None
+    row = _user(ops, sub)
+    assert row is not None and row["org_id"] == org_id
+    listed = {item["invite_link_id"]: item for item in ops.client.get(
+        "/api/v1/ops/invite-links", headers=ops.actor.headers).json()}
+    assert listed[link["invite_link_id"]]["uses"] == 0
+

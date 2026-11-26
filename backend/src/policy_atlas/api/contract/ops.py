@@ -424,6 +424,23 @@ class BulkQuota(BulkSubjects, QuotaSet):
 RequestStatus = Literal["waiting", "invited", "check", "rejected"]
 
 
+class RequestInvite(BaseModel):
+    """Why a waiting request that arrived through an invite link has no account yet.
+
+    Args:
+        label: The link's label; ``None`` when no link has the request's code.
+        reason: ``unknown_code``, ``wrong_domain``, ``expired``, ``full``,
+            ``revoked``, ``next_run`` (the sweep takes it at its next run) or
+            ``retry_wait`` (the last try failed; the sweep tries again in a few
+            minutes).
+    """
+
+    label: str | None = None
+    reason: Literal[
+        "unknown_code", "wrong_domain", "expired", "full", "revoked", "next_run", "retry_wait"
+    ]
+
+
 class RequestOut(BaseModel):
     """One waitlist row as the Requests page shows it.
 
@@ -439,6 +456,9 @@ class RequestOut(BaseModel):
         account_created_at: When the row was stamped.
         note: For ``check``, which organisation the address already belongs
             to; otherwise ``None``.
+        invite: For a waiting request that carries an invite code, the link's
+            label and why it has no account yet; otherwise ``None``. The code
+            itself is never in the answer.
     """
 
     entry_id: uuid.UUID
@@ -452,6 +472,7 @@ class RequestOut(BaseModel):
     account_created_at: datetime | None = None
     rejected_at: datetime | None = None
     note: str | None = None
+    invite: RequestInvite | None = None
 
 
 class SelfSignupOut(BaseModel):

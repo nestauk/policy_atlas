@@ -1061,8 +1061,42 @@
         "title": "QuotaSet",
         "type": "object"
       },
+      "RequestInvite": {
+        "description": "Why a waiting request that arrived through an invite link has no account yet.\n\nArgs:\n    label: The link's label; ``None`` when no link has the request's code.\n    reason: ``unknown_code``, ``wrong_domain``, ``expired``, ``full``,\n        ``revoked``, ``next_run`` (the sweep takes it at its next run) or\n        ``retry_wait`` (the last try failed; the sweep tries again in a few\n        minutes).",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "reason": {
+            "enum": [
+              "unknown_code",
+              "wrong_domain",
+              "expired",
+              "full",
+              "revoked",
+              "next_run",
+              "retry_wait"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RequestInvite",
+        "type": "object"
+      },
       "RequestOut": {
-        "description": "One waitlist row as the Requests page shows it.\n\nArgs:\n    entry_id: The row.\n    email: The requested address.\n    name: The name they gave.\n    organisation: The organisation they typed, if any.\n    role_or_reason: Why they asked.\n    created_at: When they asked.\n    status: See :data:`RequestStatus`.\n    account_user_id: The subject once an account exists.\n    account_created_at: When the row was stamped.\n    note: For ``check``, which organisation the address already belongs\n        to; otherwise ``None``.",
+        "description": "One waitlist row as the Requests page shows it.\n\nArgs:\n    entry_id: The row.\n    email: The requested address.\n    name: The name they gave.\n    organisation: The organisation they typed, if any.\n    role_or_reason: Why they asked.\n    created_at: When they asked.\n    status: See :data:`RequestStatus`.\n    account_user_id: The subject once an account exists.\n    account_created_at: When the row was stamped.\n    note: For ``check``, which organisation the address already belongs\n        to; otherwise ``None``.\n    invite: For a waiting request that carries an invite code, the link's\n        label and why it has no account yet; otherwise ``None``. The code\n        itself is never in the answer.",
         "properties": {
           "account_created_at": {
             "anyOf": [
@@ -1100,6 +1134,16 @@
             "format": "uuid",
             "title": "Entry Id",
             "type": "string"
+          },
+          "invite": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestInvite"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "title": "Name",
