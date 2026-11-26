@@ -1,252 +1,284 @@
 # Harness inventory
 
-What the agentic harness for Policy Atlas actually *is*, as it stands. This is a map of existing
-machinery, not a wishlist — add a row when the thing exists, and keep the **Known gaps** section
-honest. Rationale and the full menu of options:
+What the agentic harness for Policy Atlas is now: the instructions, tools, agents and checks
+that let coding agents build the product. This file lists what exists, not what is planned.
+Add a row when a thing exists, and keep **Known harness gaps** honest. Background reading (a
+general draft, not a rule source):
 [advanced-agentic-engineering-manual.md](references/advanced-agentic-engineering-manual.md).
 
 ## Purpose
 
-Let agents do non-trivial implementation slices with evidence and human gates, without
-re-deriving the project's intent or boundaries each time.
+Let agents build non-trivial slices with evidence and human approval gates, without working out
+the project's intent or boundaries again each time.
 
 ## Model assumptions
 
-**Containment rule:** model-generation-specific tuning lives in this section and the pinned
-agents' frontmatter **only** — skills, AGENTS.md and templates stay model-neutral, so a model swap
-is a one-section edit plus three frontmatter lines, not a harness rewrite. On any lead-model
-change (arrival *or* removal), run the manual's §16.2 harness-expiry review. Corollary: skills
-prescribe *process and gates* (tiers, artifacts, 🛑s — model-independent), not model behaviour —
-how-to-think prescription tuned to one generation degrades the next (2026-07 Fable guidance), and
-it's the first thing the expiry review should trim.
-
-- Primary: Claude Code in the IDE and CLI — **Fable 5, effort `high`**, as the lead. `high` is the
-  default on purpose: `max` burns budget for little gain on routine work; raise effort per
-  subagent-call for the hardest verify/judge steps instead of globally.
-- **Remit sizing:** current-generation leads support contracts at the top of the difficulty
-  range — the control is evidence + gates (tiers, verification.md, CI's `make verify`), not slice
-  smallness (manual §2: small slices are the onboarding default, not the ambition ceiling).
-- Secondary: Cursor (`.cursor/rules/core.mdc` -> "Follow AGENTS.md"). No Cursor-specific skills yet.
-- Skills are written tool-agnostic in prose; only `.claude/skills/` is packaged so far.
+- **Lead:** Claude Code in the IDE and the command line, with Claude Fable 5.2 as the lead (the
+  session model). The user sets the lead model and its effort with `/model` and `/effort`.
+  `.claude/settings.json` does not pin them, because a pin breaks when a model is unavailable or
+  a teammate has no access to it.
+- **Subagents:** each pinned agent in `.claude/agents/` sets its model in its frontmatter
+  (`model`, and `effort` on some). An agent's description may say what it is for and which
+  model it uses.
+- **Slice size:** slices can be large. The control is evidence and gates (risk tiers,
+  `verification.md`, the `make verify` check in CI (continuous integration)), not small slices.
+- **Cursor** is a secondary surface. `.cursor/rules/core.mdc` tells it to follow AGENTS.md.
+  Only `.claude/skills/` holds packaged skills.
+- **Harness review at each change of lead model.** When a lead model arrives or goes away, review
+  the harness: which rules are still needed, which skills and hooks no longer earn their cost,
+  which model weaknesses have gone, and which new behaviours need a guardrail. Trim rules that
+  tell the model how to think before you trim process and gates.
 
 ### Agent-side model routing
 
-*Agent-side* means the models doing the development. Distinct from the product's **inference
-route** ([engineering-considerations.md](engineering-considerations.md)) — that stays behind the
-routing seam and its runtime-egress gate; nothing here touches it.
+*Agent-side* means the models that build the product. The product's own model calls (the
+*inference route*) are a different thing: they go through
+`backend/src/policy_atlas/model_routes.toml` and the runtime-egress gate. Nothing here changes
+them.
 
-The lead plans, decomposes, judges and synthesizes; volume work is delegated so the lead's budget
-goes on judgment, not typing. The routing is **structural, not advisory**: the delegate tiers are
-pinned agent definitions in [`.claude/agents/`](../../.claude/agents/) (model in frontmatter,
-description-driven selection), so the model choice rides with the agent type instead of relying on
-whoever delegates to remember a table. The Agent/Workflow `model` + `effort` params remain the
-per-call override; the `agent-skills` subagents cover the named review roles. The two knobs this
-does **not** control: the *lead* model/effort (user-held — `/model` / `/effort`; deliberately not
-pinned in `settings.json`, since a hard pin breaks on model unavailability and teammate access),
-and the lead-only rules below (you can't pin a "don't delegate" — those stay protocol, in AGENTS.md).
+The lead orchestrates: it plans, splits the work, marks an executor for each plan task, judges
+results and synthesizes. The routing is structural: each delegate is a pinned agent definition in
+[`.claude/agents/`](../../.claude/agents/), so the model goes with the agent type and nobody has
+to remember a table. The Agent tool's `model` parameter overrides it for one call.
+**A `general-purpose` subagent starts with `model: "opus"`**, also when the caller is an
+Opus agent. The exceptions are `/code-review` and the contract and plan reviews of the design phase: their reviewers run on the lead's model. The `agent-skills` plugin supplies the named reviewer subagents.
 
 | Work | Route |
 |---|---|
-| Orchestration, architecture, hard debugging, synthesis, final judgment | Fable 5 (the lead itself) |
-| Deep-reasoning offload: long independent analysis, root-cause hunts | [`deep-reasoner`](../../.claude/agents/deep-reasoner.md) (pinned Opus) |
-| Mechanical volume: boilerplate, sweeps, broad codebase search | [`fast-worker`](../../.claude/agents/fast-worker.md) (pinned Sonnet); `Explore` agents for search |
-| Web research fan-out: one narrow sourced question per agent, notes to a named file; the lead coordinates and the writer synthesises | [`researcher`](../../.claude/agents/researcher.md) (pinned Opus; web tools plus Write, no Bash/Edit, no nesting: widen by adding researchers, not layers; owner 2026-10-30) |
-| Built-to-measure artefacts: experiment scripts, probes, prototypes in scratch or gitignored dirs | [`builder`](../../.claude/agents/builder.md) (pinned Opus, effort high; code tools, no web; owner 2026-09-29 "builds go to Opus") |
-| Judgment-bearing scoped implementation (nontrivial logic, multi-file coherence, unfamiliar APIs) from a precise, **machine-verifiable** brief | **Codex as the default doer** (`codex:rescue` / `codex exec`) — ~Opus-tier capability on the non-bottleneck budget; the **other family reviews** (family-flip). Precondition is the brief, not the budget: rescue is async fire-and-forget, so "done" must be self-checkable (`make verify`, named tests) |
-| Review fan-out: contract verification, adversarial passes | [`contract-verifier`](../../.claude/agents/contract-verifier.md) (pinned Opus) · `agent-skills` reviewer subagents · Codex — **not the lead**; the lead adjudicates findings |
-| Heterogeneous peer (different model family): native review, adversarial review, rescue/doer | Codex — `/codex:review` · `/codex:adversarial-review` · `codex:rescue` |
+| Orchestration, architecture, hard debugging, synthesis, final judgment | The lead |
+| Judgment-bearing implementation (nontrivial logic, multi-file coherence, unfamiliar APIs) from a precise brief with a machine-checkable done | **[`deep-reasoner`](../../.claude/agents/deep-reasoner.md), the default doer** (Opus) |
+| Deep-reasoning offload: long independent analysis, root-cause hunts, option studies | [`deep-reasoner`](../../.claude/agents/deep-reasoner.md) (Opus) |
+| Frontend work under `frontend/`: polish passes, design reviews, builds from a design annex | [`frontend-designer`](../../.claude/agents/frontend-designer.md) (Opus, effort high). It loads the frontend design skills, `PRODUCT.md` and `DESIGN.md` first |
+| Mechanical volume: boilerplate, sweeps, scoped edits, broad search | [`fast-worker`](../../.claude/agents/fast-worker.md) (Sonnet); `Explore` agents for search |
+| Web research: one narrow, sourced question per agent, notes to a named file | [`researcher`](../../.claude/agents/researcher.md) (Opus, effort medium; web tools and Write only). To widen the search, add researchers, not layers |
+| Throwaway artefacts built to measure something: experiment scripts, probes, prototypes in a scratch or gitignored folder | [`builder`](../../.claude/agents/builder.md) (Opus, effort high; code tools, no web) |
+| Contract verification at review | [`contract-verifier`](../../.claude/agents/contract-verifier.md) (Opus, effort high, read-only) |
+| Other review passes | `agent-skills` reviewer subagents and Codex. The lead adjudicates; it does not write the reviews |
+| Heterogeneous peer (a different model family): review, adversarial review, rescue | Codex: `/codex:review`, `/codex:adversarial-review`, `codex:rescue` |
 
-**Routing is decided at plan time, not implement time** (failure-log, 2026-07-05): the plan
-marks each task with its executor (`lead` / `fast-worker` / `deep-reasoner` / `codex`), reviewed
-at the plan gate. **The default executor is a delegate; every `lead` mark carries a one-line
-justification the plan gate reviews** (failure-log, 2026-07-05 — the 008 plan over-assigned to
-the lead and the burden must sit on keeping work, not on delegating it). The decision ladder
-(2026-07-05, user call — "Claude budget is always the constraint" is a default, not a
-condition): can't write a self-checkable brief → lead; prompt-bearing work, taste-bearing
-surfaces, adjudication, and seam *design* (signatures, semantics, the brief itself) → lead —
-but the *implementation* of a lead-designed seam against a machine-verifiable done is delegable
-like any other execution ("seam-bearing" describes the design decision, not the typing);
-judgment-bearing execution → **Codex** (~Opus tier,
-different budget, family-flip review built in — needs a machine-verifiable brief because rescue
-is async, no mid-task steering); mechanical transcription of an exact spec → fast-worker (Codex
-would overpay and the async round-trip is slower); analysis-not-code → deep-reasoner (NB
-deep-reasoner and fast-worker also spend Claude budget — Codex offload helps most exactly where
-Opus-tier work would otherwise run). Mid-build, the lead always has full context loaded and every task looks
-cheapest inline — 007's ~450-line test file went to the lead that way despite a
-fast-worker-shaped contract test list; mid-build, the lead catching itself editing product code
-directly is the smell — write a brief instead. Counter-rule: one-command mechanical edits
-(`sed`-able sweeps) stay inline, and if you can't write the brief, it isn't delegable.
+**Routing is decided at plan time.** The plan marks each task with its executor (`lead`,
+`deep-reasoner`, `frontend-designer`, `fast-worker`, `builder` or `codex`), and the plan gate
+reviews the marks. The decision ladder:
 
-**Review lane economics.** The review stack is where lead-model usage spikes: each pass re-reads
-the same diff, and that reading is systematic work, not frontier judgment. So: reviewers run on
-pinned Opus (`contract-verifier`), plugin reviewer subagents, and Codex — the lead's job in step 7
-is to *adjudicate* findings and decide fixes, not to generate the reviews. Review runs in a fresh
-conversation — fresh reviewer lanes are not enough; the **adjudicator must not be the author**
-(failure-log, 2026-07-05) — so the diff is the only context being re-paid. Exclude generated/bulk
-data files from the review diff by pathspec (e.g. `:!src/policy_atlas/data/*.json`) — data files
-get their own audit lane; on 007 they alone doubled the review spend.
-`/code-review` runs at `medium` at **every** tier — `high` dispatches a workflow fan-out an order
-of magnitude costlier (measured on 006-appraise: 552K tokens / 16 agents vs ~80K for a single
-reviewer, for one extra low-severity finding) and is user-opt-in only. One security lane per diff
-and one Claude defect pass per diff, never two of either — `/code-review medium` *is* the Claude
-half of the Tier-3 heterogeneous pair (the pair buys family diversity, not reviewer count). The
-budget is a cost proxy split by model class (008 retro): a routine slice review lands **≤250K
-reasoning-class** subagent tokens and **≤500K fast-worker** tokens. When dispatching
-`/code-review` finder angles, hand each angle a **lens-matched diff pathspec** (correctness →
-`src`/`alembic`/config; cleanup → `src`+`tests`; conventions → rule files + changed-file list) —
-the diff dominates finder cost and a shared whole-diff command pays it once per angle (008: 8 ×
-~4.8K lines ≈ 500K before any finding). Big slices are normal (sized to the model's
-orchestration capability — user, 2026-07-05); the scoping keeps their reviews affordable.
-**Family-flip rule:** whichever family implemented, the other family anchors
-review — Claude implements → Codex reviews; Codex implements → Claude reviews. Maker ≠ checker
-holds across model families in both directions. (If a Fable safety classifier declines a benign
-security pass, the fallback is this lane itself — the reviewers are already pinned Opus/Codex.)
-Two 022-build delegation lessons (step 8, 2026-07-14): **(a) Codex parallel write jobs on one
-working tree are safe when file sets are disjoint AND each brief carries "never revert files you
-did not change" plus an explicit list of the sibling job's files** (R ∥ C ran clean under this).
-**(b) Codex-authored tests are the dominant defect surface, not its product code** — five 022
-deliveries landed product-clean while every lead fix was a test-authoring bug (stale
-expectations, order-sensitive UUID comparisons, fixtures colliding with stub token rules);
-weight review attention toward delegated test diffs accordingly.
+1. You cannot write a self-checkable brief: `lead`.
+2. Prompt-bearing work, taste-bearing surfaces, adjudication, and seam *design* (signatures,
+   semantics, the brief itself): `lead`. The *implementation* of a seam the lead designed, against
+   a machine-checkable done, can be delegated like any other build.
+3. Judgment-bearing implementation: `deep-reasoner`. The model family changes at the Codex
+   review, so a Codex build adds no independence and costs a slow round-trip. Mark `codex` as the
+   doer only when the build itself needs a second family's view, and give the reason in the plan.
+   Codex runs in the background, so its done must be self-checkable (`make verify`, named tests).
+4. Frontend implementation or polish: `frontend-designer`.
+5. Mechanical transcription of an exact spec: `fast-worker`. One-command mechanical edits (a
+   `sed` sweep) stay with the lead.
+6. Analysis, not code: `deep-reasoner`.
 
-- **High-stakes decisions** (Tier 3+, real design forks): two *independent* takes — e.g. an Opus
-  subagent and Codex on the same brief, neither shown the other's answer — then the lead
-  synthesizes. The review stack's two-heterogeneous-reviewers rule, applied upstream at design time.
-- **Design-phase adversarial review** (Tier 3+ standard; Tier 2 on demand): before the plan 🛑, the
-  other family attacks the drafted `contract.md` + `plan.md` from the committed artifacts alone —
-  settled/ADR'd decisions are context, not targets. Complements the rule above: that generates
-  alternatives *before* the design call; this attacks the chosen plan *after* drafting. A review
-  that fails for lack of context is itself a finding — the artifacts aren't a self-sufficient
-  handoff. Details: task-cycle step 3.
+**Review lane economics.** The review stack reads the same diff many times. That reading is
+systematic work, so pinned reviewers and Codex do it, and the lead only adjudicates findings and
+decides fixes. Review runs in a fresh conversation, because the adjudicator must not be the
+author. Rules (the detail is in the `task-cycle-review` skill):
+
+- Exclude generated and bulk data files from the review diff by an exclude pathspec. Data files
+  get their own check.
+- `/code-review` runs at `medium` at every tier. `high` runs only when the user asks.
+- One security lane and one Claude defect pass per diff. `/code-review medium` is the Claude half
+  of the heterogeneous pair.
+- Give each `/code-review` finder angle a diff pathspec that matches its lens.
+- **Family-flip rule:** the family that did not build anchors the review. Claude builds, Codex
+  reviews; Codex builds, Claude reviews.
+- Delegated test code is where defects collect. Read delegated test diffs closely.
+- If the lead model declines a benign security pass, the pinned Opus or Codex reviewers run it.
+
+Codex parallel builds on one working tree are safe only when their file sets do not overlap and
+each brief says "never revert files you did not change" and lists the other job's files. Track
+Codex jobs with `scripts/codex_job.sh`.
+
+Other rules:
+
+- **High-stakes decisions** (Tier 3 and up, real design forks): two *independent* takes, for
+  example a `deep-reasoner` and Codex on the same brief, neither shown the other's answer. The
+  lead then synthesizes.
+- **Design-phase adversarial review** (standard at Tier 3 and up, on request at Tier 2): before
+  the plan gate, the other family attacks the drafted `contract.md` and `plan.md` from the
+  committed files alone. Decisions already settled or in an ADR (architecture decision record)
+  are context, not targets. A review that fails for lack of context is a finding: the files are
+  not a complete handoff. Details: `task-cycle-design` step 3.
 - **Escalate on quality, not price.** If a cheaper model's output misses the bar, redo it with a
-  smarter one — don't hand-polish weak output. For anything that ships: capability first, cost as
-  tie-breaker.
-- **Prompt-bearing work is lead-only.** Policy Atlas is an AI tool: the product's prompts, judge
-  rubrics and eval criteria are its highest-leverage surface (the contract template already flags
-  prompt-bearing changes; [engineering-considerations.md](engineering-considerations.md) requires
-  strongest-model review for prompt changes). Authoring or editing them is done by the most
-  intelligent model available — the lead itself, never delegated down, even when the surrounding
-  implementation is.
-- Taste-bearing surfaces (user-facing copy, interface/API shape) stay with the lead or Opus, never
-  the mechanical lane.
-- **Delegation briefs** (any surface): one concern; the **intent** (why, and who it's for — not
-  just the ask; workers connect the task to the right information instead of guessing at it);
-  enough context that the worker doesn't re-explore the repo; a definition of done the worker can
-  check itself; a short report shaped for the orchestrator's next decision. Workers execute the
-  brief — they don't invent the plan; run independent briefs in parallel, and where the tooling
-  supports continuing a subagent, prefer one long-lived worker across related subtasks over
-  re-spawning (context carries, cache reads are cheaper, no bottleneck on the slowest fresh
-  start). If a result is off, rewrite the brief and re-spawn rather than
-  silently patching over it (unless trivial). If you can't name the subtasks, don't delegate —
-  when judgment *is* the work (a hard design call, a bug needing one coherent thread), stay one agent.
-- On the Cursor surface (secondary), the same split holds: Fable plans, coordinates and judges;
-  Composer-class workers execute the scoped subtasks.
+  stronger model. Do not hand-polish weak output.
+- **Prompt-bearing work is lead-only.** The product's prompts, judge rubrics and eval criteria
+  are its highest-leverage surface. The lead writes and edits them, even when the code around
+  them is delegated.
+- **Taste-bearing surfaces** (user-facing copy, interface and API shape) stay with the lead or an
+  Opus agent, never the mechanical lane.
+- **Delegation briefs:** one concern; the intent (why, and who it is for); enough context that
+  the worker does not explore the repository again; a done the worker can check itself; a short
+  report shaped for the lead's next decision. Workers carry out the brief; they do not make the
+  plan. Run independent briefs in parallel. For related subtasks, continue one subagent instead
+  of starting new ones. If a result is wrong, rewrite the brief and start again, unless the fix
+  is trivial. If you cannot name the subtasks, do not delegate.
 
 ## Context layer
 
-- [AGENTS.md](../../AGENTS.md) — non-discoverable operational truth + boundaries (the smell ledger).
-- [CLAUDE.md](../../CLAUDE.md) — thin Claude adapter; points to AGENTS.md and the slash commands.
-- [docs/specs/](../specs/index.md) — OKF *intent* bundle: distilled, status-tagged system + capability
-  specs + conflict-resolution index. Source wins on conflict.
-- [engineering-considerations.md](engineering-considerations.md) — non-binding stack direction +
-  approval gates. [readiness.md](readiness.md) — pre-implementation gate checklist.
-- [docs/knowledge/](../knowledge/index.md) — OKF *verified* bundle: durable verified knowledge about
-  the built system + domain (open types; conventions, invariants, pitfalls so far).
-- `docs/deferred.md` — registered seams left open on purpose.
+- [AGENTS.md](../../AGENTS.md): the agent protocol, boundaries and landmines.
+- [CLAUDE.md](../../CLAUDE.md): a thin Claude adapter that loads AGENTS.md.
+- [docs/specs/](../specs/index.md): the *intent* bundle in OKF (Open Knowledge Format):
+  status-tagged system and capability specs. Specs and ADRs win over the frozen sources
+  ([ADR 0002](../adr/0002-spec-governance.md)). `docs/specs/vocabulary.md` holds the product
+  vocabulary. How to write or change a spec: [spec-authoring.md](spec-authoring.md).
+- [docs/knowledge/](../knowledge/index.md): the *verified* OKF bundle: durable, checked facts
+  about the built system and the domain.
+- `PRODUCT.md` (product principles) and `DESIGN.md` (the visual system), read by frontend work.
+- `docs/deferred.md`: seams left open on purpose.
+- [environment.md](environment.md): local setup and known quirks.
+  [readiness.md](readiness.md): what is settled and what is open.
+- [failure-log.md](failure-log.md): past harness failures and their lessons.
+- `.claude/output-styles/simple.md`: the plain-English writing style.
 
 ## Tool layer
 
-- **Command surface:** `Makefile` — `setup / test / typecheck / lint / build / verify /
-  okf-validate` (okf-validate runs inside verify: OKF bundle conformance via
-  `scripts/okf_validate.py`, stdlib-only).
-- **Runtime:** uv (Python), Docker Compose (Postgres), alembic (migrations).
-- **Required plugins** — declared in `.claude/settings.json` (`enabledPlugins` + `extraKnownMarketplaces`)
-  so a teammate opening the repo gets them; core to the workflow, not optional. The
-  [task-cycle](../../.claude/skills/task-cycle/SKILL.md) says which phase uses what:
-  - `agent-skills` — senior-engineer skills (incremental-implementation, test/TDD, debugging,
-    source-driven-development, api-and-interface-design, documentation-and-adrs, security-and-hardening,
-    doubt-driven-development, …) + the `agent-skills:code-reviewer` / `agent-skills:security-auditor` /
+- **Command surface:** the root `Makefile`. It calls `backend/Makefile` and `infra/` for their
+  parts. Main groups:
+  - setup and run: `setup`, `frontend-install`, `dev`, `dev-seed`;
+  - checks: `verify`, `verify-fast`, `frontend-verify`, `frontend-verify-fast`, `test`,
+    `test-fast`, `typecheck`, `lint`, `build`, `audit`, `fe-api-smoke`;
+  - generated files: `openapi-sync`, `drift-check`;
+  - evaluations: `eval-check`, `eval-search-recall`;
+  - cloud operations: `deploy-*`, `infra-setup`, and the user and organisation targets.
+- **Runtime:** uv (Python), pnpm (frontend), Docker Compose (Postgres), alembic (database
+  migrations), AWS CDK (infrastructure).
+- **Required plugins**, declared in `.claude/settings.json` (`enabledPlugins` and
+  `extraKnownMarketplaces`) so that Claude Code offers them to a teammate who opens the repository. Each teammate
+  installs them. The
+  [task-cycle](../../.claude/skills/task-cycle/SKILL.md) says which phase uses which:
+  - `agent-skills`: engineering skills (incremental implementation, test-driven development,
+    debugging, interface design, ADRs, security, and more) and the
+    `agent-skills:code-reviewer`, `agent-skills:security-auditor` and
     `agent-skills:test-engineer` subagents.
-  - `codex` — heterogeneous (GPT-family) review/rescue: `/codex:review`, `/codex:adversarial-review`,
-    `/codex:rescue`; job lifecycle `/codex:status` · `/codex:result` · `/codex:cancel`; `/codex:setup`
-    (readiness + an optional **stop-time review gate**).
-  - `ponytail` — anti-over-engineering: `ponytail` mode, `/ponytail-review` (diff), `/ponytail-audit` (repo).
-- **Built-in commands:** `/plan`, `/goal` (see Verification layer), `/code-review`,
-  `/security-review`, `/verify`, `/simplify`. The `/okf` skill is **user-env** (authoring/nav
-  aid) — the conformance *gate* is `make okf-validate`, a repo script, so it doesn't depend on a
-  personal skill being installed.
-- **Local subagents:** `.claude/agents/` — `deep-reasoner` (pinned Opus) · `fast-worker` (pinned
-  Sonnet) · `contract-verifier` (pinned Opus, read-only). The structural half of § Agent-side
-  model routing.
-- **Permissions:** `.claude/settings.json` deny rules + `.claude/settings.local.json` allowlist.
+  - `codex`: the heterogeneous (GPT-family) peer: `/codex:review`, `/codex:adversarial-review`,
+    `/codex:rescue`, `/codex:setup`, and the job commands `/codex:status`, `/codex:result`,
+    `/codex:cancel`.
+  - `ponytail`: checks for over-engineering: `/ponytail-review` (a diff) and `/ponytail-audit`
+    (the whole repository).
+  - `impeccable`, `taste-skill` and `frontend-design`: frontend design skills that the
+    `frontend-designer` subagent loads.
+  - `langfuse`: query traces, datasets and prompts in Langfuse.
+  - `okf`: write and maintain an Open Knowledge Format (OKF) bundle such as `docs/knowledge/`.
+- **Project skills** in `.claude/skills/`: the four `task-cycle` skills, and nine design
+  skills copied from `emilkowalski/skills` (MIT licence, kept beside each skill), because that
+  repository is not a plugin: `emil-design-eng`, `apple-design`, `animate`,
+  `review-animations`, `find-animation-opportunities`, `improve-animations`,
+  `animation-vocabulary`, `prototype` and `pick-ui-library`.
+- **Built-in commands:** `/plan`, `/goal`, `/code-review`, `/security-review`, `/verify`,
+  `/simplify`. The
+  conformance check for an OKF bundle is `make okf-validate`, a repository script, so it does
+  not depend on the `okf` plugin.
+- **Local subagents** in `.claude/agents/`: `deep-reasoner`, `fast-worker`, `frontend-designer`,
+  `researcher`, `builder`, `contract-verifier` (see the routing table).
+- **Permissions:** deny rules in `.claude/settings.json`, and a command allowlist in each user's
+  `.claude/settings.local.json`.
 
 ## Execution layer
 
-- [task-cycle skill](../../.claude/skills/task-cycle/SKILL.md) — the per-slice lifecycle, tiered.
-- Per-task artifacts under `docs/tasks/<id>/`: `contract.md`, `rubric.md`, `verification.md`,
-  `plan.md`, from `docs/tasks/_templates/`.
-- ADRs at `docs/adr/NNNN-slug.md` for Tier-3/4 design decisions.
+- [task-cycle skill](../../.claude/skills/task-cycle/SKILL.md): the lifecycle of one slice,
+  tiered by risk, split into design, build and review phases.
+- Per-task files under `docs/tasks/<id>/`: `contract.md`, `rubric.md`, `verification.md` and,
+  for frontend slices, `design-annex.md`, from `docs/tasks/_templates/`. `plan.md` has no
+  template: copy the shape of the previous slice's plan.
+- ADRs at `docs/adr/NNNN-slug.md` for Tier 3 and 4 design decisions.
 - `/plan` for read-only planning before non-trivial work.
 
 ## Enforcement layer
 
-**Mostly advisory.** Most boundaries in AGENTS.md (no hand-editing generated files, hard gates need
-approval) are guidance the agent is asked to follow — with **no hooks** behind them. The hard
-mechanisms: a **protected `dev` branch** on GitHub (PR required to merge, force-push blocked,
-deletion restricted); **CI** ([.github/workflows/verify.yml](../../.github/workflows/verify.yml),
-2026-07-03) running the identical `make verify` on every PR, wired into the `dev` ruleset as a
-**required status check**; `.claude/settings.json` **denies** reading/writing
-`.env`/secrets and editing generated artifacts (`uv.lock`, `dist/`); `settings.local.json` holds the
-command allowlist. Note **egress here means *runtime* egress** — the deployed product reaching
-search backends or model providers with project data (a per-slice approval gate, see
-[engineering-considerations.md](engineering-considerations.md)); agent/dev-time network use is not
-gated. See Known gaps.
+Some rules are enforced by a tool. The others are guidance that the agent is asked to follow.
+
+Enforced by a tool:
+
+- A **protected `dev` branch** on GitHub: a merge needs a PR, force-push is blocked, deletion is
+  restricted.
+- **CI** ([.github/workflows/verify.yml](../../.github/workflows/verify.yml)) runs `make verify`
+  on every PR. The `verify` job is a required check in the `dev` ruleset.
+- Checks inside `make verify`:
+  - `drift-check`: generated API files match the backend contract;
+  - `prompt-guard`: prompt text matches its pinned hash;
+  - `font-guard`: no licensed font files are committed;
+  - `audit-paths`: no file uses a backend path as if it were at the repository root;
+  - `okf-validate`: both OKF bundles conform.
+- `pytest-socket` blocks network calls from the tests.
+- `.claude/settings.json` denies reading and writing `.env` files, and direct edits to
+  generated and frozen files (`uv.lock`, `dist/`, `frontend/openapi.json`,
+  `frontend/src/api/gen/types.ts`, `docs/specs/sources/`).
+- A hook in `.claude/settings.json` (a command that Claude Code runs before a tool call)
+  refuses `git commit` while the branch is `dev`.
+
+Guidance only: asking for approval before a hard-gate change (schema, auth, runtime egress,
+dependencies, CI, production config, public interfaces, scaffold).
+The `/codex:setup` stop-time review gate stays off: it runs a full Codex review at the end of
+every turn and can block the turn, which suits unattended runs, not interactive work. Run
+`/codex:review` as an explicit review step instead.
+
+*Egress* here means *runtime* egress: the deployed product sends project data to search services
+or model providers. Agent and developer network use is not gated.
 
 ## Verification layer
 
-- `make verify` (okf-validate / test / typecheck / lint / build) — the green bar.
-  **Tiered commit gate** (011 retro, 2026-07-07): intermediate build sub-phase commits
-  gate on `make verify-fast` (test-fast + typecheck + lint, ~30s); full `make verify`
-  (~5–6 min, dominated by the PDF-ingest suite) stays mandatory at the build-open
-  baseline, any schema/ingest-adjacent phase (the table-count/metadata assertions live
-  *inside* the excluded `test_ingest_full_text.py`), and the step-6 exit. Never-commit-
-  on-red is unchanged — the tier picks the suite, not the discipline. Rule lives in
-  task-cycle-build § Step 5. **Two sizing decisions ride the design gates** (014 retro,
-  2026-07-08 — a 3h build wall clock): the plan's **gate map** may merge adjacent
-  low-risk phases into one full-verify checkpoint (plan 🛑 reviews it; the mandatory
-  classes above never shrink), and the contract pins the **live-check scope** (default:
-  changed surfaces + one cheap full-chain smoke; full live e2e is a priced, deliberate
-  upgrade — 014's inherited skeleton-e2e spent ~50 min of downstream live chain on
-  ~2 min of new-surface evidence). Rules live in task-cycle-design § Step 1 / § Step 3.
-- `/goal` — goal-conditioned runs, only when the stop condition is objective (`make verify`
-  green, a named test passing — CLAUDE.md's "only when completion is measurable"). Its independent
-  checker model grades completion, so the maker doesn't grade its own homework. **Scope: one goal
-  per task-cycle phase, never spanning phases** — a goal covering build *and* review forces
-  same-chat review and makes the author the adjudicator (failure-log, 2026-07-05); goal #1 = build
-  "through step 6", fresh conversation + goal #2 = the review stack. Session-scoped, attended;
-  **not** for judgment-call phases (contract/plan — those end at a 🛑), and scheduling/unattended
-  runs stay behind the `loops/` earn-it bar ([backlog.md](backlog.md)).
-- `verification.md` per task — commands run, exact end-to-end command, evidence, public-safety, gaps.
-- `rubric.md` — completion checklist; done only if every box holds.
-- Review stack (detail: `task-cycle-review` skill): contract-verifier -> `/code-review` medium ->
-  one security lane (`security-auditor` at Tier 3+, `/security-review` at Tier <=2) -> Codex
-  adversarial -> `/simplify`. Fresh conversation; data files excluded from the diff by pathspec.
+- **`make verify`, the green bar.** It checks that Postgres is running, then runs, in order:
+  - `okf-validate`;
+  - the backend: `test` (`pytest -n auto`, one database copy per worker), `typecheck` (mypy),
+    `lint` (ruff), `build`;
+  - `eval-check` (the evaluation scripts' self-tests and lint);
+  - `make -C infra test`;
+  - `audit-paths`, `prompt-guard`, `font-guard`, `drift-check`;
+  - `frontend-verify` (type check, lint, unit tests, build).
+- **`make verify-fast`** covers the backend only: `test-fast` (the backend tests without the
+  full-text ingest suite), `typecheck`, `lint`, then `eval-check`.
+- **`make frontend-verify-fast`**: frontend type check, lint and unit tests, without the
+  production build.
+- **Which check gates which commit** (rule in `task-cycle-build` § Step 5):
+  - full `make verify` at the build-open baseline, at any phase that touches schema or ingest
+    code, and at the step-6 exit;
+  - `make verify-fast` for other intermediate commits;
+  - `make frontend-verify-fast` (with `make verify-fast`) for frontend polish commits.
+
+  Never commit on a red check. The plan's gate map may merge adjacent low-risk phases into one
+  full-verify checkpoint. The contract sets the scope of the live check (default: the changed
+  surfaces and one cheap full-chain run).
+- **`/goal`**: a goal-conditioned run, only when the stop condition is objective (`make verify`
+  green, a named test passing). A separate checker model grades completion, so the maker does not
+  grade its own work. One goal per task-cycle phase, never across phases: a goal that spans build
+  and review makes the author the adjudicator. Not for judgment phases (contract, plan), which end
+  at a human gate.
+- **`verification.md`** per task: commands run, the exact end-to-end command, evidence, public
+  safety, gaps.
+- **`rubric.md`**: the completion checklist. The task is done only if every box holds.
+- **Review stack** (detail in the `task-cycle-review` skill): `contract-verifier`, `/code-review`
+  at `medium`, one security lane (`agent-skills:security-auditor` at Tier 3 and up,
+  `/security-review` below), the Codex adversarial review, a live-trace content review when the
+  slice has live runs, a design lane for frontend slices, and `ponytail-review`. Fresh
+  conversation; data files excluded from the diff. Cleanup is not a review lane: `/simplify`
+  runs at the end of the build (step 5c), so the review reads the simplified code.
 
 ## Observability
 
-- **structlog** mandated from the first slice (no print / stdlib logging).
-- Canonical, append-only `event_log` table = the audit plane, separate from execution telemetry.
-- Langfuse (trace backbone + prompt registry) and CloudWatch — **deferred**, direction only.
+- **structlog** for all application logging (no `print`, no standard-library logging).
+- The append-only **`event_log`** table is the audit record. It is separate from traces and
+  metrics.
+- **Langfuse** (self-hosted) traces model calls, with user and session ids
+  ([ADR 0038](../adr/0038-langfuse-observability-boundaries.md)). The `langfuse` plugin skill
+  queries it. The code, not Langfuse, holds the prompts.
+- **CloudWatch** holds the cloud logs (configured in `infra/`).
 
 ## Known harness gaps
 
-- **Thin enforcement.** `.env`/secrets and generated artifacts are denied via
-  `.claude/settings.json`; `dev` is protected and CI's `make verify` is a required merge check
-  (2026-07-03). What remains doc-only: the no-unapproved-hard-gate-change rule and the
-  runtime-egress gate — no PreToolUse/Stop hooks.
-- **No `metrics.md`** — the ~5-merged-tasks trigger fired 2026-07 and was consciously deferred:
-  no current harness question needs numbers, and the candidate metrics are reconstructible from
-  git/GitHub history (backfill by script when one does — see [backlog.md](backlog.md)). Harness
-  decisions/deferrals are tracked in [backlog.md](backlog.md).
-- **OKF bundle is young** — `docs/knowledge/` seeded from task-001; grow it **in the implementing PR**
-  (after the review stack finalises the code, task-cycle step 8), not after merge and not speculatively.
+- **Thin enforcement.** The hard-gate approval rule and the runtime-egress gate are guidance only.
+  No hook enforces them.
+- **No `metrics.md`.** No current harness question needs numbers. The likely metrics
+  (time to green, rework rate, review findings per task, diff size) can be rebuilt from git and
+  GitHub history by a script when a decision needs them.
+- **No scheduled loops.** Automate a workflow only after it has run by hand about three times
+  with a stable shape, and it has a state file, a checkable rubric, explicit gates and a budget.
+  Never for Tier 3 or 4 work.
+- **Repository-wide `/ponytail-audit`.** Run it at milestones, about every five merged slices. The
+  per-slice `ponytail-review` is already in the review stack.
+- **Docstrings are not checked by a tool** (see [readiness.md](readiness.md) § Open decisions).
+- **Grow `docs/knowledge/` in the implementing PR**, after the review stack finishes the code
+  (task-cycle step 8), not after merge and not on speculation.

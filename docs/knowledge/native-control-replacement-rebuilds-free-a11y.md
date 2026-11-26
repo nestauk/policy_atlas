@@ -3,7 +3,14 @@ type: Frontend rule
 title: Replacing a native form control with a styled widget forfeits its built-in accessibility — enumerate and rebuild it, or the swap is a regression
 description: 040 swapped a native `<select>` for a Radix-Popover listbox for visual reasons; every review lane independently flagged the same loss — arrow-key/Home/End navigation, label-click activation, and announcement of the current value all came free with the native control and vanished with it. Before shipping such a swap, list what the native control did for free and rebuild each item (or record the gap); JSDOM tests won't catch the loss unless they assert focus and accessible names.
 tags: [frontend, accessibility, radix, forms, task-040, review-lesson]
-timestamp: 2026-09-08
+generated:
+  by: process:okf-migrate
+  at: 2026-09-08
+sources:
+  - resource: "frontend/src/views/SourcesView.tsx"
+    title: "`frontend/src/views/SourcesView.tsx` (`FilterSelect`), `frontend/src/views/SourcesView.test.tsx` (keyboard test)"
+  - resource: "docs/tasks/040-mobile-layout/verification.md"
+    title: "`docs/tasks/040-mobile-layout/verification.md` \u00a7 Review findings (convergent finding)"
 ---
 
 # Rule
@@ -39,8 +46,3 @@ option → ArrowDown → Enter picks`) now pins the behaviour.
   `workspace/PlanDocument` pickers) and they drift; only FilterSelect has the
   keyboard model. The shared-component seam is recorded in
   `docs/deferred.md`.
-
-# Citations
-
-- `frontend/src/views/SourcesView.tsx` (`FilterSelect`), `frontend/src/views/SourcesView.test.tsx` (keyboard test)
-- `docs/tasks/040-mobile-layout/verification.md` § Review findings (convergent finding)

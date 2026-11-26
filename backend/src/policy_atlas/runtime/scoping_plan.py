@@ -99,7 +99,7 @@ log = structlog.get_logger()
 #: Where one plan field came from. Shown to the user beside the field.
 Origin = Literal["from_your_question", "assumed", "your_call"]
 
-#: What a constraint sentence is *about* (task 046, R34): what the option is or
+#: What a constraint sentence is *about*: what the option is or
 #: must not be (``boundary``; the screen calls it a requirement), what the
 #: adopter has or lacks, who can act or how far evidence from elsewhere applies
 #: (``consideration``; it never excludes an option), what the option achieves
@@ -109,10 +109,10 @@ ConstraintKind = Literal["boundary", "consideration", "preference", "evidence_re
 #: When a constraint bites. Fixed by the kind, never chosen independently.
 CheckedAt = Literal["longlist", "assessment", "retrieval"]
 
-#: kind → the one stage it is checked at (contract § Plan object). A constraint
+#: kind → the one stage it is checked at. A constraint
 #: typed one way and checked at another silently changes what the run excludes,
 #: so the pairing is validated rather than trusted. A consideration is checked
-#: at assessment, with no stage of its own (B3).
+#: at assessment, with no stage of its own.
 CHECKED_AT_BY_KIND: dict[ConstraintKind, CheckedAt] = {
     "boundary": "longlist",
     "consideration": "assessment",
@@ -120,9 +120,9 @@ CHECKED_AT_BY_KIND: dict[ConstraintKind, CheckedAt] = {
     "evidence_restriction": "retrieval",
 }
 
-#: The lines of an option's profile, in the order they are shown (task 046,
-#: R37; ``potential_impact`` last, task 055). A consideration's ``aspect`` names one of them, or
-#: ``transferability`` (B1).
+#: The lines of an option's profile, in the order they are shown
+#: (``potential_impact`` last). A consideration's ``aspect`` names one of them, or
+#: ``transferability``.
 ProfileLineKey = Literal[
     "cost",
     "time_to_set_up",
@@ -137,20 +137,19 @@ ProfileLineKey = Literal[
 PROFILE_LINE_KEYS: tuple[str, ...] = get_args(ProfileLineKey)
 
 #: The line a consideration speaks of: one of :data:`PROFILE_LINE_KEYS`, or
-#: ``transferability`` (B1).
+#: ``transferability``.
 ConsiderationAspect = Literal[ProfileLineKey, "transferability"]
 
 #: How far the shortlist may reach beyond options already tried elsewhere
-#: (task 055, contract S2, S3). It sets the mix of tested and untested places,
+#: (S3). It sets the mix of tested and untested places,
 #: never an order. ``api.contract.task_agent.ScopingRiskAppetite`` mirrors it.
 RiskAppetite = Literal["tried_only", "mostly_tried", "open_to_untested"]
 
-#: The plan's appetite when the user has not chosen one (contract S2: "Default:
-#: the middle").
+#: The plan's appetite when the user has not chosen one: the middle.
 DEFAULT_RISK_APPETITE: RiskAppetite = "mostly_tried"
 
-#: The three answers in the words the user sees (contract S2). The frontend
-#: holds the same words once in ``planVocabulary.ts`` (A25).
+#: The three answers in the words the user sees. The frontend
+#: holds the same words once in ``planVocabulary.ts``.
 RISK_APPETITE_LABELS: dict[str, str] = {
     "tried_only": "Cautious: only options that have been evaluated somewhere",
     "mostly_tried": "Balanced: mostly evaluated, plus one or two not yet evaluated",
@@ -164,43 +163,40 @@ SCOPING_STEER_POINTS: frozenset[str] = frozenset({"baseline_confirm"})
 #: The one steer point this slice's chain carries.
 BASELINE_CONFIRM = "baseline_confirm"
 
-#: The baseline's per-backend acquisition target by depth (contract § Plan
-#: object: execution-bearing, not a plan field). A narrow question about the
-#: status quo, not a broad search — the latency lever D7 names first. Phase 7
-#: measured one target of 25 (baselines of 4.3 to 7.5 minutes); phase 8 keys it
-#: on depth (owner, 2026-09-17: "targets 20 and 10").
+#: The baseline's per-backend acquisition target by depth (execution-bearing,
+#: not a plan field). A narrow question about the status quo, not a broad
+#: search. One target of 25 measured baselines of 4.3 to 7.5 minutes, so the
+#: target is keyed on depth.
 BASELINE_ACQUISITION_TARGETS: dict[str, int] = {"standard": 20, "rapid": 10}
 
-#: The broad search's per-backend acquisition target by depth (contract §
-#: Plan object "Compile constants", D2). Measured in the build; the numbers
-#: are the owner's after measurement.
+#: The broad search's per-backend acquisition target by depth (a compile
+#: constant). The numbers were chosen after measurement.
 LONGLIST_ACQUISITION_TARGETS: dict[str, int] = {"standard": 50, "rapid": 25}
 
-#: One option search's per-backend acquisition target (D2), at either depth.
+#: One option search's per-backend acquisition target, at either depth.
 OPTION_SEARCH_TARGET = 10
 
-#: At most this many option searches per longlist walk (A16): the user's own
+#: At most this many option searches per longlist walk: the user's own
 #: options and the report-derived ones always run, suggestions fill the rest.
 OPTION_SEARCH_CAP = 15
 
 #: How many option searches run at once (the cross-walk bound's width).
-#: 10 since task 057 (N10b; was 4): each child walk holds one database
-#: connection, so the width is part of the connection budget (plan P17).
+#: Each child walk holds one database connection, so the width is part of
+#: the connection budget.
 OPTION_SEARCH_WIDTH = 10
 
-#: The suggest step proposes at most this many options (D7), within the cap.
+#: The suggest step proposes at most this many options, within the cap.
 #: The prompt module's constant is the value; re-exported here beside the
 #: other compile constants.
 SUGGEST_BOUND = _PROMPT_SUGGEST_BOUND
 
-#: The coarse band the plan document shows. Replaced by the lead after the
-#: Phase 7 measurement; never a promise of a number.
+#: The coarse band the plan document shows; never a promise of a number.
 BASELINE_TIME_BAND = "A few minutes · then a check-in"
 
 #: The default jurisdiction, tagged ``assumed`` so the user is asked to check it.
 DEFAULT_WHERE_TEXT = "United Kingdom"
 
-#: The marker of a code-minted default constraint (task 045, D22). One value
+#: The marker of a code-minted default constraint. One value
 #: in this slice: the transferability preference every scoping plan carries.
 DefaultPreference = Literal["transferability"]
 
@@ -225,7 +221,7 @@ BASELINE_PURPOSE = "baseline"
 LONGLIST_PURPOSE = "longlist"
 TARGETED_PURPOSE = "targeted"
 #: A shortlist walk: the one ``shortlist`` step, opened by a risk-appetite
-#: change or by Suggest more (task 055, S17).
+#: change or by Suggest more.
 SHORTLIST_PURPOSE = "shortlist"
 
 #: The six components a scoping baseline walk runs.
@@ -238,16 +234,16 @@ SCOPING_SPINE: tuple[str, ...] = (
     "synthesise",
 )
 
-#: The longlist walk's chain, with each step's spine flag (A6, P16b; owner:
-#: "inherit non-spine"). ``inherit``, ``suggest`` and ``theme`` degrade the walk
+#: The longlist walk's chain, with each step's spine flag. ``inherit``,
+#: ``suggest`` and ``theme`` degrade the walk
 #: when they fail; every other step fails it. ``option_profile`` runs between
 #: ``longlist`` and ``constrain``: ``longlist`` makes the list,
-#: ``option_profile`` writes what is said about each option (task 046, R37).
+#: ``option_profile`` writes what is said about each option.
 #: ``theme`` runs after ``constrain`` has committed, so its failure cannot
-#: touch the verdicts (task 046, R28). ``shortlist`` runs last, after the
+#: touch the verdicts. ``shortlist`` runs last, after the
 #: themes are stored, and degrades the walk when it fails: the longlist, the
-#: verdicts and the themes stand, and the previous places stay (task 055).
-#: No step ingests full text (R13).
+#: verdicts and the themes stand, and the previous places stay.
+#: No step ingests full text.
 LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("inherit", False),
     ("suggest", False),
@@ -263,12 +259,12 @@ LONGLIST_CHAIN: tuple[tuple[str, bool], ...] = (
     ("shortlist", False),
 )
 
-#: The shortlist walk's chain (task 055, S17): one non-spine step, so a failed
+#: The shortlist walk's chain: one non-spine step, so a failed
 #: proposal ends the walk ``degraded`` and leaves the previous places.
 SHORTLIST_CHAIN: tuple[tuple[str, bool], ...] = (("shortlist", False),)
 
 #: The verb *add*'s option search (a targeted walk with no parent). Every step
-#: is spine for that walk. Its intent is the option's design (task 046, AM1).
+#: is spine for that walk. Its intent is the option's design.
 TARGETED_CHAIN: tuple[str, ...] = (
     "acquire",
     "screen_abstract",
@@ -277,14 +273,14 @@ TARGETED_CHAIN: tuple[str, ...] = (
     "extract_interventions",
 )
 
-#: An option search a longlist walk dispatched (task 046, R18, AM4): it only
+#: An option search a longlist walk dispatched: it only
 #: acquires. Its documents join the task's pool, and the longlist scope's one
 #: screen judges them after the runner's join. A failed child only degrades
 #: its parent.
 ACQUIRE_ONLY_CHAIN: tuple[str, ...] = ("acquire",)
 
 #: The intent-record context key that marks a longlist walk's option search
-#: (task 046, AM4). Written by ``option_search.run_option_search`` when the
+#: . Written by ``option_search.run_option_search`` when the
 #: walk has a parent; read by :func:`compose_scoping`.
 ACQUIRE_ONLY_KEY = "acquire_only"
 
@@ -731,7 +727,7 @@ class ScopingPlan(BaseModel):
         return self
 
 
-#: The plan fields the longlist chain reads (task 055, A6): the fields
+#: The plan fields the longlist chain reads: the fields
 #: ``compose_scoping`` and the longlist components take from the plan. A
 #: change to any of them makes a built longlist out of date; a change to any
 #: other field (the appetite, the steering mode, the title) does not. The
@@ -851,7 +847,7 @@ def _constraint_from_wire(wire: ScopingConstraintWire, index: int) -> ScopingCon
     )
 
 
-# The six inputs the baseline is built from (contract deliverable 8, plan S4):
+# The six inputs the baseline is built from:
 # a change to any of them leaves the baseline stale against the plan that did
 # not produce it. Compared deterministically between plan versions; the
 # sentence is code-authored so the Task Agent never guesses at it.
@@ -986,7 +982,7 @@ _WIRE_CONSTRAINT_FIELDS: tuple[str, ...] = (
 )
 
 
-# --- The default transferability preference (task 045, D22) ---------------
+# --- The default transferability preference ---------------
 
 
 def find_default(plan: ScopingPlan, marker: DefaultPreference) -> ScopingConstraint | None:
@@ -1112,7 +1108,7 @@ def settle_patched_defaults(patched: ScopingPlan, previous: ScopingPlan) -> Scop
     )
 
 
-# --- Options you already have in mind (task 045, D19) -----------------------
+# --- Options you already have in mind -----------------------
 
 
 def merge_your_options(
@@ -1458,7 +1454,7 @@ def _scoping_directive_delta(component: str, plan: ScopingPlan) -> dict[str, Any
             "sections": _baseline_section_directives(),
         }
         # Proposed sections are a standard-depth allowance; a rapid directive
-        # carries no budget and synthesise makes no proposal call (phase 8).
+        # carries no budget and synthesise makes no proposal call.
         if plan.depth == "standard":
             synthesis["section_budget"] = BASELINE_PROPOSED_SECTIONS_MAX
         return {"synthesis": synthesis}

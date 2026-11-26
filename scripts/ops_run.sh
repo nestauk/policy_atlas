@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Setup-and-forward wrapper for the ops CLI (owner request, 2026-08-25).
+# Setup-and-forward wrapper for the ops CLI.
 #
 # Usage: scripts/ops_run.sh <staging|prod> <ops command and flags...>
 #   e.g. scripts/ops_run.sh staging user create --email a@b.org \

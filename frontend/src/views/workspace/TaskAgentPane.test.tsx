@@ -1136,7 +1136,7 @@ describe("TaskAgentPane — the run trace", () => {
     const card = screen.getByTestId("check-in-card");
     expect(trace.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(trace).toHaveTextContent("Paused · waiting on you");
-    expect(trace.querySelector("[data-tone]")).toHaveClass("bg-orange");
+    expect(trace.querySelector("[data-tone]")).toHaveAttribute("data-tone", "paused");
   });
 
   it("folds the ended run to its one destination, with no separate finished notice", () => {

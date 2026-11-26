@@ -3,7 +3,9 @@ type: Live behaviour
 title: A 403 from a document host is usually bot-blocking, not a paywall
 description: 403 responses from live document hosts are predominantly WAF/bot-blocking of datacenter clients; only corroborated 403s (body markers or an OA cross-check) count as paywalls, or corpus accessibility is silently misstated.
 tags: [live-behaviour, fetch_live, http, "016", paywall]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

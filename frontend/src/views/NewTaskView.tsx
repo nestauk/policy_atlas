@@ -63,17 +63,17 @@ function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => 
   );
 }
 
-/** The help line under "Evidence search to start from" (owner, round 14). */
+/** The help line under "Evidence search to start from". */
 export const START_FROM_HELP =
   "Optional. Start from a completed evidence search in the same project to draw from its sources and report.";
 
-/** The label and one plain sentence over each optional field (owner, round
- *  13: "Starts from" was unclear in user testing). */
+/** The label and one plain sentence over each optional field (a label
+ *  alone, such as "Starts from", is unclear). */
 const FIELD_LABEL_CLASS = "block text-body font-semibold text-navy";
 const FIELD_HELP_CLASS = "mt-1 max-w-prose text-body font-normal text-grey";
 
-/** A finished Evidence search a scoping task can start from (owner, round
- *  14): one the reader owns whose latest walk finished. The page offers the
+/** A finished Evidence search a scoping task can start from:
+ *  one the reader owns whose latest walk finished. The page offers the
  *  chosen project's only. */
 type LinkableSearch = { task_id: string; name: string; project_ids: string[] };
 
@@ -97,12 +97,12 @@ function linkableSearches(
     .map((task) => ({ task_id: task.task_id, name: task.name, project_ids: task.project_ids ?? [] }));
 }
 
-/** Per-capability copy for step two. The form SHAPE is the same for both in
- *  this slice — question, project and (scoping only) the search to start
+/** Per-capability copy for step two. The form SHAPE is the same for both
+ *  — question, project and (scoping only) the search to start
  *  from, no depth
- *  or job control (contract second-round amendment 2) — so only the words
- *  differ. Options scoping's submit reads "Prepare plan" (task 044, phase
- *  3.4): the task's own plan is what the next screen opens on. */
+ *  or job control — so only the words
+ *  differ. Options scoping's submit reads "Prepare plan":
+ *  the task's own plan is what the next screen opens on. */
 const FORM_COPY: Record<
   SelectableCapabilityKey,
   { heading: string; blurb: string; placeholder: string; submitLabel: string }
@@ -161,25 +161,25 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const [question, setQuestion] = useState("");
   const [projectId, setProjectId] = useState(presetProject);
   // Options scoping only: the Evidence searches it starts from, none by
-  // default (owner, round 13: several again, `from_task_ids` is a list).
+  // default (several again, `from_task_ids` is a list).
   const [fromTaskIds, setFromTaskIds] = useState<string[]>([]);
   // The projects the task menu's "Add to project" offers (one cached query).
   // Every task this caller can read is a valid target: assignment resolves
-  // under the colleague-mutation grade (owner ruling 2026-08-27).
+  // under the colleague-mutation grade.
   const projects = useProjects();
   const assignableProjects = projects.data?.data ?? [];
   // The searches a scoping task can start from: the reader's own finished
-  // Evidence searches (owner, round 14). Owned is
+  // Evidence searches. Owned is
   // read off the rows (`is_owner`), so a caller without an organisation
-  // sends no `scope` (rubric 14's dark-launch invariant).
+  // sends no `scope` (organisations stay invisible to such a caller).
   const tasks = useTasks({ status: "active", page_size: 200 }, { enabled: capability === "options_scoping" });
   // While a new project is being named (`ProjectPicker`'s field is open),
   // the typed name; null otherwise.
   const [namingProject, setNamingProject] = useState<string | null>(null);
-  // Only the chosen project's searches (owner, round 14). Picking one never
+  // Only the chosen project's searches. Picking one never
   // changes the Project field; changing the project clears picks it does
   // not hold.
-  // The field waits for a project (owner, round 14): with none chosen, or a
+  // The field waits for a project: with none chosen, or a
   // new one not yet created, it is disabled ("Choose a project first").
   const searchesWait = projectId === "" || namingProject !== null;
   const searches = searchesWait
@@ -199,14 +199,14 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const makeProject = useMakeProject();
   const [projectFailed, setProjectFailed] = useState(false);
   const navigate = useNavigate();
-  // A theory of change can start from the user's own diagram (task 054, increment 5).
+  // A theory of change can start from the user's own diagram.
   const [file, setFile] = useState<File | null>(null);
   const pending = create.isPending || makeProject.isPending;
   const canSend = (question.trim().length > 0 || file !== null) && !pending;
   const copy = FORM_COPY[capability];
 
   // Create the task and open it. `draw` goes straight to the empty canvas: the user
-  // draws the theory without the Task Agent (owner, 2026-11-05). An upload opens with its file.
+  // draws the theory without the Task Agent. An upload opens with its file.
   const createTask = (taskProjectId: string | null, draw: boolean) => {
     const upload = draw ? null : file;
     create.mutate(
@@ -218,8 +218,8 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
       },
       {
         // A drawn theory opens on the empty canvas; an upload opens with its
-        // file. Otherwise the Agent tab streams the opening turn (task 058,
-        // N9): the words the person typed travel with the navigation, with
+        // file. Otherwise the Agent tab streams the opening turn:
+        // the words the person typed travel with the navigation, with
         // the turn id minted here so a repeated mount can never post it twice.
         onSuccess: (task) => {
           if (draw) void navigate(`/tasks/${task.task_id}/result`);
@@ -239,7 +239,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const submit = (draw = false) => {
     if (draw ? pending : !canSend) return;
     // A name typed in the picker but not created yet is made first, then
-    // the task in it (round 13); a blank one reads as None.
+    // the task in it; a blank one reads as None.
     const name = namingProject?.trim() ?? "";
     if (namingProject !== null && name !== "") {
       setProjectFailed(false);
@@ -260,7 +260,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
       }}
     >
       {/* No capability line above the heading: the heading names the kind of
-          work (owner, round 10), and the title starts at the page's 44 px
+          work, and the title starts at the page's 44 px
           top padding, where the lists' titles start. */}
       <h1 className="text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
         {copy.heading}
@@ -270,8 +270,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
       </p>
 
       {/* The question step, then the two optional fields, then the primary
-          alone on its own row at the right, nothing below it (owner, round
-          14: the page's foot was busy). */}
+          alone on its own row at the right, nothing below it. */}
       <div className="mt-6 border border-line-2 bg-paper px-[18px] py-3.5 focus-within:outline-2 focus-within:outline-blue">
         <label className="sr-only" htmlFor="new-task-question">
           Your question
@@ -319,7 +318,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
       </p>
 
       {/* Two plain optional fields, each a label, one line of help and its
-          control, 24 px apart (owner, rounds 13 and 14). The create call
+          control, 24 px apart. The create call
           carries both: the project membership and the links land with the
           task. */}
       <div className="mt-8 max-w-md">
@@ -354,7 +353,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
           <p className={FIELD_HELP_CLASS}>
             {START_FROM_HELP}
           </p>
-          {/* The searchable multi-select (owner, round 14): the reader's own
+          {/* The searchable multi-select: the reader's own
               finished searches in the chosen project; disabled until there
               is one. */}
           <MultiSelect

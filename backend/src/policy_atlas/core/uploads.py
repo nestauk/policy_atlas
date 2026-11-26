@@ -1,6 +1,6 @@
-"""Files a user gives a task: checked, stored, and recorded (task 054 increment 5, C8).
+"""Files a user gives a task: checked, stored, and recorded.
 
-One store and one table for every capability (owner, 2026-11-03); ``purpose``
+One store and one table for every capability; ``purpose``
 says what a file is for (``toc_theory``: a user's own theory of change).
 
 - **Where files live.** :class:`S3UploadStore` when ``POLICY_ATLAS_UPLOAD_BUCKET``

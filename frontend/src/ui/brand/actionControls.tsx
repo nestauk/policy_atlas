@@ -6,10 +6,10 @@ import { ExcludeIcon, UndoIcon } from "./icons";
 import { QUIET_CONTROL_CLASS } from "./inlineActions";
 
 /*
- * The quiet action control with a glyph before its words (round 13, owner),
+ * The quiet action control with a glyph before its words,
  * shared by two capabilities: Options scoping's Exclude and Include again,
- * and the theory of change's Remove and Restore on a document (058
- * alignment, phase 7). Grey, never red.
+ * and the theory of change's Remove and Restore on a document.
+ * Grey, never red.
  */
 
 /** A quiet text control with a 12 px glyph before the words, in the

@@ -129,7 +129,7 @@ export function codeTargets(graph: TocGraph): Map<string, Selection> {
 
 const VERDICT_OF = new Map<string, Verdict>([
   ...Object.entries(VERDICT_LABEL).map(([verdict, label]) => [label, verdict as Verdict] as const),
-  // The labels on reports written before 2026-11-04.
+  // The older verdict labels, which reports stored before the current wording still carry.
   ["Confident", "supported"],
   ["Not confident: evidence against", "against"],
 ]);
@@ -224,7 +224,7 @@ function AssumptionsTable({ rows, rich }: { rows: Row[]; rich: (text: string) =>
               </td>
               <td className="border-b border-line py-2 pr-2 align-top">{scrub(row.statement)}</td>
               <td className="border-b border-line py-2 pr-2 align-top">
-                {/* The report's square bullet, as the other capabilities' (owner, 2026-11-10). */}
+                {/* The report's square bullet, as the other capabilities'. */}
                 {(row.conditions ?? []).length > 0 && <BulletList items={(row.conditions ?? []).map((condition) => scrub(condition))} className="space-y-1" />}
               </td>
               <td className="whitespace-nowrap border-b border-line py-2 pr-2 align-top">{row.importance ?? (row.kind === "risk" ? "Risk" : "")}</td>
@@ -285,7 +285,7 @@ export const SECTION_ID: Readonly<Record<Exclude<TocPartKey, "title" | "verdict"
 };
 
 /** The parts that take the paper's full width under the narrative and its
- *  contents: the Assumptions table and the References (owner, 2026-11-10). */
+ *  contents: the Assumptions table and the References. */
 const WIDE_PARTS: ReadonlySet<TocPartKey> = new Set(["assumptions", "references"]);
 
 /** A section of the report as the shared disclosure reads it. */
@@ -318,8 +318,8 @@ export function liveSections(parts: ReadonlyMap<TocPartKey, LiveSection>): Sideb
 }
 
 /**
- * The committed report under the canvas (C38), in the shared report page's
- * sections (task 054, A14): each section a disclosure with its `h2`, folding
+ * The committed report under the canvas, in the shared report page's
+ * sections: each section a disclosure with its `h2`, folding
  * with the page's expand state; the content and its order as they were
  * (decision 4). The references are the shared References.
  *
@@ -372,13 +372,13 @@ export function ReportBody({
         <FullReportExpandAllButton />
       </div>
       {/* The narrative beside the contents; the Assumptions table and the
-          References under it take the paper's full width (owner, 2026-11-10). */}
+          References under it take the paper's full width. */}
       <ContentsBeside entries={reportSections(report)}>
       {section(
         SECTION_ID.summary,
         "Summary",
         <>
-          {/* The setting and the question, as one paragraph (owner, 2026-11-04). */}
+          {/* The setting and the question, as one paragraph. */}
           {summary.question != null && summary.question !== "" ? (
             <p className={P}>
               {summary.context !== "" && <>{rich(summary.context)} </>}
@@ -432,7 +432,7 @@ export function ReportBody({
             );
           })}
           {/* A pathway Policy Atlas set aside: its name in Grey, then who set
-              it aside and why (§ 8). No control: Include again waits (S11). */}
+              it aside and why (§ 8). No control: Include again waits. */}
           {setAside.map((pathway) => (
             <div key={pathway.pathway_id} data-testid="set-aside-pathway" className="mt-4 max-w-[44em]">
               <h3 className="text-lead font-bold text-grey">{scrub(pathway.label.replace(/[.:]?$/, ""))}</h3>
@@ -528,7 +528,7 @@ export function ReportBody({
 }
 
 /**
- * The report's sections while it is written (task 054, A13): each in its
+ * The report's sections while it is written: each in its
  * page place, its placeholder lines until its words arrive, then the
  * model's words paced in, its "[n]" markers as the muted "[·]" chips with
  * their sources' names on hover. The part being written reads "◆ Writing".

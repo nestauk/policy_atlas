@@ -3,7 +3,9 @@ type: Convention
 title: Untrusted text enters prompts only as JSON-encoded records — raw interpolation is the breach shape
 description: Every provider-derived field (title, abstract, priors, full-text segments) crosses into a product prompt as a value inside a json.dumps record, after sanitize_prompt_field. Raw f-string/format interpolation — even of sanitized text — lets multi-line values fabricate template structure, because the sanitizer deliberately preserves newlines.
 tags: [prompt-injection, sanitization, screening, classify, M10, convention]
-timestamp: 2026-07-08
+generated:
+  by: process:okf-migrate
+  at: 2026-07-08
 ---
 
 # Rule

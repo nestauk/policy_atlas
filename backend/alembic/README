@@ -1,1 +1,12 @@
-Generic single-database configuration.
+Database migrations, made with Alembic (a migration tool for SQLAlchemy).
+
+- The tables are defined in src/policy_atlas/core/schema.py. Each file in versions/ is one
+  migration with an upgrade() and a downgrade(). A schema change needs approval (AGENTS.md).
+- To make a new migration, change schema.py, then run this from backend/:
+  uv run alembic revision -m "what the change does"
+  Then write upgrade() and downgrade() in the new file. A migration keeps its own copy of
+  any SQL it runs and does not import from policy_atlas
+  (docs/knowledge/alembic-revision-freezes-the-sql-it-executes.md).
+- To migrate your dev database, run this from backend/: uv run alembic upgrade head
+  (make setup does this too). Alembic reads DATABASE_URL from the environment or backend/.env.
+- The tests migrate their own test database. The migration tests are in tests/core/.

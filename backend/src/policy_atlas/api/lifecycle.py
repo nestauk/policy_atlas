@@ -15,7 +15,7 @@ from policy_atlas.core.schema import task
 
 log = structlog.get_logger()
 
-# --- Lifecycle event vocabulary, both generations (task 038, contract V1) ---
+# --- Lifecycle event vocabulary, both generations ---
 #
 # New writes emit `task.*`. `event_log` is append-only, so rows written before
 # the slice still say `project.*` and every reader must accept both — this is
@@ -30,7 +30,7 @@ LIFECYCLE_EVENT_KINDS: tuple[str, ...] = (
 
 
 def both_generations(*kinds: str) -> frozenset[str]:
-    """Return each lifecycle kind under both the new and the pre-038 prefix.
+    """Return each lifecycle kind under both the ``task.`` and the older ``project.`` prefix.
 
     Args:
         *kinds: Bare kind names, e.g. ``"renamed"`` — each must be one of
@@ -52,7 +52,7 @@ def touch_task(conn: Connection, task_id: uuid.UUID) -> None:
     """Mark a task as worked on now, so lists sorted newest first see it.
 
     A run starting or ending, and a check-in answer, are work on the task
-    even though no task field changes (task 058, round 10): without this the
+    even though no task field changes: without this the
     Tasks list's "newest first" is creation order for Evidence search.
 
     Call it **first** in the transaction, before any run row is written: the
@@ -82,7 +82,7 @@ def rename_task(
         new_name: New task name.
         actor: Authenticated actor recorded in the event payload.
         extra: More payload, e.g. the title prompt's version and the question
-            a written name stands for (task 058, round 14).
+            a written name stands for.
 
     Raises:
         LookupError: If ``task_id`` does not identify a task.
@@ -123,7 +123,7 @@ def archive_task(
         task_id: Task to archive.
         actor: Authenticated actor recorded in the event payload.
         extra: More payload: the project whose archive archived it
-            (``project_id``, ``project_name``; task 058, round 14).
+            (``project_id``, ``project_name``).
 
     Returns:
         ``True`` when this call archived the task, ``False`` when it was

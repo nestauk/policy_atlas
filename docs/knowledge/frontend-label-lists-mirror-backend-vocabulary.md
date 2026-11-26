@@ -3,7 +3,9 @@ type: Frontend rule
 title: A frontend list of backend label values is tested against the labels the API sends
 description: A ranking or ordering list in the frontend that enumerates backend label values drifts silently when the backend vocabulary changes (lowercase tier keys outlived the "Very strong" to "Weak" labels), and adding one new value to a stale list inverts the order; such lists are written from the backend's vocabulary and their test uses the real labels.
 tags: [frontend, vocabulary, appraisal, ranking, "056"]
-timestamp: 2026-11-02
+generated:
+  by: process:okf-migrate
+  at: 2026-11-02
 ---
 
 # Rule

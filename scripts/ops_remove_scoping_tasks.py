@@ -4,12 +4,12 @@
 Two revisions refuse while options-scoping data exists, and this script is the
 remedy both name:
 
-- ``b5e1d7a4c026`` (task 044) refuses while any ``task`` or ``capability_run``
+- ``b5e1d7a4c026`` refuses while any ``task`` or ``capability_run``
   row still carries ``capability = 'options_scoping'`` — dropping
   ``task.capability`` and narrowing ``ck_capr_capability`` would silently
   reclassify those rows as Evidence searches. ADR 0037 § Rollback: "archiving
   keeps the row, so it is not a remedy".
-- ``c7e2a9f4b1d8`` (task 045) refuses while any walk runs under a
+- ``c7e2a9f4b1d8`` refuses while any walk runs under a
   ``longlist`` or ``targeted`` intent record (the longlist walk and its option
   searches), or an ``extraction_result`` has no ``selection_run_id``. Those
   walks exist only on options-scoping tasks, so removing the tasks removes
@@ -100,9 +100,9 @@ RESULT_TABLES: tuple[str, ...] = (
 #: - ``runs`` FKs to ``capability_run`` (``runs.capability_run_id``), and
 #:   ``artefact`` also FKs to ``capability_run`` — both precede it.
 #: - ``capability_run`` FKs to ``evidence_scope``, so it precedes it. Its
-#:   self-FK (``parent_capability_run_id``, task 045) is satisfied inside one
+#:   self-FK (``parent_capability_run_id``) is satisfied inside one
 #:   statement: a parent and its children always share a ``task_id``.
-#: - The task 045 option records lead: ``option_membership`` and
+#: - The option records lead: ``option_membership`` and
 #:   ``option_relation`` FK to ``option``; ``option`` FKs to ``runs`` (and is
 #:   named by ``task_link.option_id``, whose rows are already gone);
 #:   ``longlist_result`` FKs to ``runs`` and ``evidence_scope``;
@@ -263,8 +263,8 @@ def _apply(
     Args:
         conn: Open database connection, inside the caller's transaction.
         task_ids: The options-scoping task ids to remove.
-        kind: The task kind named in the closing line (task 054's
-            ``ops_remove_toc_tasks.py`` reuses this order).
+        kind: The task kind named in the closing line
+            (``ops_remove_toc_tasks.py`` reuses this order).
     """
     # Break the two nullable cycle pointers between plan and evidence_scope first.
     conn.execute(

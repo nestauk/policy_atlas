@@ -5,6 +5,7 @@ The command tree, with every global option before the subcommand::
     python -m policy_atlas.ops --env {staging,prod} [options] <group> <command>
 
       org   create    --name NAME
+      org   delete    --org ORG
       org   quota     --org ORG --tasks-per-year N|inherit --runs N|inherit
       org   domain add --domain D --org ORG
       org   domain remove --domain D
@@ -13,7 +14,9 @@ The command tree, with every global option before the subcommand::
       user  resync    --email E
       user  reissue   --email E
       user  de-enrol  (--email E | --sub SUB)
-      user  offboard  (--email E | --sub SUB)
+      user  deactivate (--email E | --sub SUB)
+      user  reactivate (--email E | --sub SUB)
+      user  reset-app (--email E | --sub SUB)
       user  quota     (--email E | --sub SUB) --tasks-per-year N|inherit --runs N|inherit
       rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
@@ -26,8 +29,8 @@ Global options: ``--env`` (required), ``--database-url``, ``--expected-account``
 confirmation this CLI asks is the environment check's database leg, and that one
 is not skippable (:func:`_prompt`).
 
-**There is no ``--password`` and no ``--temporary-password``**, on any command
-(contract § 9). The absence is asserted structurally by
+**There is no ``--password`` and no ``--temporary-password``**, on any command.
+The absence is asserted structurally by
 ``tests/ops/test_ops_structure.py``, over the built parser rather than over the
 source, so a flag added through any route fails the test. ``--database-url``
 refuses a URL carrying a password for the same reason the make targets went:
@@ -44,11 +47,11 @@ did not land.
 
 **The admin trace is emitted here, after that commit**, from whatever
 :class:`~policy_atlas.ops.commands.AdminTrace` values the record carries
-(:func:`_trace`). Contract § 3a wants the line to be evidence, and a line
+(:func:`_trace`). The line must be evidence, and a line
 written inside the transaction is a durable claim about a write a failed commit
 then threw away. One mechanism serves every command that moves ``is_admin`` —
 ``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol`` or
-``user offboard`` clears.
+``user deactivate`` clears.
 
 The one place that ordering cannot save anything is ``user create``: the Cognito
 account is made before the database is touched, because its ``sub`` is the key.
@@ -142,7 +145,7 @@ def main(
     try:
         return _run(args, engine=engine, cognito=cognito, sts=sts, emit=emit, confirm=confirm)
     except OpsError as error:
-        print(f"refused: {error}", file=sys.stderr)
+        print(f"refused: {error}", file=sys.stderr)  # noqa: T201 - command-line output
         return EXIT_REFUSED
 
 
@@ -226,6 +229,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     org_create = org.add_parser("create", help="create an organisation")
     org_create.add_argument("--name", required=True)
+    org_delete = org.add_parser(
+        "delete", help="delete an organisation no person, task, project or domain points at"
+    )
+    org_delete.add_argument("--org", required=True)
     org_quota = org.add_parser("quota", help="set organisation quota overrides")
     org_quota.add_argument("--org", required=True)
     _quota_args(org_quota)
@@ -275,8 +282,9 @@ def build_parser() -> argparse.ArgumentParser:
     user_reissue = user.add_parser(
         "reissue",
         help=(
-            "mint and print a new single-use temporary password for an account that "
-            "has never signed in (FORCE_CHANGE_PASSWORD) — it never accepts one"
+            "mint and print a new single-use temporary password for an active "
+            "account, whether or not it has signed in before (refused for a "
+            "deactivated or unconfirmed one) — it never accepts one"
         ),
     )
     user_reissue.add_argument("--email", required=True, type=_email)
@@ -286,16 +294,33 @@ def build_parser() -> argparse.ArgumentParser:
     de_enrol_subject.add_argument("--email", type=_email)
     de_enrol_subject.add_argument("--sub")
 
-    user_offboard = user.add_parser(
-        "offboard",
+    user_deactivate = user.add_parser(
+        "deactivate",
         help=(
-            "lock a person out: disable their Cognito account and sign them out "
-            "everywhere, then de-enrol them and make their public task links private"
+            "lock a person out: disable their Cognito account, sign them out everywhere, "
+            "clear their admin and ops roles and make their public task links private; "
+            "they keep their organisation and work"
         ),
     )
-    offboard_subject = user_offboard.add_mutually_exclusive_group(required=True)
-    offboard_subject.add_argument("--email", type=_email)
-    offboard_subject.add_argument("--sub")
+    deactivate_subject = user_deactivate.add_mutually_exclusive_group(required=True)
+    deactivate_subject.add_argument("--email", type=_email)
+    deactivate_subject.add_argument("--sub")
+    user_reactivate = user.add_parser(
+        "reactivate", help="turn a deactivated person's login back on (roles are not restored)"
+    )
+    reactivate_subject = user_reactivate.add_mutually_exclusive_group(required=True)
+    reactivate_subject.add_argument("--email", type=_email)
+    reactivate_subject.add_argument("--sub")
+    user_reset_app = user.add_parser(
+        "reset-app",
+        help=(
+            "for a lost or replaced phone: sign a person out everywhere and unlink their "
+            "authenticator app, so their next sign-in shows the QR code again"
+        ),
+    )
+    reset_app_subject = user_reset_app.add_mutually_exclusive_group(required=True)
+    reset_app_subject.add_argument("--email", type=_email)
+    reset_app_subject.add_argument("--sub")
     user_quota = user.add_parser("quota", help="set a person's quota overrides")
     user_quota_subject = user_quota.add_mutually_exclusive_group(required=True)
     user_quota_subject.add_argument("--email", type=_email)
@@ -386,13 +411,21 @@ def _run(
         )
         outcome = _dispatch(args, conn=conn, cognito=identity, target=target)
         if isinstance(outcome, commands.QuotaChange):
-            # A quota change is recorded wherever it is made (task 065, B12):
+            # A quota change is recorded wherever it is made:
             # the operator's verified AWS principal is the actor.
             commands.record_action(
                 conn,
                 actor=verification.caller_arn,
                 action="org.quota" if args.group == "org" else "person.quota",
                 target=outcome.who,
+                outcome="ok",
+            )
+        if isinstance(outcome, commands.AppReset):
+            commands.record_action(
+                conn,
+                actor=verification.caller_arn,
+                action="person.reset_app",
+                target=outcome.user_id,
                 outcome="ok",
             )
     # Both of these are after the commit, and for the same reason: neither a
@@ -408,7 +441,7 @@ def _database_url(args: argparse.Namespace) -> str:
     ``--database-url`` is a convenience for the tunnel's host and port. A
     password in it lands in the shell history and in the process table, which is
     exactly what the deleted ``cognito-user`` make target did with the Cognito
-    password and exactly why it went (contract § 9). ``DATABASE_URL`` is the
+    password and exactly why it went. ``DATABASE_URL`` is the
     credential path, and it is unchanged: an environment variable is not on argv.
 
     Raises:
@@ -476,6 +509,9 @@ def _dispatch(
     if args.group == "org":
         if args.command == "create":
             return commands.create_organisation(conn, name=args.name)
+        if args.command == "delete":
+            org = commands.resolve_organisation(conn, args.org)
+            return commands.delete_organisation(conn, org_id=org.org_id)
         if args.command == "quota":
             org = commands.resolve_organisation(conn, args.org)
             return commands.set_quota(
@@ -496,13 +532,22 @@ def _dispatch(
             )
         if args.command == "reissue":
             return commands.reissue_temporary_password(
-                cognito, pool_id=target.user_pool_id, email=args.email
+                conn, cognito, pool_id=target.user_pool_id, email=args.email
             )
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
-        if args.command == "offboard":
-            return commands.offboard_user(
+        if args.command == "deactivate":
+            return commands.deactivate_user(
                 conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
+        if args.command == "reset-app":
+            return commands.reset_authenticator_app(
+                conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
+        if args.command == "reactivate":
+            row = commands._resolve_and_lock(conn, email=args.email, sub=args.sub)
+            return commands.reactivate_user(
+                conn, cognito, pool_id=target.user_pool_id, sub=str(row["user_id"])
             )
         if args.command == "quota":
             row = commands._resolve_and_lock(conn, email=args.email, sub=args.sub)
@@ -587,4 +632,4 @@ def _prompt(emit: Callable[[str], None]) -> Callable[[Target], bool]:
 
 
 def _stdout(line: str) -> None:
-    print(line)
+    print(line)  # noqa: T201 - command-line output

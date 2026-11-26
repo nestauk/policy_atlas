@@ -3,7 +3,9 @@ type: Invariant (verified)
 title: A BEFORE UPDATE trigger does not guard INSERT, so a rule like can clear but never grant needs INSERT OR UPDATE
 description: A database trigger set to BEFORE UPDATE leaves INSERT open. A role that may clear a privilege but never grant it could still insert a row with the privilege set. Declare the trigger BEFORE INSERT OR UPDATE, and test both.
 tags: [postgres, triggers, privileges, security, "065"]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
 ---
 
 # Rule

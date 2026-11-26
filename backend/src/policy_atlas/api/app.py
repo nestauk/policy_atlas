@@ -46,51 +46,50 @@ _CONFLICT_CODES = {
     # 028 strand 3: the approved plan predates the newest completed task_agent
     # turn — review the demoted draft, re-approve, then start.
     "plan_stale",
-    # Task 033 § 6 (i.5): a task in a project carries that project's
+    # A task in a project carries that project's
     # visibility, so setting the task's own visibility has no honest
     # answer — the two ways out are changing the Project's visibility and
     # leaving the Task out of the Project.
     "visibility_conflict",
-    # Task 044 (C11, C12): a task can only start from a task it shares a
+    # A task can only start from a task it shares a
     # project with, and only from one whose latest walk has finished — and
-    # only from an Evidence search, whose report is what inheritance reads
-    # (S6, X4).
+    # only from an Evidence search, whose report is what inheritance reads.
     "link_project_mismatch",
     "link_source_unfinished",
     "link_source_capability",
-    # Task 054 (C10, C41): an edit made against an old revision, two boxes
+    # An edit made against an old revision, two boxes
     # already connected, an Undo already applied.
     "toc_stale_revision",
     "toc_duplicate",
     "toc_already_undone",
     "toc_not_running",
-    # Task 054: the plan is fixed once the theory is drafted (plan edits, uploads).
+    # The plan is fixed once the theory is drafted (plan edits, uploads).
     "toc_plan_fixed",
-    # Task 055 (P9): Suggest more when every included option already holds a
+    # Suggest more when every included option already holds a
     # place or was set aside; a shortlist place for an excluded or merged option.
     "nothing_to_propose",
     "not_included",
-    # Task 064a (Q7): the caller's tasks already hold `runs_per_user` walks.
+    # The caller's tasks already hold `runs_per_user` walks.
     "user_capacity",
-    # Task 064a (Q8): the caller created `task_quota_per_year` tasks in 365 days.
+    # The caller created `task_quota_per_year` tasks in 365 days.
     "task_quota",
-    # Task 064a (Q15): a free-text preview's confirm token is gone; compile again.
+    # A free-text preview's confirm token is gone; compile again.
     "confirm_expired",
-    # Task 065 ops-host command refusals.
+    # Ops-host command refusals.
     "ops_refused",
     "enrolled_elsewhere",
 }
 
 _CAPACITY_CODES = {"chat_capacity", "resend_cooldown"}
 
-#: Task 054 (S14): a readable task that is not a theory of change.
+#: A readable task that is not a theory of change.
 _NOT_FOUND_CODES = {"toc_not_found"}
 
-#: Task 054 (C15): a capability this deployment has switched off.
+#: A capability this deployment has switched off.
 _UNPROCESSABLE_CODES = {
     "capability_not_enabled",
     "toc_invalid",
-    # Task 054 increment 5 (C8): a refused upload, or an image that is no theory.
+    # A refused upload, or an image that is no theory.
     "upload_type",
     "upload_size",
     "upload_not_theory",
@@ -212,7 +211,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         allow_origins=[app_settings.app_origin],
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        # x-aws-waf-token: the waitlist form's CAPTCHA token (task 064b);
+        # x-aws-waf-token: the waitlist form's CAPTCHA token;
         # read by the firewall, never by the API.
         allow_headers=["Authorization", "Content-Type", "x-aws-waf-token"],
     )
@@ -223,7 +222,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         """Bind the request's identity onto every log line the request emits.
 
         The admin trace is the only control the privileged read has while the
-        privacy notice stands unedited (task 033 § 3a, § 12), and until this
+        privacy notice stands unedited, and until this
         existed an `admin_read` line carried a row id and nothing about the
         request that produced it — so opening a task card and reading a
         colleague's whole chat transcript were indistinguishable in the log.
@@ -261,13 +260,23 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
-        """Defense-in-depth response headers on the JSON API (review finding)."""
+        """Defense-in-depth response headers on the JSON API and the ops pages."""
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         if app_settings.service_role == "ops":
             # The ops pages are never embedded; refuse framing (clickjacking).
             response.headers.setdefault("X-Frame-Options", "DENY")
-            response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+            # CloudFront gives the public site its headers; nothing sits in
+            # front of the ops pages, so this service sends its own. Until the
+            # full policy is enforced, the framing ban stays enforced and the
+            # full policy is only reported in the browser console.
+            csp = app_settings.ops_csp
+            if csp and app_settings.ops_csp_enforced:
+                response.headers.setdefault("Content-Security-Policy", csp)
+            else:
+                response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+                if csp:
+                    response.headers.setdefault("Content-Security-Policy-Report-Only", csp)
         # Ignored by browsers over plain HTTP (dev); load-bearing behind TLS.
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
@@ -287,7 +296,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
                 conn.exec_driver_sql("SELECT 1")
         except SQLAlchemyError:
             # Mapped to code "unavailable" by the envelope handler — a DB-down
-            # readiness probe is not an "internal server error" (finding m8).
+            # readiness probe is not an "internal server error".
             raise HTTPException(status_code=503, detail="database is unavailable") from None
         return {"status": "ok"}
 
@@ -572,10 +581,10 @@ def _claim_and_execute(
 ) -> None:
     """Claim (unless pre-claimed) and execute one durable continuation.
 
-    Builds the SAME key-driven backends as the request path (review finding
-    codex-1, 2026-07-21: the drainer previously fell through to run_plan's stub
-    bundle and NullIO — a redispatched real continuation executed against
-    deterministic stubs and auto-continued every subsequent pause).
+    Builds the SAME key-driven backends as the request path, so the drainer
+    never falls through to run_plan's stub bundle and NullIO — which would run
+    a redispatched real continuation against deterministic stubs and
+    auto-continue every subsequent pause.
     """
     from policy_atlas.api.deps import get_agent_backend, runner_backends_for
     from policy_atlas.api.run_io import ParkIO
@@ -631,7 +640,7 @@ def _install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(EditRefused)
     async def edit_refused_handler(_: Request, exc: EditRefused) -> JSONResponse:
-        # A theory-of-change edit that cannot apply (task 054, C10).
+        # A theory-of-change edit that cannot apply.
         if exc.status == 404:
             return _error_response(404, "toc_not_found", exc.message)
         if exc.status == 422:
@@ -657,13 +666,13 @@ def _install_exception_handlers(app: FastAPI) -> None:
             # byte-identical (BOLA pin) — never pass router detail through.
             return _error_response(404, "not_found", "resource not found")
         # Router-authored 400/422 details are user-actionable ("change_mode
-        # requires a supported new_mode") — surfacing them was the point of
-        # raising with a message (review finding m2, 2026-07-21).
+        # requires a supported new_mode") — surfacing them is the point of
+        # raising with a message.
         detail = exc.detail if isinstance(exc.detail, str) and exc.detail else None
         if exc.status_code == 400:
             return _error_response(400, "malformed", detail or "malformed request")
         if exc.status_code == 403:
-            # Task 033 § 8 spends the 403 that web-api.md § Auth boundary
+            # This spends the 403 that web-api.md § Auth boundary
             # pre-reserved: the row is readable, the action is not. Distinct
             # from 404 by design — hiding a colleague's row from a colleague
             # who can already see it would be theatre.

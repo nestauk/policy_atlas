@@ -8,7 +8,7 @@ from math import isfinite
 from pathlib import Path
 from typing import Literal
 
-#: Where full-text ingestion runs (task 057): ``in_process`` on the API's own
+#: Where full-text ingestion runs: ``in_process`` on the API's own
 #: threads (the default), or ``queued`` through the cloud queue and function.
 IngestMode = Literal["in_process", "queued"]
 
@@ -43,17 +43,16 @@ class Settings:
         run_executor_max: Maximum number of concurrent walk workers.
         runs_per_user: Maximum number of walks one person's tasks may hold on
             the walk executor at once; administrators are exempt
-            (``RUNS_PER_USER``; task 064a, Q7).
+            (``RUNS_PER_USER``).
         task_quota_per_year: How many tasks one person may create in any
-            365 days; administrators are exempt (``TASK_QUOTA_PER_YEAR``;
-            task 064a, Q8).
+            365 days; administrators are exempt (``TASK_QUOTA_PER_YEAR``).
         jwks_cache_ttl_seconds: Duration for which a fetched JWKS is retained.
         sse_poll_interval_seconds: Durable-tail poll cadence for SSE clients.
         sse_heartbeat_seconds: Idle interval before an SSE keep-alive comment.
         db_pool_size: SQLAlchemy engine connection pool size.
         db_max_overflow: SQLAlchemy engine pool overflow above ``db_pool_size``.
         theory_of_change_enabled: Whether new theory-of-change tasks may be
-            created (``POLICY_ATLAS_THEORY_OF_CHANGE=1``; task 054, C15).
+            created (``POLICY_ATLAS_THEORY_OF_CHANGE=1``).
             Off by default; existing ones stay readable either way.
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
@@ -72,6 +71,12 @@ class Settings:
             each hour (``POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR``).
         ops_ui_dir: Directory holding the operations single-page application
             (``OPS_UI_DIR``; ``/app/ops-ui`` by default).
+        ops_csp: The Content Security Policy (the header that tells a browser
+            where a page may load content from) for the operations pages
+            (``OPS_CONTENT_SECURITY_POLICY``; the infrastructure code builds
+            it). None sends no such policy.
+        ops_csp_enforced: Whether the browser blocks what ``ops_csp`` forbids
+            (``OPS_CSP_MODE=enforce``) or only reports it in its console.
     """
 
     oidc_issuer: str
@@ -95,8 +100,10 @@ class Settings:
     pa_version: str | None = None
     service_role: Literal["api", "ops"] = "api"
     self_signup_enabled: bool = False
-    self_signup_max_per_hour: int = 20
+    self_signup_max_per_hour: int = 100
     ops_ui_dir: Path | None = Path("/app/ops-ui")
+    ops_csp: str | None = None
+    ops_csp_enforced: bool = False
 
 
 def load_settings() -> Settings:
@@ -112,8 +119,7 @@ def load_settings() -> Settings:
     # Pure os.environ by design: the DEV entry point loads backend/.env via
     # `uv run --env-file` (backend Makefile `dev` target). Loading .env here
     # would leak a developer's live keys into every test process that builds
-    # an app (live-check finding, 2026-07-21: it flipped the CLI pin test
-    # into live mode under socket-deny).
+    # an app.
     issuer = _required("OIDC_ISSUER")
     client_id = _required("OIDC_CLIENT_ID")
     app_origin = _required("APP_ORIGIN")
@@ -157,9 +163,11 @@ def load_settings() -> Settings:
         service_role=service_role_from_env(),
         self_signup_enabled=_optional("POLICY_ATLAS_SELF_SIGNUP") == "1",
         self_signup_max_per_hour=_positive_int(
-            "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", default=20
+            "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", default=100
         ),
         ops_ui_dir=Path(_optional("OPS_UI_DIR") or "/app/ops-ui"),
+        ops_csp=_optional("OPS_CONTENT_SECURITY_POLICY"),
+        ops_csp_enforced=_optional("OPS_CSP_MODE") == "enforce",
     )
 
 

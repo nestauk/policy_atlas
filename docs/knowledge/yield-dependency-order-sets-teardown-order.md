@@ -3,7 +3,9 @@ type: Invariant (verified)
 title: A FastAPI yield dependency declared before get_conn tears down after it, so it can log only after the commit
 description: FastAPI tears yield dependencies down in reverse order of use. A dependency that needs get_conn comes after it in the chain and ends first; one declared before get_conn ends after the commit. Use that to emit a log line only once the write is durable.
 tags: [fastapi, dependencies, transactions, logging, "065"]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
 ---
 
 # Rule

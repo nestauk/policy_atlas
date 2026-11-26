@@ -38,7 +38,7 @@ interface RailState {
 /**
  * Session-local state for the collapsible/resizable task_agent rail
  * (027 strand 3; PR #35's IDE-style rail, single-thread). Collapse is a real
- * button — keyboard-operable by construction (finding 19) — and resize is a
+ * button — keyboard-operable by construction — and resize is a
  * `role="separator"` handle that works by pointer drag or arrow keys, clamped
  * to sane bounds. No persistence: a fresh session gets the default split.
  *

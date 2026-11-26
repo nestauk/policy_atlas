@@ -3,7 +3,9 @@ type: Frontend rule
 title: Report-style pages use the Evidence search report's four text styles and nothing else
 description: Any page people read like a report (the ES report, the theory-of-change Result page and its Detailed information, the PDF print) uses the four classes in artefactPresentation.ts — part heading, section heading, body, label — on a white card. One body size, bold only for lead-ins and grades, grey only for metadata and labels. Panels and sheets use the smaller panel scale.
 tags: [frontend, typography, report, theory-of-change, task-054, design-system]
-timestamp: 2026-10-27
+generated:
+  by: process:okf-migrate
+  at: 2026-10-27
 ---
 
 # Rule

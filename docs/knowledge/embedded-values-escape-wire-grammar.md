@@ -3,7 +3,9 @@ type: Convention
 title: Values embedded in a structured wire param must exclude that wire's metacharacters
 description: OpenAlex's filter param is comma-delimited; a comma surviving sanitization into the embedded search value opens a new, attacker-expressible filter clause — bypassing the fail-closed directive grammar entirely. Sanitizers are wire-grammar-aware, not just content-aware.
 tags: [security, injection, transport, sanitization, search]
-timestamp: 2026-07-09
+generated:
+  by: process:okf-migrate
+  at: 2026-07-09
 ---
 
 # Rule

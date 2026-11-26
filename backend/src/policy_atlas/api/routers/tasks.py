@@ -65,7 +65,7 @@ router = APIRouter(
 public_read_router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
 #: The 403 message when someone other than the owner adds the task to a
-#: project or takes it out of one (task 058, round 10). Plain words: the
+#: project or takes it out of one. Plain words: the
 #: Share page shows it as it is.
 PROJECTS_OWNER_ONLY = "Only the task's owner can change its projects."
 
@@ -140,7 +140,7 @@ def list_tasks(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).mappings().all()
-    # One line per cross-organisation request (contract § 3a), emitted after
+    # One line per cross-organisation request, emitted after
     # the page is known so it can carry the row count — including the zero
     # that an `owner_email` search matching nobody produces.
     trace_admin_listing(
@@ -207,9 +207,8 @@ def assign_projects(
     """
     assigned_ids = list(dict.fromkeys(project_ids or []))
     # NEW targets resolve under the colleague-mutation grade (owner ∪
-    # same-org org-visible, never the admin leg — owner ruling
-    # 2026-08-27): a colleague may add their own task to an org-visible
-    # project they did not create. A project outside that estate
+    # same-org org-visible, never the admin leg): a colleague may add
+    # their own task to an org-visible project they did not create. A project outside that estate
     # must be as invisible here as it is on its own route, or PATCH
     # becomes an existence oracle for someone else's rows. A project
     # the task is ALREADY in is kept without re-resolving the grade:
@@ -251,10 +250,9 @@ def assign_projects(
     now = datetime.now(UTC)
     assignment: dict[str, object] = {"updated_at": now}
     if group_rows:
-        # i.2 (promotion) and i.3 (demotion) are one rule, not two
+        # Promotion and demotion are one rule, not two
         # branches: the member is org-visible if **any** of its projects
-        # is org-visible, private otherwise (owner ruling 2026-08-27 on
-        # the ADR 0032 merge). Organisation is different — a row carries
+        # is org-visible, private otherwise (ADR 0032). Organisation is different — a row carries
         # exactly one `org_id`, so a set spanning two organisations has
         # no honest answer and is refused rather than picking a winner.
         org_ids = {group_row["org_id"] for group_row in group_rows}
@@ -541,8 +539,8 @@ def update_task(
         )
     except HTTPException as exc:
         # A colleague who can see the row and tries to move it between
-        # projects is told why in words the Share page can show (task 058,
-        # round 10); the code stays `forbidden`.
+        # projects is told why in words the Share page can show;
+        # the code stays `forbidden`.
         if exc.status_code == 403 and "project_ids" in payload.model_fields_set:
             raise HTTPException(status_code=403, detail=PROJECTS_OWNER_ONLY) from None
         raise
@@ -570,8 +568,8 @@ def update_task(
             .where(task.c.task_id == task_id)
             .values(visibility=changes["visibility"], updated_at=datetime.now(UTC))
         )
-    # Orthogonal to visibility/project membership (D1, contract § Design
-    # decisions) — no interaction with the 409/422 rules above. Only a real
+    # Orthogonal to visibility/project membership
+    # — no interaction with the 409/422 rules above. Only a real
     # flip writes anything: a no-op PATCH (same value) writes neither the
     # column nor the audit event.
     if "is_public" in changes and bool(access.row["is_public"]) != changes["is_public"]:
@@ -634,7 +632,7 @@ def archive_task_route(
         raise ApiConflict("run_active", "the latest run is still active")
     # A run admitted but not yet inserted is invisible to the row check above —
     # consult the in-process dispatch reservation or archive can win that window
-    # and the run executes against a hidden task (review finding codex-9).
+    # and the run executes against a hidden task.
     from policy_atlas.api.routers.runs import dispatch_reserved
 
     if dispatch_reserved(task_id):

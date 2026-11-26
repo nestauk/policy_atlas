@@ -140,12 +140,12 @@ interface ClaimLike {
     }> | null;
   } | null;
   weakly_grounded?: boolean | null;
-  /** The judge's verdict on the claim (`ClaimOut`, round 13: the verdict is
-   *  the claim's, no longer copied onto each citation). */
+  /** The judge's verdict on the claim (`ClaimOut`: the verdict is
+   *  the claim's, not copied onto each citation). */
   grounding_tier?: string | null;
   grounding_rationale?: string | null;
   /** True for a claim the live page built from a checked section's
-   *  citations (task 058, round 8): the sheet opens on what the run knows
+   *  citations: the sheet opens on what the run knows
    *  (the span, the tier, each citation's id, quote and title) and leaves out
    *  what only the committed report has. */
   live?: boolean;
@@ -177,7 +177,7 @@ interface SectionLike {
   cards?: CaseStudyCardLike[];
 }
 
-/** The run's source notes so far, in the order written (round 8). */
+/** The run's source notes so far, in the order written. */
 function liveSourceNotes(stream: RunStreamState): LiveSourceNote[] {
   return stream.liveSourceNotes ?? [];
 }
@@ -192,8 +192,8 @@ function liveSourceNotes(stream: RunStreamState): LiveSourceNote[] {
 const CITATION_TINT = "hover:bg-blue-tint-2";
 
 const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
-  // reasoning + unspanned_assertion carry no user-facing detail (owner,
-  // 2026-07-29): they render as plain prose — see UNMARKED_TYPES.
+  // reasoning + unspanned_assertion carry no user-facing detail:
+  // they render as plain prose — see UNMARKED_TYPES.
   citation: CITATION_TINT,
   gap: "hover:bg-yellow-tint",
   pattern: "hover:bg-blue-tint-2",
@@ -216,7 +216,7 @@ export const CITATION_MARKER_CLASS =
 
 /** Claim types whose marking is dev-facing only: the judge's source-check
  *  flags and the writer's connective reasoning have no detail to reveal, so
- *  their prose renders unmarked (owner, 2026-07-29). */
+ *  their prose renders unmarked. */
 const UNMARKED_TYPES: ReadonlySet<ClaimLike["claim_type"]> = new Set([
   "reasoning",
   "unspanned_assertion",
@@ -287,7 +287,7 @@ function locateQuote(text: string, quote: string): { start: number; end: number 
  * whitespace-normalised remap, then the same without the quote's trailing
  * `.`, `,`, `;` or `:` (the writer often ends a quote with a stop the passage
  * does not have there), then the honest degrade (the quote alone, the passage
- * not repeated; round 12) — never a broken panel (strand 5).
+ * not repeated) — never a broken panel.
  */
 export function highlightParts(text: string, quote: string): HighlightParts {
   const found = locateQuote(text, quote) ?? locateQuote(text, quote.trimEnd().replace(/[.,;:]+$/, ""));
@@ -330,7 +330,7 @@ export function HighlightedContext({ text, quote }: { text: string; quote: strin
  *  shape every grounding/verdict/appraisal indicator in the app uses (the
  *  report's classification and strength chips, chat's verdict chip).
  *  Exported so no surface re-types the wrapping. The help cursor marks a
- *  value with a reason behind it, as the Sources table does (round 12). */
+ *  value with a reason behind it, as the Sources table does. */
 export function ChipWithTooltip({
   tone,
   label,
@@ -343,8 +343,8 @@ export function ChipWithTooltip({
   return (
     <Tooltip content={content} className="text-meta">
       {/* A flex wrapper, not a line box: the chip sits on its row's line
-          whatever its first item is (the strength's empty tone square set
-          the chip's baseline and dropped it 1 px; round 12). */}
+          whatever its first item is (the strength's empty tone square would set
+          the chip's baseline and drop it 1 px). */}
       <span className="inline-flex cursor-help">
         <Chip tone={tone}>{label}</Chip>
       </span>
@@ -354,15 +354,14 @@ export function ChipWithTooltip({
 
 /** What a passage read needs: the saved citation's id for a committed
  *  report, or the cited chunk and the quote while the report is still being
- *  written (the live frame's `chunk_id`, 2026-11-09). */
+ *  written (the live frame's `chunk_id`). */
 type PassageRef = { citation_id: string | null; quote: string; chunk_id?: string | null };
 
 /** Fetch one citation's clamped chunk context on demand (the click rung).
  *  A committed report's citation is read by its id. While the report is
  *  still being written (`live`) its citation rows are not committed yet,
- *  so the read goes by the cited chunk and the quote, the way chat's does
- *  (owner, 2026-11-09: the root of "the passage doesn't load during the
- *  write"); the chunks were committed long before. A 4xx is not retried; it
+ *  so the read goes by the cited chunk and the quote, the way chat's does;
+ *  the chunks were committed long before. A 4xx is not retried; it
  *  means the same thing on every attempt. */
 function useChunkContext(taskId: string, citation: PassageRef, live = false) {
   const client = useApiClient();
@@ -396,7 +395,7 @@ function useChunkContext(taskId: string, citation: PassageRef, live = false) {
  *  before the field existed): no passage read can run until the commit. */
 const LIVE_PASSAGE_NOTE = "The surrounding passage is read once the report is complete.";
 
-/** The judge's callout tint (owner, round 13): a checked tier on Blue
+/** The judge's callout tint: a checked tier on Blue
  *  Wash 2 ("blue means checked"), an unsupported one on Red Tint, an
  *  unchecked one on Ground. */
 function judgementTint(judgement: CitationJudgement): string {
@@ -407,7 +406,7 @@ function judgementTint(judgement: CitationJudgement): string {
 
 /** A part's label on the sheet, the dossier's label style (Meta Grey).
  *  "Judge" carries the Policy Atlas blue diamond before it, the mark of the
- *  product's own AI work (owner, round 13). */
+ *  product's own AI work. */
 function ProvenanceLabel({ children, ai = false }: { children: string; ai?: boolean }) {
   return (
     <p data-provenance-label="" className="mb-1 flex items-center gap-1.5 text-meta text-grey">
@@ -419,7 +418,7 @@ function ProvenanceLabel({ children, ai = false }: { children: string; ai?: bool
 
 /** The judge's verdict: "Judge" led by the blue diamond (the product's AI
  *  judgement), over its tinted callout, the tier's label in Navy Semibold
- *  and the judge's words at Body Grey (owner, round 13). */
+ *  and the judge's words at Body Grey. */
 function JudgeBlock({ judgement }: { judgement: CitationJudgement }) {
   return (
     <div data-judge-block="">
@@ -434,7 +433,7 @@ function JudgeBlock({ judgement }: { judgement: CitationJudgement }) {
 
 /** The evidence type on the sheet's marks line, its hover the classifier's
  *  reasoning read from the cited source's dossier, as the badges and the
- *  Sources table do (owner, round 13): the dotted word, the help cursor,
+ *  Sources table do: the dotted word, the help cursor,
  *  the Meta tooltip. Without a task and a source to ask, the type alone. */
 function ClassificationHint({ taskId, sourceId, type }: { taskId: string; sourceId: string | null; type: string }) {
   const label = scrub(evidenceTypeLabel(type));
@@ -518,8 +517,8 @@ export function CitationQuote({
 }) {
   const parts = context.data !== undefined ? highlightParts(context.data.context, quote) : null;
   // The quote is known before the passage is read: it shows at once, and the
-  // passage takes its place when it lands (owner, 2026-11-09: a citation
-  // opened during the write showed only "Loading…").
+  // passage takes its place when it lands, so a citation opened during the
+  // write never shows only "Loading…".
   const loading = context.isLoading ?? (context.isPending && !context.isError);
   return (
     <div>
@@ -552,7 +551,7 @@ export function CitationQuote({
   );
 }
 
-/** A source's marks line (owner, round 14): the evidence type (dotted,
+/** A source's marks line: the evidence type (dotted,
  *  its classifier's reasoning on hover), then the strength with its tone
  *  square (its appraisal on hover), then any plain facts ("Since 2019",
  *  "Cited by 3 claims"), at Meta Grey, joined by middots. One line for the
@@ -590,7 +589,7 @@ function EvidenceMarksLine({
   );
 }
 
-/** One source's provenance block (owner, round 13): its own box (a Line
+/** One source's provenance block: its own box (a Line
  *  hairline, no coloured rule: that is the Claim's). The report's sheet
  *  groups a claim's citations by source, one box each, and shows the
  *  claim's one verdict under the Claim; chat passes one citation and its own
@@ -599,8 +598,8 @@ function EvidenceMarksLine({
  *  Navy, the title the way into the dossier, then "Sampleton A, Mockford C ·
  *  2022 · BMJ Open" in Grey, then the evidence type (its reasoning on hover)
  *  and strength at Meta; then each quote under its own "Quote" label,
- *  highlighted inside its passage (`CitationQuote`). One type scale (round
- *  12). Presentational: callers own the chunk-context queries. */
+ *  highlighted inside its passage (`CitationQuote`). One type scale.
+ *  Presentational: callers own the chunk-context queries. */
 export function CitationProvenanceBlock({
   n,
   sourceTitle,
@@ -642,11 +641,11 @@ export function CitationProvenanceBlock({
   taskId?: string;
   sourceId?: string | null;
   /** Several quotes from this one source, each a `CitationQuote` (the
-   *  report groups a claim's citations by source, owner round 13); without
+   *  report groups a claim's citations by source); without
    *  it the block shows the one `quote` in `context`. */
   quotes?: ReactNode;
 }) {
-  // Title first (owner, round 13): the title on its own line, then the
+  // Title first: the title on its own line, then the
   // authors, year and venue in Grey; the References keep their author-year
   // form.
   const byline = [
@@ -687,7 +686,7 @@ export function CitationProvenanceBlock({
           className="mt-1"
         />
       </div>
-      {/* Each quote under its own "Quote" label (owner, round 13). */}
+      {/* Each quote under its own "Quote" label. */}
       <div className="space-y-3">
         {quotes ?? <CitationQuote context={context} quote={quote} fallbackNote={fallbackNote} />}
       </div>
@@ -731,7 +730,7 @@ function ReportQuote({ taskId, citation, label, live = false }: { taskId: string
   return <CitationQuote context={context} quote={citation.quote} label={label} note={unreadable ? LIVE_PASSAGE_NOTE : undefined} />;
 }
 
-/** One source's box in the claim panel (owner, round 13): a claim's
+/** One source's box in the claim panel: a claim's
  *  citations grouped by source, the source line once, then each of its
  *  quotes under its own "Quote" label. The byline comes from the first
  *  quote's passage read (the chunk context carries the authors, year and
@@ -768,7 +767,7 @@ function SourceGroupBlock({
           taskId={taskId}
           citation={citation}
           live={live}
-          // Several quotes from one source are numbered in order (owner, round 13).
+          // Several quotes from one source are numbered in order.
           label={citations.length > 1 ? `Quote ${at + 1}` : "Quote"}
         />
       ))}
@@ -791,7 +790,7 @@ export function citationsBySource<C extends { source_id?: string | null; source_
   return [...groups.values()];
 }
 
-/** The claim's verdict (round 13: the tier and rationale are the claim's,
+/** The claim's verdict (the tier and rationale are the claim's,
  *  `ClaimOut.grounding_tier` and `grounding_rationale`). A claim with no
  *  citations has nothing judged against a source. */
 function claimJudgement(claim: ClaimLike): CitationJudgement | null {
@@ -803,16 +802,15 @@ function nonEmpty(value: string | null | undefined): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
-/** The citation sheet's title, the report's and chat's (owner, round 13;
- *  it read "Where this comes from"). */
+/** The citation sheet's title, the report's and chat's. */
 export const PROVENANCE_SHEET_TITLE = "Evidence for this claim";
 
-/** The provenance sheet a claim (report) or a claim/citation (chat) opens
- *  (owner, round 13): the "Evidence for this claim" shell, then the claim's
+/** The provenance sheet a claim (report) or a claim/citation (chat) opens:
+ * the "Evidence for this claim" shell, then the claim's
  *  block (its words behind the 2 px blue rule; one line per string — chat
  *  stacks several when multiple claims cite one citation), a caller-supplied
  *  extras slot (the reader's gap/type-hint/theme/weak-grounding lines), the
- *  claim's one Judge block (lead, round 13), then one bounded block per
+ *  claim's one Judge block, then one bounded block per
  *  citation, 16 px apart. The Sheet keeps its close
  *  button and focus rules. */
 export function ProvenanceSheet({
@@ -829,8 +827,7 @@ export function ProvenanceSheet({
   extras?: ReactNode;
   /** A block at the foot of the sheet (in-app feedback: the claim flag). */
   footer?: ReactNode;
-  /** The claim's one verdict, shown once under the Claim (lead, round 13:
-   *  the read model copies the claim's verdict onto every citation). */
+  /** The claim's one verdict, shown once under the Claim. */
   judgement?: CitationJudgement | null;
   onClose: () => void;
   /** One element per source box (the label over them counts sources). */
@@ -845,10 +842,10 @@ export function ProvenanceSheet({
       }}
     >
       {/* "Claim provenance" repeats the title on screen: it stays the
-          dialog's accessible description only (round 10, C3). */}
+          dialog's accessible description only. */}
       <SheetContent title={PROVENANCE_SHEET_TITLE} description={description} descriptionHidden>
         {/* The claim's block, then one bounded block per citation, 16 px
-            apart (owner, round 13). */}
+            apart. */}
         <div className="space-y-4">
           {claimTexts.some((text) => text !== "") && (
             <div>
@@ -1050,7 +1047,7 @@ export function CitationTooltipBody({
   // title · quote · ONE short status (tier label or unchecked wording) ·
   // the click hint — identical on every surface. Rationale/explainer text
   // lives in the provenance sheet's chip tooltip, never on the hover. A JSX
-  // slot here is what let the chat hover drift twice (owner, 2026-08-12).
+  // slot here is what let the chat hover drift twice.
   return (
     <div className="max-w-[260px] space-y-1.5 text-meta leading-snug">
       <p className="font-semibold text-navy">{scrub(sourceTitle)}</p>
@@ -1077,7 +1074,7 @@ function numberList(numbers: readonly number[]): string {
 }
 
 /**
- * The marker's accessible name (round 10, C1): what it opens. One source
+ * The marker's accessible name: what it opens. One source
  * names it, "Source 2: School meals and child weight outcomes"; several are
  * counted, "Sources 7 and 12".
  */
@@ -1091,8 +1088,8 @@ export function markerName(citations: readonly { n: number; source_title: string
 }
 
 /** A claim span in the prose (demo ClaimSpan): the whole span is clickable
- *  and hover previews the first citation; the marker is the one control
- *  (round 10, finding 4), with the same preview on hover and on keyboard
+ *  and hover previews the first citation; the marker is the one control,
+ * with the same preview on hover and on keyboard
  *  focus, and opens the provenance panel. Citation numbers ride as one
  *  inline chip; typed claims carry their label. */
 function ClaimSpan({
@@ -1109,8 +1106,8 @@ function ClaimSpan({
    *  half of a colon-crossing citation so the marker shows only once. */
   showCitationMarker?: boolean;
   /** True on the report while it is written. A checked claim whose
-   *  citations carry their ids is a control as on the committed report
-   *  (task 058, round 8); one without them (an older stream) shows its
+   *  citations carry their ids is a control as on the committed report;
+   * one without them (an older stream) shows its
    *  number in the report's look and is not a control. */
   live?: boolean;
 }) {
@@ -1120,7 +1117,7 @@ function ClaimSpan({
   const canFlag =
     feedbackEnabled("claim_flag") && !isPublicView && !live && claim.live !== true && showCitationMarker;
   // Dev-facing markings (source-check flags, connective reasoning) carry no
-  // user-facing detail: their prose renders unmarked (owner, 2026-07-29).
+  // user-facing detail: their prose renders unmarked.
   if (UNMARKED_TYPES.has(claim.claim_type)) return <span>{scrub(text)}</span>;
   const citationNumbers = sortedNumbers(claim.citations);
   const inert =
@@ -1144,7 +1141,7 @@ function ClaimSpan({
     );
   }
   // A marker whose number changed at the swap fades its new number in; the
-  // text around it does not move (owner, round 7).
+  // text around it does not move.
   const before = swap.liveNumbers.get(markerKey(claim.span, text));
   const renumbered = swap.arriving && before !== undefined && before !== citationNumbers.join(",");
   const first = (claim.citations ?? [])[0];
@@ -1191,7 +1188,7 @@ function ClaimSpan({
     <span data-claim-id={claim.claim_id} className="group">
       {/* The words are a pointer target only: hover tints them and shows the
           preview, a click opens the panel. The marker after them is the one
-          control a keyboard and a screen reader meet (round 10, finding 4),
+          control a keyboard and a screen reader meet,
           so a claim is one tab stop and the sentence is not read as a
           button. A real <button> around the words would be an atomic inline
           block that could never wrap mid-line. */}
@@ -1440,10 +1437,9 @@ export function AnnotatedProse({
     if (current.length > 0) bullets.push(current);
     return (
       <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
-        {/* The bullet is an Electric Blue square (owner, round 11, reversing
-            round 10's Navy) centred on the text's x-height
-            (`BULLET_MARK_CLASS`); the items stand apart (round 10,
-            finding 8). `data-bullet` prints it as a border, since print
+        {/* The bullet is an Electric Blue square centred on the text's x-height
+            (`BULLET_MARK_CLASS`); the items stand apart.
+            `data-bullet` prints it as a border, since print
             drops backgrounds. */}
         <ul className="list-none space-y-3">
           {bullets.map((bullet, bulletIndex) => {
@@ -1510,12 +1506,12 @@ export function SourceDossier({
   /** A source id (citations carry one) or a display title (references,
    *  theme members — the legacy title-keyed path). */
   sourceRef: string;
-  /** Opened from a claim's sheet: "Back to the claim" returns to it (owner,
-   *  round 13). Absent from every other route in. */
+  /** Opened from a claim's sheet: "Back to the claim" returns to it.
+   *  Absent from every other route in. */
   onBack?: () => void;
   /** The option whose card opened the dossier (the `option` search
    *  parameter): on an options-scoping task the slot then reads "In this
-   *  option" (task 046, amendment 3, R67). */
+   *  option". */
   optionId?: string | null;
   onClose: () => void;
 }) {
@@ -1543,7 +1539,7 @@ export function SourceDossier({
         headerAction={
           onBack !== undefined ? (
             // "Back" with the icons module's left arrow; its
-            // name and tooltip say where it goes (owner, round 13).
+            // name and tooltip say where it goes.
             <Tooltip content={<p>Back to the claim</p>} className="text-meta">
               <button
                 type="button"
@@ -1612,7 +1608,7 @@ export function showLiveArtefact(
   if (replayingFinished) return false;
   return (
     stream.run?.status === "running" ||
-    // A run parked on a check-in keeps the live body (task 058, N11).
+    // A run parked on a check-in keeps the live body.
     stream.run?.status === "paused" ||
     hasTerminalPartialLiveArtefact(stream)
   );
@@ -1676,7 +1672,7 @@ export function PlaceholderLines({
   index: number;
   still: boolean;
   className?: string;
-  /** Fading out over the first words (round 9). */
+  /** Fading out over the first words. */
   leaving?: boolean;
 }) {
   const widths = PLACEHOLDER_WIDTHS[index % PLACEHOLDER_WIDTHS.length];
@@ -1726,7 +1722,7 @@ const LINE_BREAK = /\n\s*/g;
 const ITEM_MARKER = /^\s*-(?:\s|$)/;
 
 /** Each repaired span's blur and its settle start this long after the one
- *  before it, in document order (task 058, owner round 8). */
+ *  before it, in document order. */
 export const REVISE_STAGGER_MS = 120;
 
 /** How long a repaired span's new words take to resolve out of the blur. */
@@ -1854,8 +1850,8 @@ export function draftParagraphs(
   return draftBlocks(draft, revising, claims, "prose");
 }
 
-/** The citation marker while the claim is still being checked (task 058,
- *  owner round 7): the final marker's chip in its muted look (Line border,
+/** The citation marker while the claim is still being checked:
+ *  the final marker's chip in its muted look (Line border,
  *  Ground fill, grey text), a dot in place of the number. Not a control. */
 export const CITATION_MARKER_PENDING_CLASS =
   "citation-marker citation-number pending-mark ml-1 border border-line bg-ground px-1.5 align-[2px] text-caption font-semibold text-grey";
@@ -1869,7 +1865,7 @@ export const CITATION_MARKER_LIVE_CLASS =
 /** The writer's own citation while the section is written: the marker's chip,
  *  muted, after the cited words. Its titles are the hover text. `at` is its
  *  place in the section, which sets its turn while the claims are checked
- *  (task 058, owner round 8: the chips breathe in sequence). */
+ *  (the chips breathe in sequence). */
 function PendingMarker({ claim, at }: { claim: LiveClaim; at: number }) {
   const titles = claim.sources.map((source) => scrub(source.title)).join("; ");
   return (
@@ -1887,7 +1883,7 @@ function PendingMarker({ claim, at }: { claim: LiveClaim; at: number }) {
 }
 
 /** One run's words: plain, or, in the live block, one span per reveal batch
- *  that fades in over 150 ms, opacity only (task 058, owner round 7). Pieces
+ *  that fades in over 150 ms, opacity only. Pieces
  *  are keyed by where they start, so a batch fades once. */
 function RunWords({ run, cuts }: { run: DraftRun; cuts?: readonly number[] }) {
   if (cuts === undefined || cuts.length === 0) return <>{scrub(run.text)}</>;
@@ -2030,7 +2026,7 @@ export function sameParagraph(
 }
 
 /** A block the writer has moved past: frozen, so only the live tail
- *  re-renders as text is revealed (task 058, owner round 7). */
+ *  re-renders as text is revealed. */
 export const SettledParagraph = memo(DraftBlockView, sameParagraph);
 
 /** Drafted text: plain text, no Markdown, laid out as the committed prose is
@@ -2039,7 +2035,7 @@ export const SettledParagraph = memo(DraftBlockView, sameParagraph);
  *  the last is frozen; the last is the live tail. No `text-wrap: pretty` or
  *  `balance` here: the live lines must not re-break as words arrive. While
  *  the claims are checked (`checking`), the muted markers breathe in
- *  sequence (task 058, owner round 8). */
+ *  sequence. */
 function DraftProse({
   draft,
   revising,
@@ -2169,8 +2165,8 @@ function occurrences(hay: readonly string[], needle: readonly string[], from: nu
 }
 
 /**
- * Line the draft's repaired spans up with the checked prose (task 058, owner
- * round 8: repairs of several claims settle one by one).
+ * Line the draft's repaired spans up with the checked prose (repairs of
+ * several claims settle one by one).
  *
  * The text between the spans is the same in both; each span's new words are
  * whatever the prose has between those shared stretches. A shared stretch
@@ -2272,7 +2268,7 @@ export function settleStep(
 }
 
 /** The section lines the writer's ticks carry for the two slots that are
- *  not numbered sections (round 8): the key findings and the introduction. */
+ *  not numbered sections: the key findings and the introduction. */
 const SLOT_LINES: Partial<Record<string, string>> = { key_findings: "Key findings", intro: "Introduction" };
 
 /** Whether the writer's tick names this section: its section line ends with
@@ -2292,7 +2288,7 @@ function tickNamesSection(sectionLine: string | undefined, section: { title: str
  *  code-injected last body section, keep their committed role so their rule
  *  above them is there before the swap. A stream with no roles (an old
  *  replay) knows only the key findings, by their slot. The introduction
- *  (round 8) is not a section on the page: it is the Full report part's
+ * is not a section on the page: it is the Full report part's
  *  opening paragraph, and the page takes it out of the section order. */
 function liveRole(section: LiveSection): NonNullable<SectionLike["role"]> {
   if (section.role === "key_findings" || section.role === "case_studies" || section.role === "intro") return section.role;
@@ -2310,7 +2306,7 @@ export function liveClaims(
 ): ClaimLike[] {
   const chars = Array.from(prose);
   const bySpan = new Map<string, ClaimLike>();
-  // The checker's verdict is the claim's (round 13), matched by the claim's
+  // The checker's verdict is the claim's, matched by the claim's
   // id when both carry it, else by its span.
   const byId = new Map((checked ?? []).filter((claim) => claim.claimId !== null).map((claim) => [claim.claimId, claim]));
   const bySpanVerdict = new Map((checked ?? []).map((claim) => [`${claim.start}:${claim.end}`, claim]));
@@ -2322,8 +2318,8 @@ export function liveClaims(
       claim = {
         grounding_tier: verdict?.tier ?? null,
         grounding_rationale: verdict?.rationale ?? null,
-        // The committed report's claim id when the frame carries it (round
-        // 8), so the sheet can follow the claim across the swap.
+        // The committed report's claim id when the frame carries it,
+        // so the sheet can follow the claim across the swap.
         claim_id: citation.claimId ?? `live:${key}`,
         claim_type: "citation",
         text: chars.slice(citation.start, citation.end).join(""),
@@ -2339,7 +2335,7 @@ export function liveClaims(
       source_title: citation.title,
       source_id: citation.sourceId,
       quote: citation.quote,
-      // The passage read while the report is still being written (2026-11-09).
+      // The passage read while the report is still being written.
       chunk_id: citation.chunkId ?? null,
     } as unknown as CitationOut);
   }
@@ -2402,25 +2398,25 @@ export function LiveSubhead({
   active: boolean;
   activity: string | null;
   terminal: boolean;
-  /** The stream is not connected: the live mark holds still (lead ruling). */
+  /** The stream is not connected: the live mark holds still. */
   still: boolean;
 }) {
   const filled = section.state === "filled" && (section.prose ?? "") !== "";
   // The action line under the heading opens while the section is being
-  // written and carries the run's live mark at its start (owner,
-  // 2026-11-05: "◆ Looking for: …", "◆ Writing", "◆ Checking claims"). Its
+  // written and carries the run's live mark at its start ("◆ Looking for: …",
+  // "◆ Writing", "◆ Checking claims"). Its
   // words stay beside the mark for the whole write, "Writing" included while
-  // the draft streams (lead, 2026-11-05). It collapses with its last words
+  // the draft streams. It collapses with its last words
   // when the section settles.
   const writing = active && !terminal;
   const showWords = writing && activity !== null;
   const actionText = useLatched(showWords ? activity : null);
   // The sources the writer has read, from the first read until the checked
-  // section replaces the draft (task 058, owner 2026-11-05). Not links.
+  // section replaces the draft. Not links.
   const drawingOn = filled || terminal ? null : drawingOnLine(section.sources);
   return (
     <>
-      {/* Until the key findings' own words arrive (owner, round 8). */}
+      {/* Until the key findings' own words arrive. */}
       {section.role === "key_findings" && !filled && (section.draft ?? "") === "" && !terminal && (
         <p className="mt-1.5 text-body text-grey">Written last, after the sections are checked.</p>
       )}
@@ -2449,15 +2445,15 @@ export function LiveSubhead({
 }
 
 /** A section's body, live or committed, through one component so the
- *  committed report updates the live section in place (owner, round 7).
+ *  committed report updates the live section in place.
  *
  *  Live: placeholder lines, then the draft, then the checked prose through
  *  the report's own prose component with its numbered markers, which open
- *  the provenance sheet once their citations carry their ids (round 8).
+ *  the provenance sheet once their citations carry their ids.
  *  When the section completes, a settling layer carries the draft into the
  *  checked prose: each repaired span takes its new words in document order,
  *  120 ms apart, resolving out of the blur, while the section's height eases
- *  to fit (round 8); then the layer, pending markers and all, fades off the
+ *  to fit; then the layer, pending markers and all, fades off the
  *  checked prose, so the markers arrive without a flash. Under reduced
  *  motion the checked prose replaces the draft at a cut. Committed: the
  *  report's blocks, with their markers live. */
@@ -2602,7 +2598,7 @@ function SectionBody({
 
 /**
  * A section's placeholder lines, then its streamed draft in the same box
- * (task 058, round 9; the animation sweep's entry 8): when the first words
+ * (the animation sweep's entry 8): when the first words
  * arrive the box keeps the placeholder's height until the text is taller,
  * so the page below never shrinks and regrows, and the lines fade out over
  * the first words in 150 ms. Under reduced motion the height still holds
@@ -2743,7 +2739,7 @@ function readingPlace(): { id: string; top: number } | null {
 
 /**
  * Keep the reader's place when the committed report takes the live page
- * (owner, round 7: the scroll position stays). While live, the block at the
+ * (the scroll position stays). While live, the block at the
  * top of the pane and its offset are noted on every render and scroll; when
  * the committed report lands, before paint, the pane is moved by however far
  * that block moved, so what grew above the reader (the facts strip, the
@@ -2794,7 +2790,7 @@ function liveMarkerNumbers(stream: RunStreamState): ReadonlyMap<string, string> 
 type RoledLiveSection = LiveSection & { role: NonNullable<SectionLike["role"]> };
 
 /** The live sections in the committed report's order, with their roles, and
- *  the introduction apart (round 8: it opens the Full report part, it is not
+ *  the introduction apart (it opens the Full report part, it is not
  *  a section, so it takes no place in the order). */
 function orderedLiveSections(stream: RunStreamState): { sections: RoledLiveSection[]; intro: RoledLiveSection | undefined } {
   const all = Object.values(stream.liveSections)
@@ -2831,8 +2827,8 @@ type LiveClaimSheet = {
 };
 
 /**
- * The report while it is being written (task 058, N8; annex scene 6; owner
- * round 7: the live page looks like the final page).
+ * The report while it is being written (the live page looks like the final
+ * page).
  *
  * The same page as the committed report: the kind row, the question as the
  * title, "See the plan", the part headings, the sections in the report's
@@ -2846,7 +2842,7 @@ type LiveClaimSheet = {
  * key findings as their list) with a muted marker after each cited sentence,
  * the markers breathing in turn while the claims are checked. On completion
  * the draft settles into the checked prose with its numbered markers, whose
- * hover and sheet work once their citations carry their ids (round 8). What
+ * hover and sheet work once their citations carry their ids. What
  * only the committed report has (links into provenance, the download, the
  * facts strip, the method, the chips) is absent, with no placeholder.
  *
@@ -2874,7 +2870,7 @@ function useLiveReport(
       ? writer.activity
       : null;
   // The judge checks a section in one call: the page cannot know which claim
-  // it is on, so the chips breathe in turn and nothing else moves (round 8).
+  // it is on, so the chips breathe in turn and nothing else moves.
   const checking = activity === CHECKING_CLAIMS;
   // A run with no key findings slot is a baseline: one linear profile, no
   // summary and full-report parts (as the committed baseline renders).
@@ -2888,10 +2884,10 @@ function useLiveReport(
   const references = liveReferences(sections);
   const notes = report ? liveSourceNotes(stream) : [];
   const onOpenClaim = sheet?.onOpenClaim;
-  // The section's live mark holds still while the stream is down (lead ruling).
+  // The section's live mark holds still while the stream is down.
   const markStill = stream.connectionStatus !== "connected";
 
-  // Sections inside a part are h3; a baseline has no parts (round 10).
+  // Sections inside a part are h3; a baseline has no parts.
   const level: SectionHeadingLevel = report ? 3 : 2;
   const entries: SidebarEntry[] = [
     ...(report ? [{ kind: "part" as const, id: EXECUTIVE_SUMMARY_ANCHOR, title: "Executive summary" }] : []),
@@ -2961,8 +2957,8 @@ function useLiveReport(
   };
 
   // The Full report's opening paragraph where the committed report sets it,
-  // paced as the sections are; no heading or "Drawing on" line of its own
-  // (round 8). Nothing shows before it is begun.
+  // paced as the sections are; no heading or "Drawing on" line of its own.
+  // Nothing shows before it is begun.
   const introProse = intro?.state === "filled" ? (intro.prose ?? "").trim() : "";
   const introDraft = intro?.draft ?? "";
   const introBegun = intro !== undefined && !terminal && (intro.state === "writing" || introDraft !== "");
@@ -2987,7 +2983,7 @@ function useLiveReport(
       <ReportKindRow kind={report ? "Report" : "Baseline"} />
       {question != null && question !== "" && <h1 className={REPORT_TITLE_CLASS}>{scrub(question)}</h1>}
       {/* The committed report's action line, holding only what the live
-          page has, so the swap fills it in place (round 10, finding 9). */}
+          page has, so the swap fills it in place. */}
       {onSeePlan !== undefined && (
         <div className={REPORT_ACTIONS_CLASS}>
           <SeePlanLink onClick={onSeePlan} />
@@ -3003,8 +2999,7 @@ function useLiveReport(
       </h2>
     ) : null,
     ...front.map(renderSection),
-    // The executive summary's last part, as on the committed page (owner,
-    // round 11).
+    // The executive summary's last part, as on the committed page.
     <div key="most-relevant">{notes.length > 0 && <MostRelevantSources live sources={liveTopSources(notes)} level={level} />}</div>,
     <FullReportExpandProvider key="full-report">
       {report && body.length > 0 && (
@@ -3089,7 +3084,7 @@ export function LiveArtefactBody({
 }
 
 /**
- * The Result tab before writing (task 058, N11; annex scene 5): the report
+ * The Result tab before writing: the report
  * to be, titled with the question, and one sentence. The run trace in the
  * Task Agent says where the run is.
  */
@@ -3101,7 +3096,7 @@ export function ReportToBe({
   question: string | null | undefined;
   /** The run ended before any section was proposed (failed, aborted, interrupted). */
   ended?: boolean;
-  /** Opens the plan document (owner, polish round 2: a small link on the Result tab). */
+  /** Opens the plan document (a small link on the Result tab). */
   onSeePlan?: () => void;
 }) {
   return (
@@ -3126,7 +3121,7 @@ export function SeePlanLink({ onClick, className }: { onClick: () => void; class
 
 /** A link to a source's dossier on this page (`?source=`), keeping the
  *  page's other parameters: a real address, so it opens in a new tab or
- *  copies, while a plain click opens the sheet in place (round 10). */
+ *  copies, while a plain click opens the sheet in place. */
 function sourceHref(sourceRef: string): string {
   const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
   params.set("source", sourceRef);
@@ -3176,8 +3171,8 @@ export function minutesSince(iso: string, nowMs: number): number {
 }
 
 /**
- * The one plain line above an existing report while a new run is under way
- * (task 058, N11; annex scene 8). No button: the sidebar rail and the Agent
+ * The one plain line above an existing report while a new run is under way.
+ * No button: the sidebar rail and the Agent
  * tab are the routes to the run, whose trace carries the stage.
  */
 export function RerunNotice({
@@ -3240,14 +3235,13 @@ function CaseStudyCardProse({
 /**
  * The case studies: heading, the one-line intro and a card per example.
  *
- * The report while it is written renders the same section (task 058, owner
- * round 7): its cards arrive one by one as each closes in the writer's
+ * The report while it is written renders the same section:
+ * its cards arrive one by one as each closes in the writer's
  * reply, in the report's card layout, with no evidence chips until the
  * committed report brings them.
  */
 /** The case studies' and the most relevant sources' cards: each entry a
- *  ruled card (a Line hairline, 16 px inside), 12 px apart (owner, round 11:
- *  back in boxes, as before round 10). */
+ *  ruled card (a Line hairline, 16 px inside), 12 px apart. */
 const REPORT_CARD_LIST_CLASS = "mt-3 grid gap-3";
 const REPORT_CARD_CLASS = "border border-line p-4";
 
@@ -3289,15 +3283,14 @@ function CaseStudiesSection({
       {cards.length === 0 ? (
         pending
       ) : (
-        // Each case study in its own ruled card (owner, round 11, reversing
-        // round 10's ruled entries).
+        // Each case study in its own ruled card.
         <ul role="list" className={REPORT_CARD_LIST_CLASS}>
           {cards.map((card, at) => {
             const { strength, design, sinceYear } = cardEvidenceMeta(card);
             return (
               <li key={`${at}:${card.title}`} className={`${REPORT_CARD_CLASS} ${live ? "anim-rise" : ""}`}>
                 <CardHeading className="text-lead font-bold text-navy max-md:text-body">{scrub(card.title)}</CardHeading>
-                {/* The marks line under the title (owner, round 14): type,
+                {/* The marks line under the title: type,
                     strength, then "Since 2019"; it arrives with the
                     committed report. */}
                 {!live && (
@@ -3321,8 +3314,8 @@ function CaseStudiesSection({
 }
 
 /**
- * The most relevant sources. While the report is written (task 058, owner
- * round 8) the block appears with the first source note, in the final
+ * The most relevant sources. While the report is written
+ * the block appears with the first source note, in the final
  * layout, each note rising in as it lands: titles not yet links, no authors
  * or chips. The committed report takes the block over in place; what it adds
  * (the authors, the chips) arrives with `arrivingClass`.
@@ -3352,7 +3345,7 @@ function MostRelevantSources({
     <section id="sources" className="mb-9">
       <Heading className={REPORT_SECTION_HEADING_CLASS}>Most relevant sources</Heading>
       <p className={`mt-1.5 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{MOST_RELEVANT_SOURCES_INTRO}</p>
-      {/* In the case studies' ruled card (owner, round 11). */}
+      {/* In the case studies' ruled card. */}
       <ul role="list" className={REPORT_CARD_LIST_CLASS}>
         {sources.map((source) => (
           <li key={source.sourceId} className={`${REPORT_CARD_CLASS} ${live ? "anim-rise" : ""}`}>
@@ -3370,8 +3363,8 @@ function MostRelevantSources({
                 {source.authors.map((a) => scrub(a)).join(", ")}
               </p>
             )}
-            {/* The marks line under the title and authors (owner, round
-                14): type, strength, then "Cited by 3 claims". */}
+            {/* The marks line under the title and authors:
+                type, strength, then "Cited by 3 claims". */}
             {!live && (
               <EvidenceMarksLine
                 taskId={taskId}
@@ -3396,9 +3389,9 @@ function MostRelevantSources({
  * The Result tab. An Evidence search's report, or a scoping task's baseline,
  * renders as it always has; once a scoping task has a longlist the Result
  * gains the view switch — **Baseline · Longlist · Report** — and opens on
- * the longlist (task 045, deliverable 9; ruling 50). The chosen view rides
+ * the longlist. The chosen view rides
  * `?view=` so a link or a refresh keeps it. The public view switches too
- * once the task has a longlist (owner, round 12: a shared scoping task shows
+ * once the task has a longlist (a shared scoping task shows
  * its longlist and shortlist), never onto a longlist being built; its views
  * are read-only there.
  */
@@ -3407,14 +3400,14 @@ export function ArtefactView() {
   const isPublicView = usePublicView();
   const task = useTask(taskId);
   const stream = useRunStream(taskId);
-  // While a longlist walk runs the Result is the longlist being built
-  // (task 058, N24), before and after the longlist read first answers.
+  // While a longlist walk runs the Result is the longlist being built,
+  // before and after the longlist read first answers.
   const building = !isPublicView && isLonglistBuilding(task.data, stream.stages);
-  // A theory of change is public like the Result tab (C17): the graph and its
+  // A theory of change is public like the Result tab: the graph and its
   // evidence are on the public read leg.
   if (isToc(task.data)) return <TocResult taskId={taskId} />;
   // The report's expand state is the task's, kept while the reader moves
-  // between its tabs (owner, round 12).
+  // between its tabs.
   return (
     <ReportExpandScope taskId={taskId}>
       {!hasLonglist(task.data) && !building ? (
@@ -3444,10 +3437,10 @@ function ScopingResult({ taskId, building }: { taskId: string; building: boolean
   return (
     <>
       <Tabs value={view} onValueChange={select} className="mx-auto w-full max-w-5xl px-6 pt-6 max-md:px-4">
-        {/* The tab language of the whole app (round 10, finding 3): the
+        {/* The tab language of the whole app: the
             growing rule, one line on a phone (scrolling sideways if it must),
             and a view still to come locked as a lifecycle stage is, with no
-            note beside it (C3). */}
+            note beside it. */}
         <TabsList aria-label="Result view" className="overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
           {RESULT_VIEWS.map((option) => (
             <TabsTrigger
@@ -3512,7 +3505,7 @@ function ArtefactReport() {
   const planPanel = usePlanPanel();
   const task = useTask(taskId);
   const artefact = useArtefact(taskId);
-  // The public view (task 037) must issue only public-surface requests:
+  // The public view must issue only public-surface requests:
   // conversations stay unfetched and the chat affordance below is hidden.
   const chats = useConversations(
     taskId,
@@ -3520,7 +3513,7 @@ function ArtefactReport() {
     { enabled: !isPublicView },
   );
   // Cited-scoped distributions for the facts line: the years count what the
-  // report CITES, not the whole included corpus (owner, 2026-08-05); the
+  // report CITES, not the whole included corpus; the
   // durable coverage_snapshot keeps the corpus-wide counts. The same read
   // says whether the method section renders.
   const citedLandscape = useLandscape(taskId, "cited");
@@ -3529,15 +3522,14 @@ function ArtefactReport() {
   const dossierSource = searchParams.get("source");
   const dossierOption = searchParams.get("option");
   const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
-  // Task 044 (deliverable 9): an options-scoping task's Result is the
+  // An options-scoping task's Result is the
   // baseline, not a report. It is headed "Baseline" and nothing else; the
-  // walk's state lives on the plan document (owner ruling 2026-09-18 — the
-  // band under the title came off).
+  // walk's state lives on the plan document.
   const baseline = isBaselineArtefact(artefact.data);
   useDocumentTitle(task.data?.name, baseline ? "Baseline" : "Report");
   const latestRun = statusRun(task.data);
-  // The title is the refined research question from the plan (owner, round
-  // 14), live and committed; the task's question when the plan has none. The
+  // The title is the refined research question from the plan,
+  // live and committed; the task's question when the plan has none. The
   // plan read is not on the public surface, so a public link reads the
   // task's question.
   const plan = usePlan(isPublicView ? "" : taskId);
@@ -3546,8 +3538,7 @@ function ArtefactReport() {
   const showLive = showLiveArtefact(stream, latestRun);
   // A run watched while it wrote keeps its page when it finishes until the
   // committed report for that run has loaded; then the report takes its
-  // place, with no click (owner, 2026-11-05; N8's "Read the full report"
-  // button is withdrawn). A run that had already finished when the page
+  // place, with no click. A run that had already finished when the page
   // loaded opens the report at once.
   const [watchedRunId, setWatchedRunId] = useState<string | null>(null);
   const liveRunId = stream.run?.id ?? null;
@@ -3585,10 +3576,10 @@ function ArtefactReport() {
   // A claim opened on the live page follows itself into the committed
   // report by its claim id once that report has taken the page (never into
   // an older report held under a re-run), so the sheet gains what only the
-  // committed report has (task 058, round 8).
+  // committed report has.
   // A claim named in the address (`?claim=`) is the sheet a source was
   // opened from: the dossier's "Back to the claim" and the browser's Back
-  // return to it (owner, round 13).
+  // return to it.
   const claimParam = searchParams.get("claim");
   const committedSections = artefact.data?.sections as SectionLike[] | undefined;
   const claimFromAddress =
@@ -3645,7 +3636,7 @@ function ArtefactReport() {
     onOpenClaim: setDetailClaim,
     panel: claimPanel,
   });
-  // The swap (owner, round 7): the live page and the committed report are
+  // The swap: the live page and the committed report are
   // the same element tree (the swap context, then `ReportPage`, then keyed
   // slots), so React updates the page in place; the scroll position stays.
   // What arrives with the committed report fades in once over 300 ms; under
@@ -3654,7 +3645,7 @@ function ArtefactReport() {
   // `hadIntro` and `hadNotes`: the live page already showed the Full
   // report's opening paragraph and the most relevant sources, so they stay
   // put at the swap and only what the committed report adds to them fades
-  // in (round 8).
+  // in.
   const [swap, setSwap] = useState<{ live: boolean; swapped: boolean; hadIntro: boolean; hadNotes: boolean } & ReportSwap>({
     live: false,
     swapped: false,
@@ -3665,7 +3656,7 @@ function ArtefactReport() {
   });
   if (renderingLive && !swap.live) {
     // The reader is watching the report being written: the committed report
-    // opens with every section open (owner, round 12). Seeded before the
+    // opens with every section open. Seeded before the
     // sections render, in this same pass.
     seedReportExpanded(taskId);
     setSwap({ live: true, swapped: false, arriving: false, liveNumbers: new Map(), hadIntro: false, hadNotes: false });
@@ -3687,7 +3678,7 @@ function ArtefactReport() {
   );
   const arriving = swap.arriving ? "anim-swap-in" : "";
   useKeepReadingPlace(renderingLive, swap.swapped);
-  // The baseline opens at its top with focus on its title (round 13, as the
+  // The baseline opens at its top with focus on its title (as the
   // Longlist and Shortlist do), so switching to it never keeps the
   // longlist's scroll offset. Not the report, and not a baseline the reader
   // watched being written: there the reading place is kept.
@@ -3719,7 +3710,7 @@ function ArtefactReport() {
       return next;
     });
   };
-  // Back to the claim's sheet, in place of the source (owner, round 13).
+  // Back to the claim's sheet, in place of the source.
   const backToClaim = () => {
     setSearchParams(
       (current) => {
@@ -3732,13 +3723,13 @@ function ArtefactReport() {
     );
   };
   const { setActiveConversation, openDraftChat } = useActiveConversation();
-  // Chats need a result to ask about (038 V8) — the same gate as New chat.
+  // Chats need a result to ask about — the same gate as New chat.
   const chatsEnabled = useChatsEnabled(taskId);
   const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
     // fact, never a scope fence); reuse a blank chat already carrying it,
-    // else open a DRAFT beside the artefact (rev 3.4) — the row is created
-    // on the first message, never before (038 V8).
+    // else open a DRAFT beside the artefact — the row is created
+    // on the first message, never before.
     const artefactId = artefact.data?.artefact_id ?? null;
     const blank = chats.data?.data.find(
       (chat) => chat.title === "New chat" && chat.entry_artefact_id === artefactId,
@@ -3788,8 +3779,8 @@ function ArtefactReport() {
   // it streams (the reducer clears sections when a different run starts) —
   // and if that run dies mid-write, the terminal-partial view stays up in
   // place of the stale committed page: the user's latest run ended badly and
-  // hiding that behind the old artefact would be dishonest (live-check
-  // adjudication, 2026-07-29). A new run or a fresh mount clears it. Replay
+  // hiding that behind the old artefact would be dishonest. A new run or a
+  // fresh mount clears it. Replay
   // of a finished succeeded run must not flash through this view.
   if (showLive || readyHere) return liveBody;
 
@@ -3817,11 +3808,10 @@ function ArtefactReport() {
           index: firstBodyIndex + index,
         }));
 
-  // The facts line (round 10, finding 2 and C4): Sources and Published;
+  // The facts line: Sources and Published;
   // the study types are the method section's, not repeated here, and the
-  // date has its own line under the title (owner, round 11). The sources
-  // count opens this page's References (owner, round 11, replacing the
-  // Sources tab's cited filter of 028 F.5), when the report has any.
+  // date has its own line under the title. The sources
+  // count opens this page's References, when the report has any.
   const facts: ReportFact[] = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
@@ -3853,7 +3843,7 @@ function ArtefactReport() {
   // A baseline is one linear profile, not a summary over a full report: the
   // two part headings would frame an empty half (it mints no key findings and
   // no case studies), so the outline lists its sections flat.
-  // Titles in full: the sidebar wraps them (round 10, finding 6); a
+  // Titles in full: the sidebar wraps them; a
   // server `nav_label` still wins.
   const outlineHead: SidebarEntry[] = baseline
     ? sections.map((section, index) => ({
@@ -3866,8 +3856,7 @@ function ArtefactReport() {
           id: sectionAnchor(section.title, index),
           title: sectionNavLabel(section, Infinity),
         })),
-        // The last part of the executive summary (owner, round 11, reversing
-        // round 10's D2).
+        // The last part of the executive summary.
         ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
         ...(bodySections.length > 0
           ? [{ kind: "part" as const, id: FULL_REPORT_ANCHOR, title: "Full report" }]
@@ -3880,11 +3869,11 @@ function ArtefactReport() {
   const outlineEntries: SidebarEntry[] = [
     ...outlineHead,
     ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
-    // Listed only when the section will render (round 10, finding 6), under
-    // its heading's own words (C2).
+    // Listed only when the section will render, under
+    // its heading's own words.
     ...(gatheredSectionShows(citedLandscape) ? [{ id: "gathered", title: GATHERED_SECTION_TITLE }] : []),
   ];
-  // Sections inside a part are h3; a baseline has no parts (round 10).
+  // Sections inside a part are h3; a baseline has no parts.
   const level: SectionHeadingLevel = baseline ? 2 : 3;
 
   const sectionBlocks = (section: SectionLike) => (
@@ -3932,7 +3921,7 @@ function ArtefactReport() {
               {/* The kind-of-artefact slot. The roll-up's depth label
                   ("scoping pass") stays on the wire for the later per-row
                   surfaces; the Result's heading says what the reader is
-                  looking at (owner ruling 2026-09-18). */}
+                  looking at. */}
               <span className={arriving}>
                 {/* In-app feedback analytics: `report_exported`. */}
                 <TrackAction event="report_exported" taskId={taskId}>
@@ -3948,7 +3937,7 @@ function ArtefactReport() {
             </ReportKindRow>
             {/* A report's title is its question, live and committed, so the
                 heading never changes at the swap; the generated title names
-                the download (round 10, D1). A baseline keeps its own title
+                the download. A baseline keeps its own title
                 ("Do nothing: …"), which says what the profile is. */}
             <h1
               ref={baseline && !swap.swapped ? baselineTitle : undefined}
@@ -3957,14 +3946,13 @@ function ArtefactReport() {
             >
               {scrub(baseline ? data.title : (question ?? data.title))}
             </h1>
-            {/* The date on its own line under the title (owner, round 11). */}
+            {/* The date on its own line under the title. */}
             {lastUpdated != null && (
               <p className={cn(REPORT_DATELINE_CLASS, arriving)}>
                 Last updated <time dateTime={lastUpdated}>{formatDate(lastUpdated, "long")}</time>
               </p>
             )}
-            {/* One action line under the title, then the facts (round 10,
-                finding 9). */}
+            {/* One action line under the title, then the facts.*/}
             {!isPublicView && (
               <div className={REPORT_ACTIONS_CLASS}>
                 <SeePlanLink onClick={planPanel.openPlan} />
@@ -3982,11 +3970,11 @@ function ArtefactReport() {
             <div className={arriving}>
               <ReportFacts facts={facts} />
             </div>
-            {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
+            {/* Coverage banner removed: the adequacy verdict
                 surfaces where it matters — inside each gap claim's detail. */}
           </header>,
 
-          /* Executive summary part — In brief hidden (034 owner steer: overlaps
+          /* Executive summary part — In brief hidden (it overlaps the
              key findings). A baseline has no summary half to head (see the
              outline above). */
           baseline ? null : (
@@ -4012,12 +4000,11 @@ function ArtefactReport() {
             />
           ) : null,
 
-          /* The executive summary's last part, above the Full report (owner,
-             round 11, reversing round 10's D2). A baseline writes no
+          /* The executive summary's last part, above the Full report.
+             A baseline writes no
              most-relevant-source notes and cites few sources per section,
              so the report's "cited most often" block would rank two or
-             three documents as if that were a finding. Report only (task
-             044). */
+             three documents as if that were a finding. Report only.*/
           <div key="most-relevant" className={swap.hadNotes ? "" : arriving}>
             {baseline ? null : (
               <MostRelevantSources
@@ -4124,11 +4111,11 @@ type ReferenceRow = {
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
  *  (028 strand 10, binding record). While the report is written the same
- *  list grows as sections are checked, open, titles only and no links
- *  (task 058, owner round 7); the committed report adds the links and the
+ *  list grows as sections are checked, open, titles only and no links;
+ * the committed report adds the links and the
  *  details in place.
  *
- *  Each reference is one entry in a citation form (round 10, C5): "Sampleton
+ *  Each reference is one entry in a citation form: "Sampleton
  *  A, Mockford C (2022). Title. Venue. doi.org/…", the number in a Grey
  *  column, the title a link to its dossier, the address a Grey link without
  *  its scheme on screen and in full in print, so the list carries a source
@@ -4167,8 +4154,8 @@ export function ReferencesSection({
         <ol className="mt-3 space-y-2 text-body text-ink">
           {references.map((reference) => (
             <li key={reference.n} className="flex gap-3">
-              {/* The number opens the source's sheet, in Electric Blue
-                  (owner, round 14); while the report is written it is
+              {/* The number opens the source's sheet, in Electric Blue;
+                  while the report is written it is
                   the number alone. */}
               {onOpenReference !== undefined ? (
                 <button

@@ -10,11 +10,10 @@ import { type Action, type MenuStep, NameActionsMenu, NameRenameField } from "./
 export const ROW_LEAVE_MS = 200;
 
 /**
- * A list row's own menu (task 058, owner round 12: "There should be a way
- * to delete or archive and rename tasks and projects on the tasks/project
- * lists"): a 40 px quiet control with the headers' chevron at the row's right
+ * A list row's own menu, so tasks and projects can be renamed and archived
+ * from the lists: a 40 px quiet control at the row's right
  * end, a sibling of the row's link, never inside it. Its glyph is the three
- * dots (`MoreIcon`; owner, round 12: not the headers' chevron). It opens the
+ * dots (`MoreIcon`, not the headers' chevron). It opens the
  * headers' menu (`NameActionsMenu`): Rename, any further steps (a task's
  * "Add to project"), and Archive with its confirm in words.
  *
@@ -138,7 +137,7 @@ export function RowFold({
 type Departing<T> = { row: T; index: number; done: boolean };
 
 /**
- * The rows with the archived ones folding away (round 12). An archived row
+ * The rows with the archived ones folding away. An archived row
  * is kept where it stood, folding, for {@link ROW_LEAVE_MS}, whatever the
  * list's refetch does meanwhile, and then left out for good, so it never
  * blinks back if the refetch is slower than the fold.

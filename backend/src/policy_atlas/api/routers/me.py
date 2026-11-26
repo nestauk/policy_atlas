@@ -62,7 +62,7 @@ def get_me(
         their task quota unless they are exempt (task 064a, Q8).
     """
     provision_user(conn, user.user_id)
-    # The first time the person opens the app (task 065, owner 2026-11-18): the
+    # The first time the person opens the app: the
     # ops pages tell an invitation still waiting from one used. Later calls
     # match no row and write nothing.
     conn.execute(
@@ -84,7 +84,7 @@ def get_me(
         )
         .where(app_user.c.user_id == user.user_id)
     ).mappings().one()
-    # Reader (iv) of contract § 3a's closed list of `is_admin` readers: the
+    # One of the closed list of `is_admin` readers: the
     # caller's own row, projected back to the caller. Nothing here decides
     # access; the frontend uses it to say plainly that a wider list spans
     # organisations.
@@ -93,7 +93,7 @@ def get_me(
         if row["org_id"] is not None
         else None
     )
-    # Task 065 (B12): the limit is the resolved one (own override, else the
+    # The limit is the resolved one (own override, else the
     # organisation's, else the setting); ``None`` hides the quota band.
     limits = effective_limits(conn, user.user_id, settings=settings)
     return MeOut(

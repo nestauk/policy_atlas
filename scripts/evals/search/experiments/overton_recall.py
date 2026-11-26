@@ -1,4 +1,4 @@
-"""Overton recall probes (R&D, task 049).
+"""Overton recall probes (R&D).
 
 Overton indexes policy documents, and the current ground truth is a list of paper DOIs
 (the product wants both; the ground truth measures the paper side only). So a policy
@@ -107,7 +107,7 @@ def pages(path: str, n: int, **params: str) -> list[dict[str, Any]]:
     return out[:n]
 
 
-CACHE_VERSION = "v2"  # 2026-10-08: payloads carry slim docs and cited_without_doi
+CACHE_VERSION = "v2"  # Payloads carry slim docs and cited_without_doi
 
 
 def cache_file(arm: str, item_id: str, shape: str) -> Path:
@@ -224,7 +224,7 @@ def fetch_docs_cites(
         "inset": [counts[d] for d in ranked],
         "titles": [titles[d] for d in ranked],
         "doc_titles": [d.get("title") for d in docs],
-        # Slim copy of each policy document (2026-10-07): its own DOI when it has
+        # Slim copy of each policy document: its own DOI when it has
         # one (``keyed_other_identifiers``), title and date, for seed scoring and
         # for title matching of references without a DOI.
         "docs": [slim_doc(d) for d in docs],
@@ -277,7 +277,7 @@ def main() -> None:
     items = select_items(client.get_dataset(args.dataset).items, args.reviews)
 
     # Each arm: (fetch, request shape). The shape goes into the cache file name so a
-    # run with other counts cannot be served a stale file (Codex review, 2026-10-08).
+    # run with other counts cannot be served a stale file (Codex review).
     arms = {
         "articles": (
             lambda i, c: fetch_articles(i, c, sort="relevance", n=args.articles),
@@ -299,7 +299,7 @@ def main() -> None:
             ),
             f"docs|intent|date|d{args.docs}|{CACHE_VERSION}",
         ),
-        # Seed-set variants (2026-10-07): more documents, and the pipeline's generated
+        # Seed-set variants: more documents, and the pipeline's generated
         # texts as extra searches, to see whether policy in-set counts rise above one.
         "docs-cites-200": (
             lambda i, c: fetch_docs_cites(

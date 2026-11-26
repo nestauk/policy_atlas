@@ -74,8 +74,8 @@ export function ChatPane({
     if (row !== undefined) void chat.cancelTurn(row.id);
   };
 
-  // A draft chat hands its first message over as it becomes this chat (038
-  // V8): send it once, on mount under the new id. `sendTurn` is the store's
+  // A draft chat hands its first message over as it becomes this chat:
+  // send it once, on mount under the new id. `sendTurn` is the store's
   // stable callback for this conversation, so the effect keys on it honestly.
   const { sendTurn } = chat;
   // Deferred one tick: a StrictMode rehearsal (mount → cleanup → mount) would
@@ -90,8 +90,8 @@ export function ChatPane({
   }, [conversationId, sendTurn]);
 
   const footer = useFooterReveal(onAtBottomChange);
-  // A chat opens at its end and stays there as turns stream in (owner,
-  // 2026-09-05); a reader who scrolls up is left alone.
+  // A chat opens at its end and stays there as turns stream in;
+  // a reader who scrolls up is left alone.
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const pin = usePinToBottom(scrollRef, contentRef, conversationId);

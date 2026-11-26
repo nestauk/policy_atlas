@@ -28,28 +28,28 @@ import {
  * exception: they carry no `sequence` at all and never advance
  * `lastSequence`. `tick` updates only the transient `liveness` slice;
  * `artefact.section_delta` and `artefact.section_revising` update only a
- * section's `draft` and `revising` (task 058, N7);
+ * section's `draft` and `revising`;
  * `artefact.section_sources` and `artefact.section_claim` update only its
- * `sources` and `claims` (task 058, evidence shown live);
- * `artefact.section_card` appends to its `cards` (task 058, round 7);
- * `artefact.source_note` adds to the run's `liveSourceNotes`, one per source
- * (round 8); `search.query` adds or updates a row of `liveSearchQueries` and
+ * `sources` and `claims` (evidence shown live);
+ * `artefact.section_card` appends to its `cards`;
+ * `artefact.source_note` adds to the run's `liveSourceNotes`, one per source;
+ * `search.query` adds or updates a row of `liveSearchQueries` and
  * `characterise.themes` sets `liveThemes`, `liveOptions` or
- * `liveOptionThemes` by its `stage` (rounds 9 and 11); `toc.sketch` sets or
- * removes `liveSketch` (task 054, S12). A replay carries none of them, so folding a replay rebuilds
+ * `liveOptionThemes` by its `stage`; `toc.sketch` sets or
+ * removes `liveSketch`. A replay carries none of them, so folding a replay rebuilds
  * `prose` and `citations` alone.
  */
-/** Task 045 (A3): a stage frame names its walk; one from a different walk
+/** A stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
  *  timeline's. A frame without a run id (older events) still applies. Ticks
- *  name their walk too (round 11). */
+ *  name their walk too. */
 export function isOtherRunsStage(state: RunStreamState, runId: string | null): boolean {
   return runId !== null && state.run !== null && runId !== state.run.id;
 }
 
 export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): RunStreamState {
   if (frame.type === "tick") {
-    // A tick names its walk (round 11): a longlist walk's option searches run
+    // A tick names its walk: a longlist walk's option searches run
     // `acquire` too, and their lines are not the tracked walk's.
     if (isOtherRunsStage(state, frame.capability_run_id ?? null)) return state;
     const key = frame.stage ?? GLOBAL_LIVENESS_KEY;
@@ -159,7 +159,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
   }
 
   if (frame.type === "characterise.themes") {
-    // One frame, three stages (round 11): the Evidence search's themes, the
+    // One frame, three stages: the Evidence search's themes, the
     // longlist's options and the longlist's themes, each in its own slot.
     const names = frame.themes.map((theme) => ({ label: theme.label, description: theme.description }));
     const slot = frame.stage === "longlist" ? "liveOptions" : frame.stage === "theme" ? "liveOptionThemes" : "liveThemes";
@@ -167,7 +167,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
   }
 
   if (frame.type === "toc.sketch") {
-    // Sent whole each time (task 054, S12): it replaces the sketch; an empty
+    // Sent whole each time: it replaces the sketch; an empty
     // one means the draft is being written again, so the sketch goes.
     if (frame.boxes.length === 0 && frame.links.length === 0) {
       const next = { ...state };
@@ -215,12 +215,12 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       // currently tracks is a fresh walk — its timeline must not inherit
       // the previous (possibly interrupted) run's stage entries or liveness.
       const current = base.run;
-      // Task 045 (S12): a longlist walk's option searches are child walks on
+      // A longlist walk's option searches are child walks on
       // the same task stream. A different run's frame while the tracked walk
       // is still running or paused can only be such a child (the admission
       // fences never open a second parentless walk beside a live one), so it
       // is recorded but never becomes the live run.
-      // Task 045 (A9): a child seen that way stays a child — its late
+      // A child seen that way stays a child — its late
       // terminal frame, arriving after the walk itself has finished, must not
       // replace the walk as the tracked run.
       if (
@@ -274,8 +274,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         liveSections: isNewRun ? {} : base.liveSections,
         pendingDrafts: isNewRun ? {} : base.pendingDrafts,
       };
-      // A new run's notes, queries and themes start empty (task 058, rounds
-      // 8 and 9).
+      // A new run's notes, queries and themes start empty.
       if (isNewRun) {
         delete next.liveSourceNotes;
         delete next.liveSearchQueries;
@@ -323,7 +322,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       };
 
     case "stage.failed":
-      // The pinned stage-entry shape (task 025 §4) has no `reason` field —
+      // The pinned stage-entry shape has no `reason` field —
       // the failure reason travels in `summary` instead, the one bucket
       // already typed to hold an arbitrary string value.
       if (isOtherRunsStage(base, frame.capability_run_id)) return base;
@@ -395,11 +394,11 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       delete settled.claims;
       delete settled.cards;
       // The checked citations stay until the committed report replaces the
-      // live view (task 058, round 7). A section with none carries none.
+      // live view. A section with none carries none.
       delete settled.citations;
       delete settled.checkedClaims;
       if (frame.claims !== undefined && frame.claims.length > 0) {
-        // Round 13: the checker's verdict, per claim.
+        // The checker's verdict, per claim.
         settled.checkedClaims = frame.claims.map((claim) => ({
           claimId: claim.claim_id ?? null,
           start: claim.start,
@@ -415,7 +414,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
           n: citation.n,
           sourceId: citation.source_id,
           title: citation.title,
-          // Round 8: absent on a frame recorded before the fields existed.
+          // Absent on a frame recorded before the fields existed.
           citationId: citation.citation_id ?? null,
           claimId: citation.claim_id ?? null,
           chunkId: citation.chunk_id ?? null,

@@ -2,7 +2,7 @@
 
 Several repo modules read the model route once, when they are first imported (for
 example the screen and rerank model names), so this runs first. ``backend/.env`` may
-select the Bedrock route; this evaluation runs on OpenAI directly (task 054 brief):
+select the Bedrock route; this evaluation runs on OpenAI directly:
 
 - default (``--models 56``): the product's ``openai-direct`` route (gpt-5.6 Luna/Terra);
 - ``--models 6x``: the harness-only route in ``model_route_6x.toml`` (screen,

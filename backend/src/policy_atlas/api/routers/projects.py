@@ -61,7 +61,7 @@ router = APIRouter(
 
 
 #: The only columns `PATCH /api/v1/projects/{id}` may write **by splat**.
-#: Explicitly **not** `visibility`: contract § 6, i.4 makes
+#: Explicitly **not** `visibility`: the visibility cascade makes
 #: :func:`_cascade_visibility` its sole writer. `ProjectUpdate` now carries
 #: the field — the route routes it to the cascade by name — and this list is
 #: what guarantees the generic path can never carry it to the column instead.
@@ -155,7 +155,7 @@ class _Members(NamedTuple):
     total: int
     newest_update: datetime | None
     #: The caller's own active members in no other active project: what
-    #: archiving the project would archive with it (round 14).
+    #: archiving the project would archive with it.
     solo: int = 0
 
 
@@ -339,14 +339,14 @@ def list_projects(
             project.outerjoin(app_user, app_user.c.user_id == project.c.owner_user_id)
         )
         .where(*where)
-        # Newest activity first (task 058, round 12), so the page the list
+        # Newest activity first, so the page the list
         # shows is the page it would sort to; the project id breaks ties.
         .order_by(_last_activity_at(user.user_id).desc(), project.c.project_id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).mappings().all()
     counts = _task_counts(conn, [row["project_id"] for row in rows], user_id=user.user_id)
-    # One line per cross-organisation request (contract § 3a), emitted after
+    # One line per cross-organisation request, emitted after
     # the page is known so it can carry the row count — including the zero an
     # `owner_email` search matching nobody produces.
     trace_admin_listing(
@@ -520,7 +520,7 @@ def archive_project(
         for task_id in _tasks_only_here(conn, project_id=project_id, user_id=user.user_id):
             if _run_active(conn, task_id):
                 # As the single-task archive refuses (``run_active``): a task
-                # mid-run stays visible (task 058 review).
+                # mid-run stays visible.
                 continue
             if archive_task(
                 conn,
@@ -659,7 +659,7 @@ def update_project(
     # (`_task_counts` is per-caller: read grade minus admin, active only), not
     # through "how many rows the cascade touched" — the outcome copy must
     # never name rows the reader cannot see. Since colleague assignment
-    # (owner ruling 2026-08-27) a member may be owned by a same-org
+    # a member may be owned by a same-org
     # colleague, so the two genuinely differ: the count names the members
     # this owner can read, which is the honest number for the copy.
     counts = _task_counts(conn, [project_id], user_id=user.user_id)

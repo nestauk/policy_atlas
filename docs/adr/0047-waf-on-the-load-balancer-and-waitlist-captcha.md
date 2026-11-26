@@ -127,6 +127,18 @@ The AWS documentation pages these decisions rest on (gathered 2026-11-17):
   appears (inside groups and at the ACL level), because a Logs Insights `stats` over array
   fields sees only the first element.
 
+## Amendment (2026-11-23): the ops pages and Metabase
+
+Decision 3 scoped the general rate rule and the managed groups to the API host, so the ops
+pages (built later) and Metabase matched nothing. Both are the most privileged sites and sit
+on the same load balancer, so the scope is now a list of hosts: the API, the ops pages and,
+where the analytics stack is deployed, Metabase. Their allowlists of addresses stay.
+
+- The rate rule counts one address across the three hosts together.
+- `waf.mode` is still one switch. The count week must include the ops pages and Metabase
+  before the switch to block: Metabase sends long queries that a managed rule may match.
+- The waitlist rules do not change.
+
 ## Consequences
 
 - About $11 a month per environment, plus request and puzzle fees in cents.

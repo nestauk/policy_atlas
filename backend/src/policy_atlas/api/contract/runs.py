@@ -27,7 +27,7 @@ RunStatus = Literal[
     "interrupted",
 ]
 
-#: A theory-of-change walk's kind (task 054's 058 alignment, S3): the draft, an
+#: A theory-of-change walk's kind: the draft, an
 #: uploaded theory's read, a check, or "Update the report".
 TocWalkKind = Literal["draft", "read", "check", "report_update"]
 

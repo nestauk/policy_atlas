@@ -10,8 +10,8 @@ const MIN_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30000;
 /**
  * How long the stream may go without a single byte before the client treats
- * the connection as dead, drops it and reconnects at its cursor (task 058,
- * N15). The server sends a keep-alive comment every 15 s and repeats the
+ * the connection as dead, drops it and reconnects at its cursor.
+ * The server sends a keep-alive comment every 15 s and repeats the
  * current tick every 10 s while a model call runs, so 45 s of silence means
  * the connection is gone even if the browser has not noticed.
  */
@@ -211,7 +211,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
  *   startCursor: The cursor to return if no frame with an `id:` arrives.
  *   onFrame: Called for every parsed frame, in arrival order.
  *   signal: Stops reading when aborted.
- *   readInactivityMs: The watchdog (task 058, N15). When set, reading stops
+ *   readInactivityMs: The watchdog. When set, reading stops
  *     and the function returns the cursor so far if no bytes at all (frames,
  *     ticks or keep-alive comments) arrive for this long. The caller then
  *     reconnects at that cursor as for any ended stream.

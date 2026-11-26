@@ -6,7 +6,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from types import SimpleNamespace, TracebackType
+from types import TracebackType
 from typing import Any, Literal, cast
 
 import pytest
@@ -14,6 +14,7 @@ from structlog.testing import capture_logs
 
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
+from policy_atlas.core.usage import TokenUsage
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     StubGroundingJudgeBackend,
     build_envelope,
@@ -40,6 +41,15 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     _salvage_section,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange, run_section_loop
+from tests.helpers import (
+    FakeResponsesClient,
+    FakeStream,
+    cut_off_response,
+    response_usage,
+    spy_calls,
+    text_stream_events,
+    tool_call_response,
+)
 
 
 def _seed(
@@ -243,75 +253,38 @@ def test_stub_section_turn_default_tool_ordering_is_gated() -> None:
 # --- Live section-turn parsing: multi-read-tool-call turns (018 C2 round 3) ---
 
 
-class _FakeFunctionCall:
-    def __init__(self, name: str, arguments: str) -> None:
-        self.name = name
-        self.arguments = arguments
+#: The token usage ``tool_call_response`` and ``text_stream_events`` report by default.
+_DEFAULT_USAGE = TokenUsage(prompt=10, completion=5, total=15, cached=0, reasoning=0)
 
 
-class _FakeToolCall:
-    def __init__(self, name: str, arguments: str) -> None:
-        self.function = _FakeFunctionCall(name, arguments)
-
-
-class _FakeMessage:
-    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
-        self.tool_calls = tool_calls
-
-
-class _FakeChoice:
-    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
-        self.message = _FakeMessage(tool_calls)
-
-
-class _FakeResponse:
-    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
-        self.choices = [_FakeChoice(tool_calls)]
-        self.usage = None
-
-
-class _FakeCompletions:
-    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
-        self._tool_calls = tool_calls
-        self.calls: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> _FakeResponse:
-        self.calls.append(kwargs)
-        return _FakeResponse(self._tool_calls)
-
-
-class _FakeChat:
-    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
-        self.completions = _FakeCompletions(tool_calls)
-
-
-class _FakeOpenAIClient:
-    def __init__(self, tool_calls: list[_FakeToolCall]) -> None:
-        self.chat = _FakeChat(tool_calls)
-
-
-def _backend_with_fake_client(tool_calls: list[_FakeToolCall]) -> OpenAISynthesisBackend:
+def _backend_with_fake_client(tool_calls: list[tuple[str, str]]) -> OpenAISynthesisBackend:
+    """A backend whose model answers every turn with ``tool_calls`` (a plain reply when none)."""
     backend: OpenAISynthesisBackend = object.__new__(OpenAISynthesisBackend)
-    fake_client = _FakeOpenAIClient(tool_calls)
-    cast("Any", backend)._client = fake_client
+    answer = tool_call_response(*tool_calls, text="" if tool_calls else "Ready.")
+    cast("Any", backend)._client = FakeResponsesClient(answer)
     return backend
 
 
-def test_live_section_turn_parses_two_read_tool_calls_in_order() -> None:
+def test_live_section_turn_parses_two_read_tool_calls_in_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
+
+    calls = spy_calls(monkeypatch, sb, "send_turn")
     backend = _backend_with_fake_client([
-        _FakeToolCall("search_chunks", json.dumps({"query": "housing"})),
-        _FakeToolCall("query_findings", json.dumps({})),
+        ("search_chunks", json.dumps({"query": "housing"})),
+        ("query_findings", json.dumps({})),
     ])
 
     turn, usage = cast("Any", backend)._create_section_turn_once([], force_emit=False)
 
-    assert usage is None
+    assert usage == _DEFAULT_USAGE
     assert turn["claims"] is None
     assert turn["tool_calls"] == [
         {"tool": "search_chunks", "arguments": {"query": "housing"}},
         {"tool": "query_findings", "arguments": {}},
     ]
-    [kwargs] = cast("Any", backend)._client.chat.completions.calls
+    [kwargs] = calls
     assert kwargs["parallel_tool_calls"] is True
     # Task 056 D10, task 058: allowed_tools over the three reads and the ready
     # signal (never emit_section on an open turn, never emit_repairs).
@@ -326,21 +299,20 @@ def test_live_section_turn_parses_two_read_tool_calls_in_order() -> None:
         },
     }
     assert kwargs["model"] == SYNTHESIS_MODEL
-    # Pin regression: gpt-5.6-terra 400s on function tools without this (029).
     assert kwargs["reasoning_effort"] == route().effort_for("synthesise_section_turn")
-    assert kwargs["reasoning_effort"] == "none"
+    assert kwargs["reasoning_effort"] == "low"
 
 
 def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
     backend = _backend_with_fake_client([
-        _FakeToolCall("emit_section", json.dumps({"prose": "x", "claims": []})),
-        _FakeToolCall("search_chunks", json.dumps({"query": "housing"})),
+        ("emit_section", json.dumps({"prose": "x", "claims": []})),
+        ("search_chunks", json.dumps({"query": "housing"})),
     ])
 
     with capture_logs() as logs:
         turn, usage = cast("Any", backend)._create_section_turn_once([], force_emit=False)
 
-    assert usage is None
+    assert usage == _DEFAULT_USAGE
     assert turn["claims"] is None
     assert turn["tool_calls"] == [
         {"tool": "search_chunks", "arguments": {"query": "housing"}},
@@ -351,34 +323,36 @@ def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
 @pytest.mark.parametrize(
     "tool_calls",
     [
-        pytest.param([_FakeToolCall("write_section", "{}")], id="single-write-section"),
+        pytest.param([("write_section", "{}")], id="single-write-section"),
         pytest.param(
-            [_FakeToolCall("write_section", "{}"), _FakeToolCall("write_section", "{}")],
+            [("write_section", "{}"), ("write_section", "{}")],
             id="every-parallel-call-write-section",
         ),
         pytest.param([], id="bare-reply-no-tool-call"),
     ],
 )
-def test_live_section_turn_ready_signal(tool_calls: list[_FakeToolCall]) -> None:
+def test_live_section_turn_ready_signal(tool_calls: list[tuple[str, str]]) -> None:
     """Task 058: write_section alone, or a reply with no tool call, means ready."""
     backend = _backend_with_fake_client(tool_calls)
 
     turn, usage = cast("Any", backend)._create_section_turn_once([], force_emit=False)
 
-    assert usage is None
+    assert usage == _DEFAULT_USAGE
     assert turn == {"tool_calls": [], "claims": None, "ready": True}
 
 
 def test_live_section_turn_drops_write_section_alongside_reads() -> None:
     """write_section beside reads: the reads run, the write is dropped and logged."""
     backend = _backend_with_fake_client([
-        _FakeToolCall("search_chunks", json.dumps({"query": "housing"})),
-        _FakeToolCall("write_section", "{}"),
+        ("search_chunks", json.dumps({"query": "housing"})),
+        ("write_section", "{}"),
     ])
 
     with capture_logs() as logs:
         turn, _usage = cast("Any", backend)._create_section_turn_once([], force_emit=False)
 
+    # ``carried`` is the in-memory model turn the loop sends back; not part of this check.
+    turn.pop("carried")
     assert turn == {
         "tool_calls": [{"tool": "search_chunks", "arguments": {"query": "housing"}}],
         "claims": None,
@@ -393,7 +367,7 @@ def test_step_kwargs_send_the_steps_model_and_effort() -> None:
 
     assert sb._step_kwargs("synthesise_section_turn") == {
         "model": route().model_for("synthesise_section_turn"),
-        "reasoning_effort": "none",
+        "reasoning_effort": "low",
         "timeout": route().timeout_for("synthesise_section_turn"),
     }
     # A "breakpoint" step also sends the body that turns the provider's own storing off.
@@ -887,46 +861,27 @@ _STREAM_JSON = json.dumps(
         ],
     }
 )
-_STREAM_USAGE = SimpleNamespace(prompt_tokens=120, completion_tokens=40, total_tokens=160)
+_STREAM_USAGE = response_usage(input_tokens=120, output_tokens=40)
 
 
-def _content_chunk(text: str) -> Any:
-    return SimpleNamespace(
-        choices=[SimpleNamespace(delta=SimpleNamespace(content=text))], usage=None
-    )
+def _stream_events(text: str, size: int) -> list[Any]:
+    # The usage arrives on the final event.
+    pieces = [text[at : at + size] for at in range(0, len(text), size)]
+    return text_stream_events(pieces, usage=_STREAM_USAGE)
 
 
-def _stream_chunks(text: str, size: int) -> list[Any]:
-    chunks = [_content_chunk(text[at : at + size]) for at in range(0, len(text), size)]
-    # The usage arrives on the last chunk, which carries no choices.
-    chunks.append(SimpleNamespace(choices=[], usage=_STREAM_USAGE))
-    return chunks
-
-
-class _StreamCompletions:
-    """``chat.completions`` double: ``create`` returns the scripted chunks."""
-
-    def __init__(self, chunks: list[Any], *, fail_after: int | None = None) -> None:
-        self._chunks = chunks
-        self._fail_after = fail_after
-        self.calls: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> Iterator[Any]:
-        self.calls.append(kwargs)
-        return self._iterate()
-
-    def _iterate(self) -> Iterator[Any]:
-        for index, chunk in enumerate(self._chunks):
-            if self._fail_after is not None and index == self._fail_after:
-                raise ConnectionError("stream dropped")
-            yield chunk
+def _stream_client(
+    text: str, size: int, *, fail_after: int | None = None
+) -> FakeResponsesClient:
+    """A client streaming ``text`` in ``size`` pieces; ``fail_after`` drops it at that event."""
+    return FakeResponsesClient(FakeStream(_stream_events(text, size), fail_after=fail_after))
 
 
 def _streaming_backend(
-    completions: _StreamCompletions, *, langfuse: Any | None = None
+    client: FakeResponsesClient, *, langfuse: Any | None = None
 ) -> OpenAISynthesisBackend:
     backend = OpenAISynthesisBackend(api_key="sk-test-stream", langfuse_client=langfuse)
-    cast("Any", backend)._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    cast("Any", backend)._client = client
     return backend
 
 
@@ -950,26 +905,32 @@ def test_section_emit_stream_addresses_deltas_to_the_display_index(
     # The loop counts sections from 0; the page puts the key findings first,
     # so the seed carries the page's index and the deltas use it (owner round
     # 5, 2026-11-05: the first section's text landed on the key-findings slot).
-    backend = _streaming_backend(_StreamCompletions(_stream_chunks(_STREAM_JSON, 50)))
+    backend = _streaming_backend(_stream_client(_STREAM_JSON, 50))
     backend.section_emit_stream({**_seed(), "section_index": 0, "display_index": 1}, [])
     assert section_deltas and all(index == 1 for index, _text, _mode in section_deltas)
 
     # Without a display index (a seed built without the emitter) the loop's
     # index is used, as before.
     section_deltas.clear()
-    backend = _streaming_backend(_StreamCompletions(_stream_chunks(_STREAM_JSON, 50)))
+    backend = _streaming_backend(_stream_client(_STREAM_JSON, 50))
     backend.section_emit_stream({**_seed(), "section_index": 0}, [])
     assert section_deltas and all(index == 0 for index, _text, _mode in section_deltas)
 
 
-def test_section_emit_stream_request_shape(section_deltas: list[tuple[int, str, str]]) -> None:
-    completions = _StreamCompletions(_stream_chunks(_STREAM_JSON, 50))
-    backend = _streaming_backend(completions)
+def test_section_emit_stream_request_shape(
+    monkeypatch: pytest.MonkeyPatch, section_deltas: list[tuple[int, str, str]]
+) -> None:
+    from policy_atlas.evidence_search.synthesis import synthesis_backend as sb
+
+    calls = spy_calls(monkeypatch, sb, "stream_turn")
+    client = _stream_client(_STREAM_JSON, 50)
+    backend = _streaming_backend(client)
 
     backend.section_emit_stream(_seed(), [])
 
-    [kwargs] = completions.calls
-    assert kwargs["stream"] is True
+    [kwargs] = calls
+    [sent] = client.calls
+    assert sent["stream"] is True
     assert kwargs["stream_options"] == {"include_usage": True}
     # Probe 2026-11-05 (shape B): the section turns' tools stay on the request
     # with no tool allowed, so the cached prefix is reused; a structured-output
@@ -995,7 +956,7 @@ def test_section_emit_stream_parses_a_fenced_reply(
     reply: str, section_deltas: list[tuple[int, str, str]]
 ) -> None:
     """A Markdown code fence around the JSON reply is stripped before parsing."""
-    backend = _streaming_backend(_StreamCompletions(_stream_chunks(reply, 9)))
+    backend = _streaming_backend(_stream_client(reply, 9))
 
     turn, _usage = backend.section_emit_stream(_seed(), [])
 
@@ -1011,7 +972,7 @@ def test_section_emit_stream_deltas_decode_to_the_parsed_prose(
     size: int, section_deltas: list[tuple[int, str, str]]
 ) -> None:
     """N6: the appended deltas, joined, equal ``parsed.prose`` at any chunking."""
-    backend = _streaming_backend(_StreamCompletions(_stream_chunks(_STREAM_JSON, size)))
+    backend = _streaming_backend(_stream_client(_STREAM_JSON, size))
 
     turn, _usage = backend.section_emit_stream(_seed(), [])
 
@@ -1040,10 +1001,10 @@ def test_section_emit_stream_turn_matches_the_forced_tool_parse(
 ) -> None:
     """The streamed turn is what ``_emit_turn`` returns for the same JSON."""
     streamed, usage = _streaming_backend(
-        _StreamCompletions(_stream_chunks(_STREAM_JSON, 7))
+        _stream_client(_STREAM_JSON, 7)
     ).section_emit_stream(_seed(), [])
     forced, _forced_usage = cast(
-        "Any", _backend_with_fake_client([_FakeToolCall("emit_section", _STREAM_JSON)])
+        "Any", _backend_with_fake_client([("emit_section", _STREAM_JSON)])
     )._create_section_turn_once([], force_emit=True)
 
     assert streamed == forced
@@ -1051,7 +1012,7 @@ def test_section_emit_stream_turn_matches_the_forced_tool_parse(
     claims = streamed["claims"]
     assert claims is not None
     assert [claim.text for claim in claims.claims] == ["next"]
-    # The usage comes from the last chunk.
+    # The usage comes from the final event.
     assert usage is not None
     assert (usage.prompt, usage.completion, usage.total) == (120, 40, 160)
 
@@ -1060,9 +1021,7 @@ def test_section_emit_stream_records_one_generation(
     section_deltas: list[tuple[int, str, str]],
 ) -> None:
     langfuse = _FakeLangfuse()
-    backend = _streaming_backend(
-        _StreamCompletions(_stream_chunks(_STREAM_JSON, 50)), langfuse=langfuse
-    )
+    backend = _streaming_backend(_stream_client(_STREAM_JSON, 50), langfuse=langfuse)
 
     backend.section_emit_stream(_seed(), [])
 
@@ -1071,8 +1030,10 @@ def test_section_emit_stream_records_one_generation(
     assert "input" in span.updates[0]
     assert span.updates[0]["metadata"]["step"] == "synthesise_section_emit"
     assert span.updates[0]["metadata"]["attempt"] == 1
-    assert span.updates[-1]["model"] == route().model_for("synthesise_section_emit")
-    assert span.updates[-1]["usage_details"]
+    # The last update with output; the request-id scope adds its metadata after it.
+    final = next(update for update in reversed(span.updates) if "output" in update)
+    assert final["model"] == route().model_for("synthesise_section_emit")
+    assert final["usage_details"]
 
 
 def _spy_section_turn(
@@ -1098,9 +1059,8 @@ def _spy_section_turn(
 def test_section_emit_stream_failure_midway_falls_back_once(
     monkeypatch: pytest.MonkeyPatch, section_deltas: list[tuple[int, str, str]]
 ) -> None:
-    backend = _streaming_backend(
-        _StreamCompletions(_stream_chunks(_STREAM_JSON, 7), fail_after=4)
-    )
+    # Event 0 opens the stream, so the drop comes after four text pieces.
+    backend = _streaming_backend(_stream_client(_STREAM_JSON, 7, fail_after=5))
     forced, fallback_turn = _spy_section_turn(backend, monkeypatch)
 
     with capture_logs() as logs:
@@ -1121,9 +1081,7 @@ def test_section_emit_stream_failure_midway_falls_back_once(
 def test_section_emit_stream_unparseable_text_falls_back_once(
     monkeypatch: pytest.MonkeyPatch, section_deltas: list[tuple[int, str, str]]
 ) -> None:
-    backend = _streaming_backend(
-        _StreamCompletions(_stream_chunks('{"prose": "Cut short', 5))
-    )
+    backend = _streaming_backend(_stream_client('{"prose": "Cut short', 5))
     forced, fallback_turn = _spy_section_turn(backend, monkeypatch)
 
     turn, _usage = backend.section_emit_stream(_seed(), [])
@@ -1134,6 +1092,28 @@ def test_section_emit_stream_unparseable_text_falls_back_once(
     assert section_deltas[-2:] == [(0, "", "replace"), (0, "Fallback prose.", "replace")]
 
 
+def test_section_emit_stream_cut_off_counts_its_tokens_with_the_fallbacks(
+    monkeypatch: pytest.MonkeyPatch, section_deltas: list[tuple[int, str, str]]
+) -> None:
+    pieces = [_STREAM_JSON[:20], _STREAM_JSON[20:40]]
+    events = text_stream_events(pieces, ending="incomplete", usage=_STREAM_USAGE)
+    backend = _streaming_backend(FakeResponsesClient(events))
+    fallback_turn: SectionTurn = {"tool_calls": [], "claims": None}
+    fallback_usage = TokenUsage(prompt=1, completion=2, total=3)
+    monkeypatch.setattr(
+        backend, "section_turn", lambda *_args, **_kwargs: (fallback_turn, fallback_usage)
+    )
+
+    with capture_logs() as logs:
+        turn, usage = backend.section_emit_stream(_seed(), [])
+
+    assert turn is fallback_turn
+    assert usage is not None
+    assert (usage.prompt, usage.completion, usage.total) == (121, 42, 163)
+    [logged] = [e for e in logs if e["event"] == "synthesis.section_emit_stream.usage"]
+    assert logged["total_tokens"] == 160
+
+
 def _open_calls(task_id: uuid.UUID) -> int:
     from policy_atlas.core import liveness
 
@@ -1142,21 +1122,21 @@ def _open_calls(task_id: uuid.UUID) -> int:
     return entry.open_calls if entry is not None else 0
 
 
-class _CountingStream(_StreamCompletions):
-    """Records the hub's open-call count as each chunk is read."""
+class _CountingStream(FakeStream):
+    """Records the hub's open-call count as each event is read."""
 
     def __init__(self, task_id: uuid.UUID, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._task_id = task_id
         self.open_during: list[int] = []
 
-    def _iterate(self) -> Iterator[Any]:
-        for chunk in super()._iterate():
+    def __iter__(self) -> Iterator[Any]:
+        for event in super().__iter__():
             self.open_during.append(_open_calls(self._task_id))
-            yield chunk
+            yield event
 
 
-@pytest.mark.parametrize("fail_after", [None, 4], ids=["streamed", "fallback"])
+@pytest.mark.parametrize("fail_after", [None, 5], ids=["streamed", "fallback"])
 def test_section_emit_stream_holds_one_open_call_for_the_heartbeats(
     fail_after: int | None,
     monkeypatch: pytest.MonkeyPatch,
@@ -1166,10 +1146,10 @@ def test_section_emit_stream_holds_one_open_call_for_the_heartbeats(
     from policy_atlas.core import liveness
 
     task_id = uuid.uuid4()
-    completions = _CountingStream(
-        task_id, _stream_chunks(_STREAM_JSON, 7), fail_after=fail_after
+    stream = _CountingStream(
+        task_id, _stream_events(_STREAM_JSON, 7), fail_after=fail_after
     )
-    backend = _streaming_backend(completions)
+    backend = _streaming_backend(FakeResponsesClient(stream))
     open_in_fallback: list[int] = []
 
     def _section_turn(
@@ -1185,7 +1165,7 @@ def test_section_emit_stream_holds_one_open_call_for_the_heartbeats(
         backend.section_emit_stream(_seed(), [])
         after = _open_calls(task_id)
 
-    assert completions.open_during and set(completions.open_during) == {1}
+    assert stream.open_during and set(stream.open_during) == {1}
     assert open_in_fallback == ([] if fail_after is None else [1])
     assert after == 0
 
@@ -1274,3 +1254,14 @@ def test_run_section_loop_without_the_stream_method_uses_the_forced_tool() -> No
     assert claims is not None
     assert claims.prose == "Forced."
     assert result["turn_cap_hit"] is True
+
+
+def test_a_section_turn_cut_off_at_the_token_limit_is_a_malformed_emission_not_retried() -> None:
+    from policy_atlas.evidence_search.synthesis.synthesis_tools import MalformedEmissionError
+
+    client = FakeResponsesClient(cut_off_response(""))
+    backend = _streaming_backend(client)
+
+    with pytest.raises(MalformedEmissionError):
+        backend.section_turn(_seed(), [], force_emit=True)
+    assert len(client.calls) == 1

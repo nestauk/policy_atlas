@@ -96,7 +96,12 @@ METABASE_CONFIG = _load_config("metabase_config.json")
 # Five CIDRs exercise the split: one full rule of four and a second rule of one.
 ANALYTICS_ALLOWLIST_SIZE = 5
 OPS_ALLOWLIST_SIZE = 5
-APP = cdk.App(context={"aws:cdk:bundling-stacks": []})
+# The cdk.json flag that makes the sign-in address record point straight at the Cognito
+# custom domain (no helper Lambda), as a real deploy does. Only this flag: the rest of
+# cdk.json's context would change templates other tests pin.
+SIGN_IN_ALIAS_FLAG = "@aws-cdk/aws-route53-targets:userPoolDomainNameMethodWithoutCustomResource"
+CDK_CONTEXT = {SIGN_IN_ALIAS_FLAG: _load_environments("cdk.json")["context"][SIGN_IN_ALIAS_FLAG]}
+APP = cdk.App(context={**CDK_CONTEXT, "aws:cdk:bundling-stacks": []})
 ENV = Environment(account=DUMMY_ACCOUNT, region=NETWORK_CONFIG["aws_region"])
 CERT_ENV = Environment(account=DUMMY_ACCOUNT, region="us-east-1")
 NETWORK_STACK = NetworkStack(
@@ -119,6 +124,16 @@ CERT_STACK = PaV3CertStack(
     APP,
     "PaV3CertStack",
     network_config=NETWORK_CONFIG,
+    env=CERT_ENV,
+    cross_region_references=True,
+)
+# Each config names our own sign-in address (ADR 0049), which needs its
+# certificate; CERT_STACK stays without one, as the saved sign-in baseline expects.
+AUTH_CERT_STACK = PaV3CertStack(
+    APP,
+    "PaV3CertStackAuth",
+    network_config=NETWORK_CONFIG,
+    auth_domain=PA_CONFIG["policy_atlas_config"]["sign_in"]["domain"],
     env=CERT_ENV,
     cross_region_references=True,
 )
@@ -148,13 +163,18 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStack",
         pa_config=PA_CONFIG,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        # As infra/app.py passes it where the analytics stack is deployed.
+        metabase_host=(
+            f"{METABASE_CONFIG['metabase_subdomain']}.{METABASE_CONFIG['domain_name']}"
+        ),
         cross_region_references=True,
     )
     # The same app stack pinned to each model route, to show the Bedrock key is
-    # wired only on a Bedrock route (task 053), whatever route the shipped
+    # wired only on a Bedrock route, whatever route the shipped
     # config has. Not part of TEMPLATES: the namespacing and rendering checks
     # below stay about the shipped staging config.
     ROUTE_APP_STACKS = {}
@@ -166,12 +186,13 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
             stack_id,
             pa_config=route_config,
             certificate=CERT_STACK.certificate,
+            auth_certificate=AUTH_CERT_STACK.auth_certificate,
             env=ENV,
             env_name=ENV_NAME,
             ops_allowlist_size=OPS_ALLOWLIST_SIZE,
             cross_region_references=True,
         )
-    # The same app stack with the other ingest mode (task 057), so the API
+    # The same app stack with the other ingest mode, so the API
     # task's environment is checked for both values whatever the config says.
     in_process_config = json.loads(json.dumps(PA_CONFIG))
     in_process_config["policy_atlas_config"]["backend"]["ingest_mode"] = "in_process"
@@ -180,6 +201,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackInProcess",
         pa_config=in_process_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -192,13 +214,14 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackEmail",
         pa_config=email_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
     # The email-off case on its own, whatever the committed environment says
-    # (staging turned SES on, owner 2026-11-18).
+    # (staging turned SES on).
     no_email_config = json.loads(json.dumps(PA_CONFIG))
     no_email_config["policy_atlas_config"]["email"]["enabled"] = False
     NO_EMAIL_APP_STACK = PolicyAtlasStack(
@@ -206,6 +229,64 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         "PaV3AppStackNoEmail",
         pa_config=no_email_config,
         certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    enforce_config = json.loads(json.dumps(PA_CONFIG))
+    enforce_config["policy_atlas_config"]["csp_mode"] = "enforce"
+    ENFORCE_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackEnforce",
+        pa_config=enforce_config,
+        certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    coupling_config = json.loads(json.dumps(PA_CONFIG))
+    coupling_config["policy_atlas_config"]["cognito_domain_prefix"] = "pa-csp-coupling-test"
+    COUPLING_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackCspCoupling",
+        pa_config=coupling_config,
+        certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    prod_config = _load_environments("pa_config.json")["prod"]
+    PROD_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackProdCsp",
+        pa_config=prod_config,
+        certificate=CERT_STACK.certificate,
+        auth_certificate=AUTH_CERT_STACK.auth_certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    # An environment with no sign_in block, a report-only CSP, the default email
+    # sender and no CAPTCHA: the state the saved sign-in baseline was written from. It takes the website certificate
+    # from AUTH_CERT_STACK because one more reader of CERT_STACK would add an
+    # export to that stack's template, which the baseline also holds.
+    no_sign_in_config = json.loads(json.dumps(prod_config))
+    del no_sign_in_config["policy_atlas_config"]["sign_in"]
+    no_sign_in_config["policy_atlas_config"]["csp_mode"] = "report-only"
+    no_sign_in_config["policy_atlas_config"]["email"]["enabled"] = False
+    no_sign_in_config["policy_atlas_config"]["backend"]["waf"]["captcha"] = False
+    NO_SIGN_IN_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackNoSignIn",
+        pa_config=no_sign_in_config,
+        certificate=AUTH_CERT_STACK.certificate,
         env=ENV,
         env_name=ENV_NAME,
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
@@ -233,6 +314,10 @@ OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_
 IN_PROCESS_APP_TEMPLATE = Template.from_stack(IN_PROCESS_APP_STACK).to_json()
 EMAIL_APP_TEMPLATE = Template.from_stack(EMAIL_APP_STACK).to_json()
 NO_EMAIL_APP_TEMPLATE = Template.from_stack(NO_EMAIL_APP_STACK).to_json()
+ENFORCE_APP_TEMPLATE = Template.from_stack(ENFORCE_APP_STACK).to_json()
+COUPLING_APP_TEMPLATE = Template.from_stack(COUPLING_APP_STACK).to_json()
+PROD_APP_TEMPLATE = Template.from_stack(PROD_APP_STACK).to_json()
+NO_SIGN_IN_APP_TEMPLATE = Template.from_stack(NO_SIGN_IN_APP_STACK).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()
@@ -1205,8 +1290,7 @@ def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
     assert properties["AllowedOAuthScopes"] == ["openid", "email", "profile"]
     assert properties["CallbackURLs"] == urls
     assert properties["LogoutURLs"] == urls
-    # Review-stack pins (026 step 7; refresh length is the owner's call —
-    # 30 d kept, 2026-07-28): explicit token validities and no
+    # Pins explicit token validities (refresh length 30 d) and no
     # user-enumeration oracle.
     assert properties["AccessTokenValidity"] == 60
     assert properties["RefreshTokenValidity"] == 43200  # 30 d, rendered in minutes
@@ -1299,17 +1383,17 @@ def test_cloudfront_uses_oac_with_spa_fallback_and_certificate():
         config["ViewerCertificate"]["AcmCertificateArn"]
     )
     assert all("OriginAccessControlId" in origin for origin in config["Origins"])
-    # Review-stack hardening pin (026 step 7): the managed SecurityHeadersPolicy
-    # (HSTS etc.) on the default and /index.html behaviors.
-    security_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03"
-    assert (
-        config["DefaultCacheBehavior"]["ResponseHeadersPolicyId"]
-        == security_headers_policy_id
-    )
+    # Task 064c: both web behaviours use the one custom headers policy.
+    security_headers_policy_id = config["DefaultCacheBehavior"]["ResponseHeadersPolicyId"]
+    assert security_headers_policy_id != "67f7725c-6f97-4210-82d7-5512b31e9d03"
     assert all(
         behavior["ResponseHeadersPolicyId"] == security_headers_policy_id
         for behavior in config["CacheBehaviors"]
     )
+    assert security_headers_policy_id in [
+        {"Ref": logical_id}
+        for logical_id, _ in _resources(app_template, "AWS::CloudFront::ResponseHeadersPolicy")
+    ]
     assert {
         (response["ErrorCode"], response["ResponseCode"], response["ResponsePagePath"])
         for response in config["CustomErrorResponses"]
@@ -1354,7 +1438,7 @@ def test_frontend_apex_and_www_have_a_and_aaaa_cloudfront_aliases():
 
 def test_frontend_and_fonts_buckets_are_private_and_fonts_are_destroyed():
     buckets = _resources(TEMPLATES["app"], "AWS::S3::Bucket")
-    # Frontend, fonts, and users' uploads (task 054 increment 5; its own test in
+    # Frontend, fonts, and users' uploads (its own test in
     # test_service_wiring checks it is retained, encrypted and HTTPS only).
     assert len(buckets) == 3
     assert all(
@@ -1435,3 +1519,21 @@ def test_cert_stack_uses_its_namespaced_cloudformation_id():
     manifest_path = Path(ASSEMBLY.directory) / "manifest.json"
     artifacts = json.loads(manifest_path.read_text())["artifacts"]
     assert "PaV3CertStack" in artifacts
+
+
+def _firewall_hosts(template: dict) -> list[str]:
+    _, acl = _resources(template, "AWS::WAFv2::WebACL")[0]
+    general = next(rule for rule in acl["Properties"]["Rules"] if rule["Name"] == "general-rate")
+    scope = general["Statement"]["RateBasedStatement"]["ScopeDownStatement"]
+    return [item["ByteMatchStatement"]["SearchString"] for item in scope["OrStatement"]["Statements"]]
+
+
+def test_firewall_covers_the_api_and_ops_hosts_and_metabase_where_it_is_deployed():
+    # The Metabase name is the one its own listener rule routes on.
+    assert _firewall_hosts(TEMPLATES["app"]) == [
+        "api.v3.policyatlas.uk", "ops.v3.policyatlas.uk", "metabase.v3.policyatlas.uk",
+    ]
+    # No `metabase_host`: an environment without the analytics stack.
+    assert _firewall_hosts(ENFORCE_APP_TEMPLATE) == [
+        "api.v3.policyatlas.uk", "ops.v3.policyatlas.uk",
+    ]

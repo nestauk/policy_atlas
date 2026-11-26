@@ -122,7 +122,7 @@ const APPRAISAL_TIER_SORT_RANK: Record<string, number> = {
   "High confidence": 2,
 };
 
-/** The label of an appraisal with no score (task 056). Like the server, it
+/** The label of an appraisal with no score. Like the server, it
  *  sorts after every scored row in both directions, before an unappraised one. */
 const UNRATED_TIER = "Unrated";
 
@@ -183,22 +183,22 @@ function compareMockEvidenceSort(
 /**
  * Scripted event-stream variants (contract strand 13 fixture requirement):
  * `"default"` is the full skeleton -> writing -> filled -> succeeded flow the
- * main journey drives (round 9: the search first says it is writing its
+ * main journey drives (the search first says it is writing its
  * queries, then sends five topic queries and one citations pass as
  * `search.query` frames, each out then back with its count; the characterise
  * stage sends its four themes as `characterise.themes` before its batches); `"paused"` holds indefinitely at a mid-synthesis
  * "writing" state (a demo/screenshot fixture — the run never resolves);
  * `"failed-partial"` streams both sections then ends the run `failed`, the
  * terminal-partial banner fixture the contract names. `"reload-mid-section"`
- * is what a reconnect sees mid-write (task 058, N26): the durable replay up to
+ * is what a reconnect sees mid-write: the durable replay up to
  * `artefact.section_started` for the streamed section (display index 1), one
  * `replace` delta carrying the first half of the prose, then appends for the
  * rest. The key findings (index 0) stream as deltas with one claim mark before
- * they complete (round 8). The case-studies slot (index 2): its two cards
- * stream as `artefact.section_card` frames, then the checked cards land
- * (task 058, round 7). Then two source notes arrive as `artefact.source_note`
+ * they complete. The case-studies slot (index 2): its two cards
+ * stream as `artefact.section_card` frames, then the checked cards land.
+ * Then two source notes arrive as `artefact.source_note`
  * frames, and the introduction streams into its slot (index 3, role `intro`)
- * and completes (round 8). `"paused-strip"` runs
+ * and completes. `"paused-strip"` runs
  * to the check-in after searching and screening and holds there for good,
  * for the run status bar's paused state. Selected via a
  * `?mockScenario=` query param on the `/events` request itself — a direct
@@ -239,7 +239,7 @@ let plannerScripted = false;
 
 let checkInAnswer = createDeferred();
 let checkInAnswered = false;
-// Task 044 Phase 5.5: the options-scoping baseline gate, held separately
+// The options-scoping baseline gate, held separately
 // from the Evidence search check-in above so the two scripts cannot collide.
 let baselineGateAnswer = createDeferred();
 let baselineGateDecision: { optionId: string; label: string } | null = null;
@@ -250,9 +250,9 @@ let currentRun: RunOut | null = null;
 let taskAgentTurns: TaskAgentTranscriptTurnOut[] = seedTaskAgentTurns();
 let nextTurnIndex = 4; // the seed transcript occupies turn_index 1-3
 
-// --- Chat conversations + turns (task 029 phase G3 mock) -----------------
+// --- Chat conversations + turns -----------------
 // Follow-up chats are created on demand. The task_agent conversation is
-// pre-seeded so the chats overlay (G14) has a task_agent row in mock mode,
+// pre-seeded so the chats overlay has a task_agent row in mock mode,
 // matching a real task that already has a plan lineage.
 function seedConversations(): ConversationOut[] {
   return [
@@ -278,7 +278,7 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 // which this flips to `enriched` — the scripted async-judge fixture.
 let chatTurnEnrichmentReads = new Map<string, number>();
 let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
-// Task 044: the mock's scoping-plan counterpart to `currentPlan`, read only
+// The mock's scoping-plan counterpart to `currentPlan`, read only
 // while `mockTask.capability === "options_scoping"`.
 let currentScopingPlan: components["schemas"]["ScopingPlanDraft"] = { ...mockScopingPlanReady };
 
@@ -287,13 +287,13 @@ function scopingPlanOut(version: number) {
   return { capability: "options_scoping", plan: null, scoping: currentScopingPlan, version, status: "approved" } as const;
 }
 
-// --- Identity + projects (task 033 phase 10a) --------------------------
-// `currentMe` defaults to the unenrolled fixture — dark launch: every
-// pre-033 mock journey sees `organisation: null` and stays unchanged. Tests
+// --- Identity + projects --------------------------
+// `currentMe` defaults to the unenrolled fixture — dark launch: a mock
+// journey sees `organisation: null` unless it opts in. Tests
 // that need the enrolled/org-scoped journeys call `setMockMe(mockMeEnrolled)`.
 let currentMe: MeOut = { ...mockMeUnenrolled };
 let mockProjects: ProjectOut[] = [{ ...mockProject }];
-/** The full-text state the mock's ingest stage moves rows through (round 14),
+/** The full-text state the mock's ingest stage moves rows through,
  *  by source id, over the fixture's own; reset with the scenario. */
 let mockIngestState = new Map<string, components["schemas"]["EvidenceItemOut"]["full_text_status"]>();
 
@@ -303,7 +303,7 @@ function mockEvidenceRow(item: components["schemas"]["EvidenceItemOut"]): compon
   return state === undefined ? item : { ...item, full_text_status: state, read_in_full: state === "ingested" };
 }
 
-/** Tasks archived with their project (round 14), by id, with when; reset with the scenario. */
+/** Tasks archived with their project, by id, with when; reset with the scenario. */
 let mockArchivedWithProject = new Map<string, string>();
 
 /** A task as the mock serves it: archived when its project's archive took it. */
@@ -313,7 +313,7 @@ function mockTaskState(task: TaskOut): TaskOut {
 }
 
 /** The caller's own active tasks in the project that no other active project
- *  holds: what archiving it archives (round 14, as the server counts them). */
+ *  holds: what archiving it archives (as the server counts them). */
 function mockSoloTasks(projectId: string): TaskOut[] {
   const activeProjects = new Set(mockProjects.filter((project) => project.archived_at == null).map((project) => project.project_id));
   return [mockTask, ...mockOtherTasks]
@@ -322,7 +322,7 @@ function mockSoloTasks(projectId: string): TaskOut[] {
     .filter((task) => (task.project_ids ?? []).every((other) => other === projectId || !activeProjects.has(other)));
 }
 
-/** A project as the mock serves it, with its solo-task count (round 14). */
+/** A project as the mock serves it, with its solo-task count. */
 function mockProjectOut(project: ProjectOut): ProjectOut {
   return { ...project, solo_task_count: mockSoloTasks(project.project_id).length };
 }
@@ -400,7 +400,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
     });
   }
-  // Task 044 Phase 5.5: the baseline gate. Both options end the walk — one
+  // The baseline gate. Both options end the walk — one
   // through to the longlist, one back to an editable plan — and each leaves a
   // `decision` turn in the Task Agent thread, exactly as the turn route does.
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_BASELINE_CHECK_IN_ID}/response`)) {
@@ -419,7 +419,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // The walk ends in the same request the decision lands in, so the runs
     // read is already terminal when the answer's invalidation refetches it.
     finishRun(optionId === "change_plan" ? "aborted" : "succeeded");
-    // Task 045 (6.3): the gate's Confirm opens the longlist walk, as the
+    // The gate's Confirm opens the longlist walk, as the
     // turn route and the card do.
     if (optionId !== "change_plan") requestMockLonglistWalk(mockScopingPlanVersion);
     baselineGateAnswer.resolve();
@@ -438,7 +438,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json({ accepted: true });
   }
 
-  // Task 054: a theory-of-change task reads the Result page's fixture, so the
+  // A theory-of-change task reads the Result page's fixture, so the
   // canvas, panel and Detailed information can be looked at without a backend.
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/toc`)) {
     // While the scripted live draft runs, the stored graph is still empty.
@@ -451,7 +451,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(tocEvidenceFixture());
   }
 
-  // Task 044 (C10): create is ONE request carrying the kind of work, the
+  // Create is ONE request carrying the kind of work, the
   // projects and the tasks it starts from. The mock stores the capability so
   // the New task screen's two paths are exercisable without a backend; it
   // does not simulate the Link rules, which are server-side invariants with
@@ -466,7 +466,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       isRecord(body) && Array.isArray(body.from_task_ids)
         ? body.from_task_ids.filter((value): value is string => typeof value === "string")
         : [];
-    // Task 044 (C10, C11); round 13: each chosen search's own name, read
+    // Each chosen search's own name, read
     // before `mockTask` below is overwritten to become the new task. An id
     // the mock does not hold keeps the id as its name.
     const sourceNames = fromTaskIds.map(
@@ -496,7 +496,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         isRecord(body) && Array.isArray(body.project_ids)
           ? body.project_ids.filter((value): value is string => typeof value === "string")
           : [],
-      // One link per chosen search, each under its own name (round 13).
+      // One link per chosen search, each under its own name.
       links: fromTaskIds.map((sourceTaskId, index) => ({
         link_id: index === 0 ? MOCK_LINK_ID : `${MOCK_LINK_ID.slice(0, -2)}${String(index + 1).padStart(2, "0")}`,
         source_task_id: sourceTaskId,
@@ -531,7 +531,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // --- Project lifecycle (landing rename/archive, contract strand 8) ------
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) {
     const body = await requestBody(request, init);
-    // Task 033 phase 10b: i.5 — a Task's own visibility can't be set while
+    // i.5 — a Task's own visibility can't be set while
     // it's in a Project (project membership). The mock mirrors the real
     // 409 `visibility_conflict` so the control's error line is exercisable
     // in mock mode too, not just against a live backend. Checked before any
@@ -544,7 +544,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     ) {
       return json({ error: { code: "visibility_conflict", message: `${TASK.one} is in a ${PROJECT.one}.` } }, 409);
     }
-    // Task 058, round 10: PATCH is owner-only; a colleague's project change
+    // PATCH is owner-only; a colleague's project change
     // gets the server's 403 and its plain message (flip `mockTask.is_owner`
     // to walk the colleague's Share page).
     if (isRecord(body) && "project_ids" in body && mockTask.is_owner === false) {
@@ -578,10 +578,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const body = await requestBody(request, init);
     const clientTurnId = isRecord(body) && typeof body.client_turn_id === "string" ? body.client_turn_id : crypto.randomUUID();
     const message = isRecord(body) && typeof body.message === "string" ? body.message : "";
-    // The route streams (task 058, N9): a `progress` line, the reply in
+    // The route streams: a `progress` line, the reply in
     // `delta` pieces, then one `completed` carrying the stored turn. The
     // transcript changes when the stream finishes, never before.
-    // Task 044 Phase 5.5: while the scoping walk is parked on the baseline
+    // While the scoping walk is parked on the baseline
     // gate the turn route answers FROM the baseline — an `answer` turn with
     // citations, not a planning reply.
     // The mock's REST run row stays `running` while the stream parks (the
@@ -616,7 +616,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return ndjsonResponse(createMockTaskAgentStream(scripted.reply, () => {
       const now = new Date().toISOString();
       if (existing !== undefined) {
-        // Retry-in-place (finding 6): the same client_turn_id re-runs, never a
+        // Retry-in-place: the same client_turn_id re-runs, never a
         // fresh turn_index.
         existing.status = "completed";
         existing.reply = scripted.reply;
@@ -639,7 +639,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         });
         nextTurnIndex += 1;
       }
-      // Task 044: a scoping task's turn carries `scoping_plan`, never `plan`
+      // A scoping task's turn carries `scoping_plan`, never `plan`
       // (`PlanOut`'s own capability-keyed shape, mirrored here).
       if (mockTask.capability === "options_scoping") {
         return { scoping_plan: currentScopingPlan, reply: scripted.reply, suggestions: [], capability: "options_scoping" };
@@ -659,7 +659,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // `ready` — see mockPlanReady / mockScopingPlanReady) -------------------
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     if (mockTask.capability === "options_scoping") {
-      // Task 045 (6.3): the version moves with each edit and confirm, so
+      // The version moves with each edit and confirm, so
       // the plan document can tell a longlist built from an older version.
       return json(scopingPlanOut(mockScopingPlanVersion));
     }
@@ -677,22 +677,22 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       ...currentScopingPlan,
       baseline_confirmed: { artefact_id: artefactId, plan_version: minted },
     };
-    // Task 045 (6.3): the confirm opens the longlist walk on the version it
-    // minted (a rebuild when a longlist already exists — D14, P12).
+    // The confirm opens the longlist walk on the version it
+    // minted (a rebuild when a longlist already exists).
     mockScopingPlanVersion = minted;
     const openedRun = requestMockLonglistWalk(minted);
     return json({ ...scopingPlanOut(minted), opened_run: openedRun });
   }
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     const body = await requestBody(request, init);
-    // Task 045: a scoping plan's direct edits — the constraint list (removing
+    // A scoping plan's direct edits — the constraint list (removing
     // the default transferability preference) and the options by their words
     // (unchanged words keep their design; the mock proposes none for new ones).
     if (mockTask.capability === "options_scoping" && isRecord(body) && isRecord(body.scoping)) {
       const edits = body.scoping;
       if (typeof edits.risk_appetite === "string") {
         // The appetite alone: a new plan version, a stale proposal, and no
-        // change to what the longlist reads (task 055, A6).
+        // change to what the longlist reads.
         currentScopingPlan = {
           ...currentScopingPlan,
           risk_appetite: edits.risk_appetite as NonNullable<typeof currentScopingPlan.risk_appetite>,
@@ -769,10 +769,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(currentRun, 201);
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/runs`)) {
-    // Newest first, as the API lists them: the longlist walks (task 045)
+    // Newest first, as the API lists them: the longlist walks
     // were all opened after the baseline walk.
     const walks = [...mockLonglistWalks, ...(currentRun ? [currentRun] : [])].map(withStages);
-    // `parentless` (A13): the task's own walks only, never an option search.
+    // `parentless`: the task's own walks only, never an option search.
     const parentless = url.searchParams.get("parentless") === "true";
     return json(
       page(
@@ -799,12 +799,12 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
 
-  // --- Identity + projects (task 033 phase 10a) -------------------------
+  // --- Identity + projects -------------------------
   if (method === "GET" && path.endsWith("/api/v1/me")) return json(currentMe);
   if (method === "GET" && path.endsWith("/api/v1/projects")) {
-    // `status` (task 058, round 11): active by default, as the server lists.
+    // `status`: active by default, as the server lists.
     const status = url.searchParams.get("status") ?? "active";
-    // Newest activity first, as the server pages them (round 12).
+    // Newest activity first, as the server pages them.
     const listed = mockProjects
       .filter((project) =>
         status === "all" ? true : status === "archived" ? project.archived_at != null : project.archived_at == null,
@@ -819,7 +819,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const found = mockProjects.find((project) => project.project_id === projectArchiveMatch[1]);
     if (found === undefined) return json({ detail: "resource not found" }, 404);
     if (!found.is_owner) return json({ error: { code: "forbidden", message: "action is not permitted" } }, 403);
-    // Again changes nothing; the first time stands. Round 14: the first time
+    // Again changes nothing; the first time stands. The first time
     // archives the caller's tasks that are in no other project.
     if (found.archived_at != null) return json({ ...mockProjectOut(found), archived_task_count: 0 });
     const when = new Date().toISOString();
@@ -834,7 +834,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const found = mockProjects.find((project) => project.project_id === projectDetailMatch[1]);
     return found !== undefined ? json(mockProjectOut(found)) : json({ detail: "resource not found" }, 404);
   }
-  // Task 033 phase 10b: the visibility control's cascade (i.4) — the mock's
+  // The visibility control's cascade (i.4) — the mock's
   // one task is the project's only member, so "every member follows"
   // is a single assignment, but the shape (mutate both rows, return the
   // updated `task_count`) matches what the visibility-outcome copy reads.
@@ -854,10 +854,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   }
 
   // `project_id` narrows to one project's members, server-side — mirrors
-  // the real list's filter (contract task 033 phase 10a: `ProjectDetailView`
-  // no longer filters the global page client-side).
-  // Task 058, round 10: the list pages like the server (20 a page by
-  // default since round 12, newest first, `has_more`), honours `status` and `scope=mine`,
+  // the real list's filter (`ProjectDetailView` does not filter the global
+  // page client-side).
+  // The list pages like the server (20 a page by
+  // default, newest first, `has_more`), honours `status` and `scope=mine`,
   // and holds more than one page so "Show more" is walkable.
   if (method === "GET" && path.endsWith("/api/v1/tasks")) {
     const projectId = url.searchParams.get("project_id");
@@ -888,16 +888,16 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const evidenceType = url.searchParams.get("evidence_type");
     const strength = url.searchParams.get("strength");
     const country = url.searchParams.get("country");
-    // A coverage row's `query_id` (round 12): only what that search returned.
+    // A coverage row's `query_id`: only what that search returned.
     const queryId = url.searchParams.get("query");
     const returned = queryId === null ? null : (mockEvidenceByQuery[Number(queryId)] ?? []);
-    // Round 13: the Status column's read depth, and the appraised documents
+    // The Status column's read depth, and the appraised documents
     // (the mock's: those with a strength).
     const depth = url.searchParams.get("depth");
     const appraised = url.searchParams.get("appraised");
     const sort = url.searchParams.get("sort") as EvidenceSortField | null;
     const order = url.searchParams.get("order") as "asc" | "desc" | null;
-    // Round 14: on the scoping task a longlist theme's id lists the
+    // On the scoping task a longlist theme's id lists the
     // documents of its options (their card documents, as the dossier serves them).
     const longlistTheme = theme === null ? undefined : mockLonglistThemeDocuments(theme);
     let rows = (longlistTheme ?? mockEvidence.map(mockEvidenceRow)).filter((item) => {
@@ -929,11 +929,11 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       const direction = order ?? (sort === "year" || sort === "relevance" ? "desc" : "asc");
       rows = [...rows].sort((left, right) => compareMockEvidenceSort(left, right, sort, direction));
     }
-    // Paged like the server (50 by default; round 12), so the foot line's
+    // Paged like the server (50 by default), so the foot line's
     // page controls show in mock mode.
     return json(pageOf(rows, url));
   }
-  // Task 046, amendment 3 (R67): the dossier's records on a scoping task,
+  // The dossier's records on a scoping task,
   // derived from the option cards' documents (one per option holding it).
   const sourceRecordsMatch = path.match(new RegExp(`/api/v1/tasks/${MOCK_TASK_ID}/sources/([^/]+)/records$`));
   if (method === "GET" && sourceRecordsMatch) {
@@ -1012,14 +1012,14 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/decisions`)) return json(pageOf(mockDecisions, url));
-  // Task 044 (deliverable 9): a scoping task's Result is its baseline, not an
+  // A scoping task's Result is its baseline, not an
   // Evidence search report.
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/artefact`)) {
     return json(mockTask.capability === "options_scoping" ? mockBaselineArtefact : mockArtefact);
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/coverage`)) return json(mockCoverage);
 
-  // --- Conversations + chat turns (task 029 phase G3 mock) ---------------
+  // --- Conversations + chat turns ---------------
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/conversations`)) {
     const kind = url.searchParams.get("kind");
     const status = url.searchParams.get("status");
@@ -1098,7 +1098,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
   }
 
-  // task 045 (6.2) — the longlist's three surfaces: list view, reduced
+  // The longlist's three surfaces: list view, reduced
   // grid and option card. The two GETs and the three POSTs `pnpm e2e`
   // drives them through; the POSTs mutate `mockLonglistOptionCards` in
   // place (the same fixture `GET /longlist`'s summaries project from) so a
@@ -1111,11 +1111,11 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     if (mockFinishedWalk !== null) return json(mockFinishedWalkLonglist());
     return json(mockLonglist());
   }
-  // Task 058, N22: the options read, served from the end of the suggest stage.
+  // The options read, served from the end of the suggest stage.
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/options`)) {
     return json({ options: mockOptionRows });
   }
-  // task 055 — the shortlist: the two option verbs and Suggest more, over
+  // The shortlist: the two option verbs and Suggest more, over
   // the same in-memory cards. The 409s are the API's: `run_active` while a
   // walk runs, `not_included` for an excluded option, `nothing_to_propose`
   // when every included option holds a place or was set aside.
@@ -1134,7 +1134,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
     return json(option);
   }
-  // Round 14: the note rewritten for the places as they now stand, only
+  // The note rewritten for the places as they now stand, only
   // when stale; otherwise the shortlist comes back as it is.
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/shortlist/note`)) {
     if (mockTask.active_run != null) return mockConflict("run_active", "A walk is already running.");
@@ -1149,7 +1149,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/shortlist/suggest`)) {
     if (mockTask.active_run != null) return mockConflict("run_active", "A walk is already running.");
     // The proposal takes a moment on the server; a short wait lets the
-    // button's pending state show (task 058, round 10).
+    // button's pending state show.
     await pace(800);
     const current = currentMockOptionIds()
       .map((optionId) => mockLonglistOptionCards[optionId])
@@ -1267,8 +1267,8 @@ function conversationListItem(conversation: ConversationOut): ConversationListIt
   };
 }
 
-/** Advance a conversation's pending enrichment on its second read (task 029
- *  phase G3 fixture): the first read is the `completed` event's own
+/** Advance a conversation's pending enrichment on its second read: the
+ *  first read is the `completed` event's own
  *  `invalidateTurns()` refetch — still honestly "unchecked" — and the
  *  second is the client's async-judge poll, which this flips to `enriched`
  *  with a tier verdict on the one scripted citation. Mutates the stored
@@ -1307,7 +1307,7 @@ function ndjsonResponse(stream: ReadableStream<Uint8Array>): Response {
 }
 
 /**
- * One planner turn as NDJSON (task 058, N9): one `progress` line ("Drafting
+ * One planner turn as NDJSON: one `progress` line ("Drafting
  * the plan"), the reply as `delta` pieces of 2 to 6 words every 80 ms, then
  * one `completed` with the whole turn. `finish` runs once the reply has
  * streamed: it stores the turn and returns the `TaskAgentTurnOut` to send.
@@ -1332,7 +1332,7 @@ function createMockTaskAgentStream(reply: string, finish: () => TaskAgentTurnOut
 /** Reserve and stream one chat turn's scripted NDJSON lifecycle: one
  *  `progress` label, two `delta` chunks that concatenate into the answer,
  *  then a `completed` terminal event carrying one citation with its
- *  enrichment left honestly "pending" (task 029 phase G3 fixture). Each
+ *  enrichment left honestly "pending". Each
  *  emit is separated by a brief real delay — matching this module's own
  *  `sleep(500)` before the artefact stream's section fill — so the
  *  progress/streaming states are reliably Playwright-observable rather than
@@ -1389,7 +1389,7 @@ function createMockChatTurnStream(conversationId: string, clientTurnId: string, 
       };
       chatTurnsByConversation.set(conversationId, [...existing, turn]);
       emit({ type: "completed", turn });
-      // Round 14: the first message's chat is titled a second after the
+      // The first message's chat is titled a second after the
       // answer, as the server's background `chat_title` call lands.
       const conversation = chatConversations.find((candidate) => candidate.id === conversationId);
       if (existing.length === 0 && conversation !== undefined && conversation.title === "New chat") {
@@ -1402,7 +1402,7 @@ function createMockChatTurnStream(conversationId: string, clientTurnId: string, 
   });
 }
 
-/** How long after the first answer the mock's chat title lands (round 14). */
+/** How long after the first answer the mock's chat title lands. */
 export const MOCK_CHAT_TITLE_DELAY_MS = 1000;
 
 /** The mock's chat title: the first few words of the first message. */
@@ -1431,8 +1431,8 @@ export function installMockApi() {
 }
 
 /**
- * The scripted SSE narrative (task 025 I.1; extended 027 F.2 with the
- * `artefact.*` events, strand 13). Held open behind `runStarted` so the
+ * The scripted SSE narrative, with the
+ * `artefact.*` events. Held open behind `runStarted` so the
  * stream carries no frames until a real `POST .../runs` succeeds — the plan
  * pane's "Start the analysis" CTA is a genuine gate, not cosmetic.
  */
@@ -1459,7 +1459,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
 
       if (mockTask.capability === "options_scoping") {
         await scopingBaselineWalk(emit, nextSequence);
-        // Task 045 (6.3): the stream stays open for the longlist walks the
+        // The stream stays open for the longlist walks the
         // gate and the plan document's confirm open.
         await mockLonglistWalkLoop(emit, nextSequence);
         return;
@@ -1474,9 +1474,9 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       };
 
       emit(runStatus("running", nextSequence()));
-      // The approved plan's steps give the card its rows to come (task 058, N5).
+      // The approved plan's steps give the card its rows to come.
       emit({ type: "plan.updated", plan: currentPlan, scoping: null, toc: null, version: 1, occurred_at: frameTime(), sequence: nextSequence() });
-      // The search (round 9): the queries are written, then each goes out
+      // The search: the queries are written, then each goes out
       // and comes back with its count, the line naming the query out; then
       // one citations pass, described in words.
       emit(stageStarted("acquire", nextSequence()));
@@ -1546,7 +1546,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       await walkStage(emit, emitTick, nextSequence, "appraise", wait, [
         { activity: "Classifying" },
       ], { quality_checked: 118 });
-      // Round 14: the full texts are collected, as the server's ingest stage
+      // The full texts are collected, as the server's ingest stage
       // does; the rows read "Collecting…" while queued, then full text.
       const collected = mockEvidence.filter((item) => item.read_in_full).map((item) => item.source_id);
       for (const id of collected) mockIngestState.set(id, "queued");
@@ -1559,7 +1559,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         emitTick(tick("ingest", entry.activity, entry));
       }
       emit(stageCompleted("ingest", { ingested: collected.length }, nextSequence()));
-      // The themes show once found, while the sources are assigned (round 9).
+      // The themes show once found, while the sources are assigned.
       emit(stageStarted("characterise", nextSequence()));
       setLiveStage("characterise");
       emitTick(tick("characterise", "Finding themes"));
@@ -1581,7 +1581,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emit({ type: "artefact.section_started", index: 0, occurred_at: FRAME_TIME, sequence: nextSequence() });
       if (!replay) {
         // The key findings stream as a body section does: deltas, then the
-        // writer's citation as it closes (round 8).
+        // writer's citation as it closes.
         emitTick(tick("synthesise", "Writing the key findings", { section: "Key findings" }));
         for (const chunk of chunkWords(mockArtefactSectionProse[0])) {
           await pace(100);
@@ -1649,7 +1649,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: frameTime(),
       });
       // Each read names the sources it returned; the set only grows
-      // (task 058, evidence shown live).
+      // (evidence shown live).
       const sources = (set: { source_id: string; title: string }[]): SseFrame => ({
         type: "artefact.section_sources",
         ephemeral: true,
@@ -1701,7 +1701,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         sequence: nextSequence(),
       });
       // The case studies come last: the slot starts, each card streams in as
-      // it closes, then the checked cards land (task 058, round 7).
+      // it closes, then the checked cards land.
       emit({ type: "artefact.section_started", index: MOCK_CASE_STUDIES_INDEX, occurred_at: FRAME_TIME, sequence: nextSequence() });
       emitTick(tick("synthesise", "Writing the case studies", { section: "Case studies" }));
       for (const card of mockCaseStudyCards) {
@@ -1726,8 +1726,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
-      // The source notes, each named on the line and sent as it is written
-      // (round 8).
+      // The source notes, each named on the line and sent as it is written.
       for (const note of mockSourceNotes) {
         emitTick(tick("synthesise", `Writing a source note · ${note.short}`));
         await pace(400);
@@ -1740,7 +1739,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
           occurred_at: frameTime(),
         });
       }
-      // The introduction streams into its own slot (round 8).
+      // The introduction streams into its own slot.
       emit({ type: "artefact.section_started", index: MOCK_INTRO_INDEX, occurred_at: FRAME_TIME, sequence: nextSequence() });
       emitTick(tick("synthesise", "Writing the introduction", { section: "Introduction" }));
       for (const chunk of chunkWords(MOCK_FULL_REPORT_INTRO)) {
@@ -1756,7 +1755,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
-      // Round 14: the summaries pass after the introduction, as the server
+      // The summaries pass after the introduction, as the server
       // runs it once the report is saved: the line moves section by section.
       const summarised = mockArtefactSkeleton.filter((slot) => slot.index !== MOCK_INTRO_INDEX).length;
       for (let done = 1; done <= summarised; done += 1) {
@@ -1785,7 +1784,7 @@ function sectionLine(index: number): string {
   return `Section ${position + 1} of ${written.length} · ${mockArtefactSkeleton[index].title}`;
 }
 
-/** One activity tick (task 058, D2): never persisted, so no `sequence`. */
+/** One activity tick: never persisted, so no `sequence`. */
 function tick(
   stage: StageKey,
   activity: string,
@@ -1802,7 +1801,7 @@ function tick(
     section: extra.section ?? null,
     heartbeat: extra.heartbeat ?? false,
     dropped: 0,
-    // The walk the line belongs to (round 11); null applies to any walk.
+    // The walk the line belongs to; null applies to any walk.
     capability_run_id: extra.runId ?? null,
     occurred_at: frameTime(),
   };
@@ -1840,7 +1839,7 @@ async function walkStage(
 }
 
 /**
- * The options-scoping baseline walk (task 044, Phase 5.5): three components,
+ * The options-scoping baseline walk: three components,
  * then a genuine park on the baseline gate. The walk holds there until the
  * gate is answered — by the card or by a Task Agent decision turn — and ends
  * the way that decision says: `succeeded` through to the longlist, or
@@ -1890,7 +1889,7 @@ async function scopingBaselineWalk(emit: (frame: SseFrame) => void, nextSequence
 
 /** Records the artefact this walk wrote, once synthesise completes — before
  *  the walk necessarily reaches a terminal status (the baseline gate pauses
- *  it first; task 044 review, C6). */
+ *  it first). */
 function setRunArtefact(artefactId: string) {
   if (currentRun === null) return;
   currentRun = { ...currentRun, artefact_id: artefactId };
@@ -1909,7 +1908,7 @@ function finishRun(status: "succeeded" | "failed" | "aborted") {
 
 /** Stamp the live run with the stage it last started and the server's label
  *  for it, as `TaskOut.active_run` and `latest_run` carry them while a walk
- *  runs (task 058, N15). */
+ *  runs. */
 function setLiveStage(stage: StageKey) {
   const label = STAGE_PRESENTATION[stage][0];
   for (const run of [mockTask.latest_run, mockTask.active_run]) {
@@ -1953,7 +1952,7 @@ function page<T>(data: T[]) {
 }
 
 /** The read depth the Status column shows, as the server's `depth` filter
- *  reads it (round 13). */
+ *  reads it. */
 function mockReadDepth(item: components["schemas"]["EvidenceItemOut"]): "full_text" | "abstract" | "title" | null {
   if (item.read_in_full) return "full_text";
   if (item.status === "unavailable" || item.screen_status === "relevant") {
@@ -1962,8 +1961,8 @@ function mockReadDepth(item: components["schemas"]["EvidenceItemOut"]): "full_te
   return null;
 }
 
-/** The documents of every option in one longlist theme, as evidence rows
- *  (round 14); `undefined` when the id is no longlist theme. */
+/** The documents of every option in one longlist theme, as evidence rows;
+ * `undefined` when the id is no longlist theme. */
 function mockLonglistThemeDocuments(themeId: string): components["schemas"]["EvidenceItemOut"][] | undefined {
   const theme = mockLonglist().themes?.find((candidate) => candidate.theme_id === themeId);
   if (theme === undefined) return undefined;
@@ -1978,7 +1977,7 @@ function mockLonglistThemeDocuments(themeId: string): components["schemas"]["Evi
 }
 
 /**
- * The dossier the mock serves for one source id (round 12): a written
+ * The dossier the mock serves for one source id: a written
  * dossier when the fixtures hold one, else the evidence row's own fields, else
  * an option card's document (`mock-doc-a1` and kin), so every id a page links
  * to opens a dossier.
@@ -2010,7 +2009,7 @@ function mockDossierFor(sourceId: string): components["schemas"]["SourceDossierO
 
 /** One server-shaped page of `rows`, read from `page` and `page_size`; the
  *  server's default size when none is asked for: 20 for the Tasks and
- *  Projects lists (round 12), 50 for the read models. */
+ *  Projects lists, 50 for the read models. */
 function pageOf<T>(rows: T[], url: URL, defaultSize = 50) {
   const pageNumber = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
   const pageSize = Math.max(1, Number(url.searchParams.get("page_size") ?? String(defaultSize)) || defaultSize);
@@ -2026,7 +2025,7 @@ function pageOf<T>(rows: T[], url: URL, defaultSize = 50) {
   };
 }
 
-/** The server's 403 message for a colleague's project change (task 058, round 10). */
+/** The server's 403 message for a colleague's project change. */
 export const PROJECTS_OWNER_ONLY = "Only the task's owner can change its projects.";
 
 /** The spellings the server folds into one country name (`country_name`). */
@@ -2039,7 +2038,7 @@ const MOCK_COUNTRY_ALIASES: Record<string, string> = {
 
 /** Mirror of the server's `country` filter: any spelling; "Not reported" is none. */
 function mockCountryMatches(itemCountry: string | null, wanted: string): boolean {
-  // `none` (round 14) and "Not reported" both keep the rows with no country.
+  // `none` and "Not reported" both keep the rows with no country.
   if (wanted.trim() === "none" || wanted.trim() === "Not reported") return itemCountry === null;
   const key = wanted.trim().toLowerCase();
   return itemCountry !== null && itemCountry.toLowerCase() === (MOCK_COUNTRY_ALIASES[key] ?? key);
@@ -2077,7 +2076,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// --- task 045 (6.3): the longlist walk, what exists and what is active ---
+// --- The longlist walk, what exists and what is active ---
 
 /** True from the moment a longlist walk opens until its longlist stage
  *  completes: `GET /longlist` answers 404 meanwhile. */
@@ -2088,7 +2087,7 @@ let mockOptionRows: components["schemas"]["OptionProgressOut"][] = [];
  *  `null` outside a walk (the finished longlist is then served). */
 let mockLonglistWalkStage: MockWalkLonglistStage | null = null;
 
-/** The longlist a finished mock walk built (task 058, round 10): its option
+/** The longlist a finished mock walk built: its option
  *  ids (cards in `mockLonglistOptionCards`) and its themes. `null` until a
  *  walk finishes; the fixture's four-option longlist is served meanwhile. */
 let mockFinishedWalk: {
@@ -2138,8 +2137,8 @@ let mockScopingPlanVersion = 1;
 /** The longlist walks opened so far, newest first. */
 let mockLonglistWalks: RunOut[] = [];
 
-/** Each walk's steps as its stage frames told them, for `RunOut.stages`
- *  (task 058, round 11): folded as the server folds them, a child's steps
+/** Each walk's steps as its stage frames told them, for `RunOut.stages`:
+ * folded as the server folds them, a child's steps
  *  under the child. A frame seen before (a second connection replaying the
  *  same script) changes nothing. */
 let mockWalkStages: Record<string, RunOut["stages"]> = {};
@@ -2254,7 +2253,7 @@ function withCommas(value: number): string {
 }
 
 /**
- * One longlist walk's frames (task 058, N21, N22): the stages in the order the
+ * One longlist walk's frames: the stages in the order the
  * walk runs them, each with the server's label and an activity tick. The
  * options read follows the walk: rows from the end of `suggest`, a child
  * search per row (ten at once, then two) while `option_searches` runs, and
@@ -2269,7 +2268,7 @@ async function mockLonglistWalk(
 ) {
   const finalList = mockWalkLonglist(foldMockOptionRows(seedMockOptionRows()), "shortlist");
   const counts = finalList.counts;
-  /** The names a clustering found, sent before its batches (round 11). */
+  /** The names a clustering found, sent before its batches. */
   const names = (stage: "longlist" | "theme", found: { name: string; description?: string | null }[]) => {
     emit({
       type: "characterise.themes",
@@ -2306,7 +2305,7 @@ async function mockLonglistWalk(
 
   emit(runStatus("running", nextSequence(), walkId));
   await pace(1200);
-  // No line that only repeats the row's label (round 11): these steps send none.
+  // No line that only repeats the row's label: these steps send none.
   await runStage("inherit", [], { documents: 42, links: 1 });
   await runStage("suggest", [], { suggested: MOCK_OPTION_COUNT, from_report: 2 }, () => {
     mockOptionRows = seedMockOptionRows();
@@ -2314,10 +2313,10 @@ async function mockLonglistWalk(
 
   // The option searches: one child walk per option, run through a pool of ten.
   // While they run, the walk runs its own broad search, as the server's walk
-  // does between the fan-out and the join (task 058, round 11): two rows live
+  // does between the fan-out and the join: two rows live
   // at once, both the walk's.
   begin("option_searches");
-  // The count from the fan-out itself (round 12), before the walk's own search.
+  // The count from the fan-out itself, before the walk's own search.
   emit(tick("option_searches", `0 of ${MOCK_OPTION_COUNT} searches done · 0 sources`, {
     done: 0,
     total: MOCK_OPTION_COUNT,
@@ -2476,7 +2475,7 @@ async function mockLonglistWalk(
   emit(runStatus("succeeded", nextSequence(), walkId));
 }
 
-// --- task 054 (S12): the theory of change's first draft, drawn live ------
+// --- The theory of change's first draft, drawn live ------
 
 /** The scripted live draft, when the page asked for one; `drafted` once the
  *  stored graph exists (`GET /toc` then returns the fixture's graph). */

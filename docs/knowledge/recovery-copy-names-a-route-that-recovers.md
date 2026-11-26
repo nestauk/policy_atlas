@@ -3,7 +3,9 @@ type: Convention
 title: Copy that tells the user how to recover must be backed by a route that performs that recovery, and tested end to end
 description: Task 055's shortlist view said "Press Suggest more to re-propose" when the stored proposal's appetite differed from the plan's, but the Suggest more route kept the old picks and only filled gaps, and the button was disabled when every option held a place — so the stale state was unrecoverable. Two unit tests (one for the sentence, one for the disabled button) each passed. The remedy a stale flag names is a behaviour to test from the flag to the write, not a sentence to render.
 tags: [frontend, copy, staleness, shortlist, testing, task-055, review-findings]
-timestamp: 2026-10-27
+generated:
+  by: process:okf-migrate
+  at: 2026-10-27
 ---
 
 # Rule

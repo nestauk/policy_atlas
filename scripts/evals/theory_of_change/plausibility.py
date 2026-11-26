@@ -1,4 +1,4 @@
-"""Experiment (task 054, red team, 2026-11-03): can a judge tell a theory that cannot work?
+"""Experiment (red team): can a judge tell a theory that cannot work?
 
 Two judges, tested on cases we already have, before anything is built:
 

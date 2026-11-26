@@ -3,7 +3,7 @@
 Parsed full texts (the PDF parser's markdown output, and HTML) carry markup such as
 ``**bold**``, ``_emphasis_``, ``[link text](url)``, ``<br>`` line breaks and HTML tags.
 This module holds the one rule that removes it, so that every reader applies the same
-rule (task 057, contract N7 and N14):
+rule:
 
 * the parser strips markup from newly parsed text (parse profile v2), using
   :func:`strip_markup`;
@@ -127,7 +127,7 @@ _HTML_TAGS = frozenset(
 _IMG_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*\)")
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
-# task 057 review: contract verifier 5 - a one-letter name takes free-text
+# A one-letter name takes free-text
 # "attributes" only when they carry ``=``, so ``a<b and c>d`` stays whole. Known
 # remaining loss: ``<b disabled>`` (a bare-word attribute) is kept as text.
 _TAG_RE = re.compile(
@@ -138,17 +138,16 @@ _TAG_RE = re.compile(
     + r")(?:\s+[^<>=]*=[^<>]*)?\s*)/?>",
     re.IGNORECASE,
 )
-# task 057 review: Codex 12 - an escaped marker (``\*``) neither opens nor closes
+# An escaped marker (``\*``) neither opens nor closes
 # emphasis, so ``\*literal\*`` keeps its stars (rule 8 unescapes them).
 _EMPH_RE = re.compile(
     r"(?<![A-Za-z0-9])(?<!\\)(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)(?<!\\)\1(?![A-Za-z0-9])"
 )
 # Stray ``**`` after a digit is a significance star in a statistics table (``0.50**``),
-# not a lost emphasis marker, so it stays (owner ruling 2026-11-03: the rule must not
-# delete content).
+# not a lost emphasis marker, so it stays: the rule must not delete content.
 _STRAY_EMPH_RE = re.compile(
     r"(?<![0-9*\\])\*\*+|(?<![A-Za-z0-9\\])__+|(?<!\\)__+(?![A-Za-z0-9])"
-)  # task 057 review: Codex 12 - not after a backslash either
+)  # Not after a backslash either
 _CODE_RE = re.compile(r"`([^`]*)`")
 _ESC_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|>~])")
 
@@ -165,7 +164,7 @@ def _has_markup_chars(line: str) -> bool:
 
 
 def _strip_line(line: str, *, table: bool) -> str:
-    """Apply the markup rule to one line (the E6 reference behaviour)."""
+    """Apply the markup rule to one line."""
     t = _IMG_RE.sub("", line)
     for _ in range(2):  # nested link text
         t = _LINK_RE.sub(r"\1", t)
@@ -185,8 +184,7 @@ def _strip_line(line: str, *, table: bool) -> str:
 def strip_markup(text: str, *, table: bool = False) -> str:
     """Remove markdown and HTML markup from text, keeping the words.
 
-    The rule is applied to each line on its own (lines split on ``"\\n"``), so a
-    one-line input behaves exactly as the task 057 experiment E6 rule did.
+    The rule is applied to each line on its own (lines split on ``"\\n"``).
 
     Args:
         text: Text that may carry markup (for example a line of the PDF parser's

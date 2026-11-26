@@ -3,7 +3,16 @@ type: Integration quirk
 title: Schema-valid LLM output can still be empty — enforce count/coverage invariants in code
 description: gpt-5-nano returned a schema-perfect `{"assignments":[]}` for realistic 25-doc batches at every reasoning effort; strict structured outputs guarantee shape, never completeness — code must validate counts against the input set.
 tags: [llm, structured-output, grouping, characterise, validation, model-choice]
-timestamp: 2026-07-06
+generated:
+  by: process:okf-migrate
+  at: 2026-07-06
+sources:
+  - resource: "../tasks/009-characterise/verification.md"
+    title: "[009-characterise/verification.md](../tasks/009-characterise/verification.md) (\u00a7 Live-check failure that shaped the build)"
+  - resource: "src/policy_atlas/characterise.py"
+    title: "`_validate_assignments` / `_resolve_assignment_batch` in `src/policy_atlas/characterise.py`"
+  - resource: "tests/test_characterise.py"
+    title: "Tests: validation/repair case tests in `tests/test_characterise.py`"
 ---
 
 # Rule
@@ -37,10 +46,3 @@ fixture test can catch that.
   nano→mini flip and the standalone reproduction).
 - Repair loops must receive the *residue*, not the whole batch, and be call-capped —
   a model that returns empty twice must fail the component, not loop.
-
-# Citations
-
-- [009-characterise/verification.md](../tasks/009-characterise/verification.md)
-  (§ Live-check failure that shaped the build)
-- `_validate_assignments` / `_resolve_assignment_batch` in `src/policy_atlas/characterise.py`
-- Tests: validation/repair case tests in `tests/test_characterise.py`

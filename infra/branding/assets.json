@@ -1,0 +1,26 @@
+[
+ {
+  "category": "PAGE_HEADER_LOGO",
+  "color_mode": "LIGHT",
+  "extension": "SVG",
+  "file": "wordmark-light.svg"
+ },
+ {
+  "category": "PAGE_HEADER_LOGO",
+  "color_mode": "DARK",
+  "extension": "SVG",
+  "file": "wordmark-dark.svg"
+ },
+ {
+  "category": "FAVICON_SVG",
+  "color_mode": "LIGHT",
+  "extension": "SVG",
+  "file": "mark.svg"
+ },
+ {
+  "category": "FAVICON_SVG",
+  "color_mode": "DARK",
+  "extension": "SVG",
+  "file": "mark.svg"
+ }
+]

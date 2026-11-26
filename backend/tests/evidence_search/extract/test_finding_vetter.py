@@ -17,6 +17,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import intervention_outcome_finding
 from policy_atlas.core.usage import TokenUsage, UsageResult
+from policy_atlas.evidence_search.extract import finding_vetter
 from policy_atlas.evidence_search.extract.extract import (
     ExtractContext,
     extract_scope,
@@ -36,7 +37,7 @@ from policy_atlas.evidence_search.extract.finding_vetter import (
     validate_verdict_coverage,
 )
 from tests.helpers import (
-    fake_parse_client,
+    FakeResponsesClient,
     profile_counts,
     profile_doc,
     profile_docs,
@@ -46,6 +47,8 @@ from tests.helpers import (
     seed_run,
     seed_scope,
     seed_task_and_run,
+    spy_calls,
+    structured_response,
 )
 
 from .test_extract import _record, _run, _seed_full_text_doc, _seed_selection
@@ -734,15 +737,17 @@ def test_fingerprint_sensitive_to_junk_judge_presence() -> None:
 # --- 5. Fake-client kwargs passthrough (OpenAI backend) -----------------------
 
 
-def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
+def test_openai_junk_judge_backend_passes_model_and_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     response = FindingVetterResponse(
         verdicts=[
             VetterVerdictWire(finding_index=0, verdict="sound", flag_class=None, reason="Fine."),
         ]
     )
     backend: OpenAIFindingVetterBackend = object.__new__(OpenAIFindingVetterBackend)
-    fake_client = fake_parse_client(parsed=response)
-    cast("Any", backend)._client = fake_client
+    calls = spy_calls(monkeypatch, finding_vetter, "parse_structured")
+    cast("Any", backend)._client = FakeResponsesClient(structured_response(response))
     cast("Any", backend)._langfuse_client = None
 
     result, usage = backend.judge(
@@ -762,8 +767,8 @@ def test_openai_junk_judge_backend_passes_model_and_reasoning_effort() -> None:
     )
 
     assert result.verdicts[0].verdict == "sound"
-    assert usage is None
-    [kwargs] = fake_client.chat.completions.calls
+    assert usage == TokenUsage(prompt=10, completion=5, total=15, cached=0, reasoning=0)
+    [kwargs] = calls
     assert kwargs["model"] == FINDING_VETTER_MODEL
     assert kwargs["reasoning_effort"] == "medium"  # task 056 P5: medium
     assert kwargs["reasoning_effort"] == FINDING_VETTER_EFFORT

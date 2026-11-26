@@ -1,4 +1,4 @@
-"""Citations for the live report as each section is checked (task 058, round 7).
+"""Citations for the live report as each section is checked.
 
 In plain terms: while the report is written, the page shows each finished
 section before the whole report is saved. This module gives that finished
@@ -19,7 +19,7 @@ saved, so a number once given never changes during the run.
 
 Each entry also carries the ids the saved report gives the citation and its
 claim, and the checked quote, read back from the rows the run has just saved
-for the section (round 8), so the page can show a citation's context and its
+for the section, so the page can show a citation's context and its
 provenance sheet before the whole report is committed.
 """
 
@@ -116,7 +116,7 @@ class ReferenceNumbering:
             ``None`` without a saved row to match), ``chunk_id`` (the cited
             chunk, a string; the chunks are committed long before the report,
             so the page reads the passage by chunk and quote while the report
-            is still being written: owner, 2026-11-09) and ``quote``. A
+            is still being written) and ``quote``. A
             citation whose chunk is unknown is left out, as the read model
             leaves it out.
         """
@@ -217,7 +217,7 @@ class ReferenceNumbering:
     def claim_verdicts(
         self, claims: Sequence[_Claim], *, block_id: str | uuid.UUID | None = None
     ) -> list[dict[str, Any]]:
-        """One section's checked claims with the checker's verdict (task 058, round 13).
+        """One section's checked claims with the checker's verdict.
 
         The verdict is the claim's, not a citation's: one entry per spanned
         claim that cites, in span order.
@@ -297,7 +297,7 @@ class ReferenceNumbering:
 def source_names(
     conn: Connection, *, task_id: uuid.UUID, source_ids: Sequence[str]
 ) -> dict[str, tuple[str, str]]:
-    """Name a task's sources for the live page: short name and reference title (round 8).
+    """Name a task's sources for the live page: short name and reference title.
 
     Args:
         conn: Open database connection.

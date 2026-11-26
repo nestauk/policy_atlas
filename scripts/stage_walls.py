@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wall time per stage of a Policy Atlas run, read from the local database (task 057, P12).
+"""Wall time per stage of a Policy Atlas run, read from the local database.
 
 What this answers
 -----------------
@@ -10,8 +10,7 @@ or Options scoping run. It is made of *component runs* (stages such as ``acquire
 stopwatch reading (``wall_clock_s``). This script reads those events and prints, per
 run, how many seconds each stage took, and then the median, maximum and minimum per
 stage across the runs you selected. It reproduces the per-stage tables of the
-2026-11-02 latency anatomy (``40_anatomy.py`` in the gitignored experiment folder)
-without Langfuse.
+2026-11-02 latency anatomy without Langfuse.
 
 Definitions (the same as the anatomy)
 -------------------------------------
@@ -70,7 +69,7 @@ id. Selection flags of different kinds combine with AND (``--since`` and
 top-level capability runs are selected; their child runs (the scoping fan-out) are
 pulled in automatically. The script only reads: it opens a read-only transaction.
 
-Stream capture mode (``--capture``, task 058, N25)
+Stream capture mode (``--capture``)
 --------------------------------------------------
 "How long did the page go without being told anything?" ``--capture <file.jsonl>``
 reads one recording made by ``scripts/stream_capture.py`` (one JSON line per frame,
@@ -104,7 +103,7 @@ database. Every time below is ``received_at``: when the page would have seen it.
 - **Healthy run**: ``--healthy true|false``, decided by the caller from the run's
   trace (no model-call timeout fired, no fallback ran) and carried into the output.
 
-Recordings made before task 058 have the old tick shape (``note``, ``fetched``,
+Recordings made before ticks carried ``activity`` have the old tick shape (``note``, ``fetched``,
 ``parsed``, ``total``); such a tick is read as ``activity = note``, ``done =
 parsed``, ``unit`` empty. Usage::
 
@@ -760,7 +759,7 @@ def format_markdown(report: dict[str, Any]) -> str:
     return "\n".join(md) + "\n"
 
 
-# --- Stream capture (task 058, N25) ---------------------------------------------
+# --- Stream capture ---------------------------------------------
 
 SILENT_GAP_S = 30.0
 TERMINAL_STATUSES = frozenset({"succeeded", "degraded", "failed", "aborted", "interrupted"})
@@ -796,7 +795,7 @@ def read_capture(path: str) -> tuple[list[dict[str, Any]], int]:
 
 
 def normalise_tick(data: dict[str, Any]) -> dict[str, Any]:
-    """Read a tick body in today's shape, mapping the pre-058 shape onto it.
+    """Read a tick body in today's shape, mapping the old shape onto it.
 
     A tick with ``note`` and no ``activity`` is the old shape: ``activity`` is the
     note, ``done`` is ``parsed``, ``unit`` is ``None``.

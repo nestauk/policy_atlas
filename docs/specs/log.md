@@ -1,5 +1,12 @@
 # Spec update log
 
+## 2026-11-20 (task 063, Responses API)
+Owner-accepted spec change 1 of [the contract](../tasks/063-responses-api/contract.md) (M15).
+* **Update**: [ToC components § Web search](capabilities/theory-of-change/components.md) — three
+  places described the Responses API as a second call path beside a `chat.completions.parse`
+  wrapper. Every model request now goes to the Responses API through `core/openai_client.py`, so
+  web search is a new call in that module, not a new path. No design change. ADR 0050.
+
 ## 2026-11-17 (task 064b, firewall and CAPTCHA)
 * **Update**: [Web API § Waitlist](system/web-api.md) — one sentence: behind the firewall the
   form sends a CAPTCHA token in `x-aws-waf-token`, which CORS allows; the API never reads it.
@@ -630,7 +637,7 @@ owner's words quoted (item 10, the decision sheet, landed at plan approval). Con
   withdrawn (24 boards). [capability.md](capabilities/options-scoping/capability.md) § Output
   structure and the report/export bullet, [components.md](capabilities/options-scoping/components.md)
   (synthesise, ⟨longlist depth⟩) amended; the on-demand longlist report recorded in
-  [deferred.md](../deferred.md) § Product / output.
+  [deferred.md](../deferred.md) § Options scoping.
 
 ## 2026-09-07 (boards redrawn)
 * **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction

@@ -7,7 +7,7 @@ capabilities (the wire type, the prompt, the model, the plan builder, the
 draft projections) lives on each capability's ``TaskAgentProfile`` in the
 registry; this module holds the Evidence search profile. The task_agent
 completes before acquire begins — this seam is never invoked mid-run
-(contract decision 5, sequencing invariant).
+(sequencing invariant).
 """
 
 from __future__ import annotations
@@ -26,19 +26,17 @@ from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTAT
 from policy_atlas.core import tracing
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    AnswerCutOff,
     JsonStringFieldDecoder,
+    ModelRefusal,
     openai_kwargs,
     resolve_openai_client,
+    stream_turn,
     traced_parse,
     with_system_breakpoint,
 )
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.usage import (
-    log_usage,
-    token_usage_from_provider,
-    usage_details,
-    usage_metadata,
-)
+from policy_atlas.core.usage import log_usage, usage_details, usage_metadata
 from policy_atlas.evidence_search.extract.extract import _scrub_nul
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.runtime.capability_registry import (
@@ -60,7 +58,7 @@ from policy_atlas.runtime.task_plan import TaskPlan, registry_component_for, tim
 
 log = structlog.get_logger()
 
-# Model from the route file (task 053); see core/model_routes.py.
+# Model from the route file; see core/model_routes.py.
 TASK_AGENT_MODEL = route().model_for("task_agent_turn")
 
 # The Task Agent turn as emitted by any backend; the wire model IS the turn
@@ -95,7 +93,7 @@ class TaskAgentBackend(Protocol):
             previous_draft: The prior turn's plan draft dump, or ``None`` on
                 the first turn.
             session_id: Optional Langfuse session id shared by the Task's
-                traces (task 038, V9: no longer the conversation id).
+                traces (no longer the conversation id).
             conversation_id: Optional task_agent-conversation id recorded in
                 trace metadata, so one chat is still filterable now that
                 ``session_id`` groups by task.
@@ -133,7 +131,7 @@ class TaskAgentTurnBackend(Protocol):
             session_id: Optional Langfuse session id (the task id).
             conversation_id: Optional conversation id for trace metadata.
             on_delta: Optional callback given each new piece of the reply
-                text as it is written (task 058, N9). When it is given, the
+                text as it is written. When it is given, the
                 pieces joined equal the returned turn's ``reply``.
 
         Returns:
@@ -196,7 +194,7 @@ def _scrub_turn[W: (PlannerTurnWire, ScopingTurnWire)](turn: W) -> W:
     updates["plan_draft"] = type(turn.plan_draft).model_validate(
         _scrub_nul(turn.plan_draft.model_dump())
     )
-    part = getattr(turn, "part", None)  # a theory-of-change turn has no part (task 054)
+    part = getattr(turn, "part", None)  # a theory-of-change turn has no part
     if part is not None:
         # Postgres JSONB rejects \u0000; an unscrubbed part would wedge the
         # phase-two transcript write instead of degrading (review 028, security
@@ -240,7 +238,7 @@ class OpenAITaskAgentBackend:
         """Advance the conversation through structured OpenAI output.
 
         Without ``on_delta`` the turn is one ``parse`` request with the usual
-        traced retries. With it, the turn is streamed (task 058, N9): see
+        traced retries. With it, the turn is streamed: see
         :meth:`_streamed_turn`.
 
         Args:
@@ -312,7 +310,7 @@ class OpenAITaskAgentBackend:
         the user the same words twice; that failure fails the turn. A passing
         failure *before* the first word of the reply has shown the user
         nothing, so it is sent once more, as its own traced attempt
-        (deferred.md, the chat stream's missing pre-token retry; task 058, N9).
+        (deferred.md, the chat stream's missing pre-token retry).
         "Passing" is the rule every other model call retries on
         (:func:`tracing._retryable`: a timeout, a dropped connection, a 429 or
         a 5xx), and the wait before the retry is theirs too.
@@ -334,7 +332,7 @@ class OpenAITaskAgentBackend:
                     },
                 )
             except Exception as exc:
-                # Task 058 review: the same failures traced_attempts retries.
+                # The same failures traced_attempts retries.
                 if attempt == 2 or started or not tracing._retryable(exc):
                     raise
                 wait_s = tracing._retry_wait_s(exc)
@@ -371,8 +369,9 @@ class OpenAITaskAgentBackend:
         prompt_cache = cache_mode_for(step)
 
         def _call(span: Any | None) -> Any:
-            completions: Any = self._client.chat.completions
-            stream = completions.create(
+            stream = stream_turn(
+                self._client,
+                label=profile.label,
                 messages=with_system_breakpoint(messages)
                 if prompt_cache == "breakpoint"
                 else messages,
@@ -387,7 +386,6 @@ class OpenAITaskAgentBackend:
                         "schema": to_strict_json_schema(profile.wire),
                     },
                 },
-                stream=True,
                 stream_options={"include_usage": True},
                 max_completion_tokens=profile.max_output_tokens,
                 **openai_kwargs(
@@ -399,27 +397,29 @@ class OpenAITaskAgentBackend:
             )
             decoder = JsonStringFieldDecoder("reply")
             pieces: list[str] = []
-            provider_usage: Any | None = None
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    fragment = getattr(getattr(choices[0], "delta", None), "content", None)
-                    if isinstance(fragment, str) and fragment:
-                        pieces.append(fragment)
-                        text = scrub_nul(decoder.feed(fragment))
-                        if text:
-                            started.append(True)
-                            on_delta(text)
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    provider_usage = chunk_usage
-            log_usage(profile.usage_event, provider_usage)
+            try:
+                for fragment in stream:
+                    pieces.append(fragment)
+                    text = scrub_nul(decoder.feed(fragment))
+                    if text:
+                        started.append(True)
+                        on_delta(text)
+            except (AnswerCutOff, ModelRefusal) as exc:
+                # The turn fails, but its tokens are billed: log them and trace them.
+                log_usage(profile.usage_event, exc.usage)
+                if span is not None:
+                    span.update(
+                        usage_details=usage_details(exc.usage),
+                        metadata={**metadata, **usage_metadata(exc.usage)},
+                    )
+                raise
+            usage = stream.usage
+            log_usage(profile.usage_event, usage)
             try:
                 parsed = profile.wire.model_validate_json("".join(pieces))
             except ValueError as exc:
                 raise RuntimeError(f"OpenAI {profile.label} streamed turn was not parsed.") from exc
             turn = _scrub_turn(cast(Any, parsed))
-            usage = token_usage_from_provider(provider_usage)
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -442,6 +442,7 @@ class OpenAITaskAgentBackend:
             tracing._observation(
                 self._langfuse_client, name=profile.trace_name, as_type="generation"
             ) as span,
+            tracing.request_id_scope(span),
         ):
             span.update(
                 input={"messages": messages},
@@ -696,7 +697,7 @@ def draft_from_plan(plan: TaskPlan) -> PlanDraft:
     for step in compose_plan(EVIDENCE_SEARCH, plan).steps:
         registry_component = registry_component_for(step.component)
         # Ingest is unmapped from public acquire so Searching is not overwritten
-        # by full-text fetch (033 S5). Skip any registry component with no
+        # by full-text fetch. Skip any registry component with no
         # public stage rather than crashing the draft projection.
         stage = STAGE_BY_REGISTRY.get(registry_component)
         if stage is None:

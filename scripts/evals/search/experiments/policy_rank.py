@@ -1,4 +1,4 @@
-"""Ranking policy documents with Overton's own citation graph (R&D, task 049).
+"""Ranking policy documents with Overton's own citation graph (R&D).
 
 Which of the policy documents Overton returns for a question are the *key* ones? The
 semantic search orders them by similarity to the question. Every record also carries
@@ -162,7 +162,7 @@ def build(
     ``exclude_ids`` are held-out documents (a ground-truth strategy): they are dropped
     from the search results before any signal is computed and are never fetched, so
     their own reference lists cannot feed the snowball, the core papers or the
-    forward step (Codex review, 2026-10-08).
+    forward step.
 
     With ``paraphrases`` the intent and the pipeline's two generated paraphrases are
     searched separately, ``n_docs`` split between them, and merged round-robin with
@@ -308,7 +308,7 @@ def after_cutoff(doc: dict[str, Any], cutoff: str | None) -> bool:
     return bool(cutoff) and (doc.get("published_on") or "")[:10] > cutoff
 
 
-CACHE_VERSION = "v2"  # bumped 2026-10-08: exclusions and date fences applied at build
+CACHE_VERSION = "v2"  # v2: exclusions and date fences applied at build
 
 
 def cached_build(key: str, **kwargs: Any) -> dict[str, Any]:

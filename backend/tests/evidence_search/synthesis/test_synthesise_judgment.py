@@ -311,7 +311,12 @@ class _SiblingRepairBackend(ScriptedSynthesisBackend):
         )
 
     def section_turn(
-        self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
+        self,
+        seed: dict[str, Any],
+        transcript: list[Any],
+        *,
+        force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         chunks: list[dict[str, Any]] = []
         for exchange in transcript:
@@ -612,7 +617,12 @@ class _CrossSectionBackend(ScriptedSynthesisBackend):
         self.section0_chunk_id: str | None = None
 
     def section_turn(
-        self, seed: dict[str, Any], transcript: list[Any], *, force_emit: bool
+        self,
+        seed: dict[str, Any],
+        transcript: list[Any],
+        *,
+        force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         section_index = seed.get("section_index", 0)
         if section_index == 0:

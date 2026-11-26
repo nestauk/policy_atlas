@@ -190,7 +190,7 @@ _PROJECTION_UNIT_INTRO: dict[ProjectionKind, str] = {
     "claim": _CLAIM_UNIT_INTRO,
 }
 
-# B3 (024 steering surface): grouping.guidance system-prompt paragraph,
+# Steering surface: grouping.guidance system-prompt paragraph,
 # appended only when guidance is present — verbatim, lead-authored. Consumed
 # by the group label-DISCOVERY prompt only; the assignment prompt never sees
 # it.

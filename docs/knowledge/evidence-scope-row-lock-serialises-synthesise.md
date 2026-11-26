@@ -3,7 +3,16 @@ type: Live behaviour
 title: Writing the synthesis directive onto the shared evidence_scope row serialises concurrent synthesise runs
 description: Feasibility check 7 (task 044) fanned seven one-section synthesise runs out over one scope and they ran one after another — the run opener writes the directive onto the `evidence_scope` row, and that Postgres row lock is held for the run. `synthesise_scope` reads the directive from its context, not the row, so the lock buys nothing and costs the whole fan-out.
 tags: [synthesis, postgres, locking, concurrency, feasibility-check, task-044]
-timestamp: 2026-09-17
+generated:
+  by: process:okf-migrate
+  at: 2026-09-17
+sources:
+  - resource: "../tasks/044-scoping-shell-baseline/verification.md"
+    title: "[044 verification.md](../tasks/044-scoping-shell-baseline/verification.md) \u00a7 Phase 4.4, \u00a7 Review handoff"
+  - resource: "scripts/feasibility_checks/options_scoping/run_check_7_writing_mode.py"
+    title: "`scripts/feasibility_checks/options_scoping/run_check_7_writing_mode.py`"
+  - resource: "backend/src/policy_atlas/evidence_search/synthesis/synthesise.py::synthesise_scope"
+    title: "`backend/src/policy_atlas/evidence_search/synthesis/synthesise.py::synthesise_scope`"
 ---
 
 # Rule
@@ -25,9 +34,3 @@ went into the owner's ruling the wrong way round.
   bites feasibility checks, evals and any future parallel-writing mode (deferred — "never fan out
   the conclusion" stands by owner ruling C6).
 - The directive travels in the run context; the scope-row copy is a record, not the input.
-
-# Citations
-
-- [044 verification.md](../tasks/044-scoping-shell-baseline/verification.md) § Phase 4.4, § Review handoff
-- `scripts/feasibility_checks/options_scoping/run_check_7_writing_mode.py`
-- `backend/src/policy_atlas/evidence_search/synthesis/synthesise.py::synthesise_scope`

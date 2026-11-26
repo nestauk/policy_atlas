@@ -1,4 +1,4 @@
-"""The intervention profile's bundle parts (task 045, ADR 0039 decision 6).
+"""The intervention profile's bundle parts (ADR 0039 decision 6).
 
 The third extraction profile runs through the shared extract pipeline
 (``extract._interventions_profile`` assembles the bundle). What differs from
@@ -80,11 +80,11 @@ def interventions_fingerprint(
     The ``extraction_fingerprint`` pattern: a full sha256 hex over the
     canonical JSON of every output-affecting knob. No scope intent enters it,
     so one profile of a document serves the longlist scope and every targeted
-    scope of the task (A21). A tagging context (task 046, S4) adds its
+    scope of the task. A tagging context adds its
     ``context_hash`` — the plan's place-stripped target unit, outcomes and
     intended change, never Where — so records tagged under one plan are not
-    reused under another. With no context the map, and so the digest, is
-    exactly the pre-046 one.
+    reused under another. With no context the map, and so the digest, matches
+    records written before tagging contexts existed.
 
     Args:
         mode: The backend mode (``"live"`` or ``"stub"``).
@@ -253,7 +253,7 @@ class InterventionsWindowAdapter:
     The pipeline reads ``response.findings`` per call; the profile answers
     ``records`` plus a document-level ``covers_no_intervention``. The adapter
     carries the flag onto each record and renames nothing else. It also holds
-    the run's tagging context (task 046, S4), hands it to the backend on each
+    the run's tagging context, hands it to the backend on each
     call (with no context the backend is called exactly as before) and
     settles each record's tags by :func:`apply_tagging_rules`, counting the
     outcome tags repaired to ``other`` in :attr:`outcome_tag_repairs`. Calls

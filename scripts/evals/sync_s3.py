@@ -88,7 +88,7 @@ AREAS: dict[str, _Area] = {
                 "eval/datasets/search/ground_truth/",
                 skip=("raw/*",),
             ),
-            # The policy-side ground truth (task 049), read by experiments/policy_gt.py.
+            # The policy-side ground truth, read by experiments/policy_gt.py.
             _Folder(
                 ROOT / "search" / "ground_truth",
                 "eval/datasets/search/policy_gt/",

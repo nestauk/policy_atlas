@@ -46,6 +46,7 @@ OPS_ENVIRONMENT_NAMES = {
     "OIDC_ISSUER", "OIDC_JWKS_URL", "OIDC_CLIENT_ID", "APP_ORIGIN",
     "POLICY_ATLAS_SERVICE_ROLE", "POLICY_ATLAS_SELF_SIGNUP",
     "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", "OPS_UI_DIR",
+    "OPS_CONTENT_SECURITY_POLICY", "OPS_CSP_MODE",
     "RUNS_PER_USER", "TASK_QUOTA_PER_YEAR", "DB_POOL_SIZE", "DB_MAX_OVERFLOW",
     "FORWARDED_ALLOW_IPS", "LOG_LEVEL", "LOG_FORMAT", "PA_BACKEND_MODE",
 }
@@ -110,7 +111,7 @@ def test_every_feedback_element_is_off_in_every_environment():
 
 
 def test_theory_of_change_is_on_in_staging_only():
-    """Task 054 (C15): colleagues try it on staging; production stays off."""
+    """Colleagues try it on staging; production stays off."""
     config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
     backends = {env: config[env]["policy_atlas_config"]["backend"] for env in config}
     assert {env: backend.get("theory_of_change") for env, backend in backends.items()} == {
@@ -120,7 +121,7 @@ def test_theory_of_change_is_on_in_staging_only():
 
 
 def _uploads_bucket_id(template: dict | None = None) -> str:
-    """The logical id of the uploads bucket (task 054 increment 5)."""
+    """The logical id of the uploads bucket."""
     return next(
         name
         for name, resource in _resources(template or TEMPLATES["app"], "AWS::S3::Bucket")
@@ -204,8 +205,21 @@ def test_ops_container_has_the_complete_least_privilege_environment_and_secret_m
         "APP_ORIGIN": "https://ops.v3.policyatlas.uk",
         "POLICY_ATLAS_SERVICE_ROLE": "ops",
         "POLICY_ATLAS_SELF_SIGNUP": "0",
-        "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "20",
+        "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "100",
         "OPS_UI_DIR": "/app/ops-ui",
+        # No API origin and no CAPTCHA hosts: the ops pages call only their
+        # own host and the sign-in service.
+        "OPS_CONTENT_SECURITY_POLICY": (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; font-src 'self'; "
+            "connect-src 'self' https://cognito-idp.eu-west-2.amazonaws.com "
+            "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com "
+            "https://auth.v3.policyatlas.uk; "
+            "frame-src 'self' https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com "
+            "https://auth.v3.policyatlas.uk; "
+            "frame-ancestors 'none'; form-action 'self'; object-src 'none'; base-uri 'self'"
+        ),
+        "OPS_CSP_MODE": "enforce",
         "RUNS_PER_USER": "3",
         "TASK_QUOTA_PER_YEAR": "50",
         "DB_POOL_SIZE": "5",
@@ -254,12 +268,12 @@ def test_ops_and_api_task_roles_hold_only_their_expected_cognito_permissions():
     assert sorted(ops_actions) == sorted([
         "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
         "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
-        "cognito-idp:AdminUserGlobalSignOut",
+        "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
     ])
 
 
 def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
-    """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
+    """A Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
     container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
     environment = {item["Name"]: item["Value"] for item in container["Environment"]}
     assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock"

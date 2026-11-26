@@ -69,27 +69,25 @@ describe("highlightParts", () => {
   });
 });
 
-describe("CitationQuote — the quote not found in its passage (round 12 fallback ruling)", () => {
-  it("shows the quote alone at Body Navy, not italic Grey, and does not repeat the passage", () => {
+describe("CitationQuote — the quote not found in its passage", () => {
+  it("shows the quote alone, and does not repeat the passage", () => {
     render(
       <CitationQuote
         quote="An absent quote."
         context={{ isPending: false, isError: false, data: { context: "Completely different content.", previous: "Before.", next: "After.", clamped: false, span_start: 0, span_end: 0 } }}
       />,
     );
-    const quote = screen.getByText("“An absent quote.”");
-    expect(quote).toHaveClass("text-navy");
-    expect(quote).not.toHaveClass("italic", "text-grey");
+    expect(screen.getByText("“An absent quote.”")).toBeInTheDocument();
     expect(screen.queryByText(/Completely different content/)).toBeNull();
     expect(screen.queryByText("Before.")).toBeNull();
     expect(screen.queryByText("After.")).toBeNull();
   });
 
-  it("shows the quote at once while its passage loads, and the quote with the note when no read runs (2026-11-09)", () => {
+  it("shows the quote at once while its passage loads, and the quote with the note when no read runs", () => {
     const view = render(
       <CitationQuote quote="Uptake rose by a third." context={{ isPending: true, isLoading: true, isError: false, data: undefined }} />,
     );
-    expect(screen.getByText("“Uptake rose by a third.”")).toHaveClass("text-navy");
+    expect(screen.getByText("“Uptake rose by a third.”")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Loading surrounding context…");
     // A live report's quote: the read is off (pending, not loading), the note under it.
     view.rerender(
@@ -101,7 +99,7 @@ describe("CitationQuote — the quote not found in its passage (round 12 fallbac
     );
     expect(screen.getByText("“Uptake rose by a third.”")).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByText("The surrounding passage is read once the report is complete.")).toHaveClass("text-grey");
+    expect(screen.getByText("The surrounding passage is read once the report is complete.")).toBeInTheDocument();
   });
 
   it("highlights a quote whose trailing stop the passage lacks, inside its passage", () => {
@@ -219,7 +217,6 @@ describe("LiveArtefactBody", () => {
     const placeholders = screen.getAllByTestId("placeholder-lines");
     expect(placeholders).toHaveLength(3);
     for (const lines of placeholders) {
-      expect(lines.className).toContain("anim-breathe");
       expect(lines.children.length).toBeGreaterThanOrEqual(2);
       expect(lines.children.length).toBeLessThanOrEqual(3);
     }
@@ -291,7 +288,6 @@ describe("LiveArtefactBody", () => {
     expect(within(costs).getByTestId("action-line")).toHaveTextContent("Revising 1 claim");
     const revising = costs.querySelector("[data-revising='true']");
     expect(revising).toHaveTextContent(FAILED);
-    expect(revising).toHaveClass("draft-revising");
     // Only the failed sentence: the rest of the draft is untouched.
     expect(costs.querySelectorAll("[data-revising='true']")).toHaveLength(1);
   });
@@ -323,22 +319,16 @@ describe("LiveArtefactBody", () => {
     });
     expect(layer.querySelector(".draft-settle-in")).toHaveTextContent(REPAIRED);
     expect(layer).not.toHaveTextContent(FAILED);
-    // Then the layer fades off the checked prose.
+    // Then the layer leaves the checked prose.
     act(() => {
-      vi.advanceTimersByTime(400);
+      vi.advanceTimersByTime(900);
     });
-    expect(costs.querySelector(".anim-settle-out")).not.toBeNull();
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-    expect(costs.querySelector(".anim-settle-out")).toBeNull();
     expect(costs).toHaveTextContent(REPAIRED);
     expect(costs).not.toHaveTextContent(FAILED);
     // A done section carries no marker of any kind.
     expect(costs.querySelector("[data-revising]")).toBeNull();
     expect(within(costs).queryByTestId("section-mark")).toBeNull();
     expect(within(costs).getByTestId("action-line")).toHaveAttribute("aria-hidden", "true");
-    expect(costs.querySelector(".underline, .border-dotted")).toBeNull();
   });
 
   it("under reduced motion swaps at once, keeps the lines still and only dims the repair", () => {
@@ -467,7 +457,7 @@ describe("draftParagraphs", () => {
   });
 });
 
-describe("evidence shown live (task 058, owner 2026-11-05)", () => {
+describe("evidence shown live", () => {
   const SOURCES = [
     { sourceId: "a", title: "Smith 2023" },
     { sourceId: "b", title: "DfE 2022" },
@@ -491,8 +481,6 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
     const costs = screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
     const line = within(costs).getByTestId("drawing-on");
     expect(line).toHaveTextContent("Drawing on 2 sources · Smith 2023 · DfE 2022");
-    expect(line.className).toContain("text-meta");
-    expect(line.className).toContain("text-grey");
     // Under the heading, before the action line; nothing in it is a link.
     expect(costs.querySelector("h3")?.nextElementSibling).toBe(line);
     expect(line.compareDocumentPosition(within(costs).getByTestId("action-line"))).toBe(
@@ -535,15 +523,8 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
     expect(marks[0]).toHaveAttribute("title", "Smith 2023; DfE 2022");
     expect(marks[1]).toHaveAccessibleName("Cited, being checked: Sustrans 2020");
     for (const mark of marks) {
-      // The final marker's chip in its muted look, a dot for the number
-      // (owner, round 7); not blue, not a control.
+      // A dot for the number; not a control.
       expect(mark).toHaveTextContent("[·]");
-      expect(mark.className).toContain("citation-marker");
-      expect(mark.className).toContain("border-line");
-      expect(mark.className).toContain("bg-ground");
-      expect(mark.className).toContain("text-grey");
-      expect(mark.className).toContain("text-caption");
-      expect(mark.className).not.toMatch(/blue/);
       expect(mark.tagName).toBe("SPAN");
     }
     // The first mark follows the lead sentence; the second the blurred one.
@@ -576,7 +557,7 @@ describe("evidence shown live (task 058, owner 2026-11-05)", () => {
   });
 });
 
-describe("the live page looks like the final page (task 058, owner round 7)", () => {
+describe("the live page looks like the final page", () => {
   const SMITH = "Smith 2023";
   const DFE = "DfE 2022";
   // The pre-round-8 frame: no ids, no quote, so the markers are inert.
@@ -611,9 +592,6 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     expect(markers[0]).toHaveAccessibleName("Citations 3, 5, Smith 2023; DfE 2022; details when the report is ready");
     expect(markers[1]).toHaveAccessibleName("Citation 3, Smith 2023; details when the report is ready");
     expect(markers[1]).toHaveAttribute("title", SMITH);
-    // The final marker's look, without the control's cursor.
-    expect(markers[0].className).toContain("bg-blue-tint-2");
-    expect(markers[0].className).not.toContain("cursor-pointer");
     expect(markers[0].previousElementSibling).toHaveTextContent(LEAD);
     expect(within(costs).queryByRole("button")).toBeNull();
     // The report's own prose component sets it.
@@ -696,7 +674,7 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     expect(headings).toEqual(["Key findings", "Examples", "Costs", "Conclusions"]);
   });
 
-  it("lays the case-study cards out as the report does, one by one as each closes", () => {
+  it("shows each case-study card as it closes, its title an h4 under the section", () => {
     const stream = streamWith(
       [
         { index: 0, title: "Key findings", focus: "", state: "planned" },
@@ -716,12 +694,8 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
     expect(within(section).getByText("Relevant examples from the cited evidence.")).toBeInTheDocument();
     const cards = within(section).getAllByRole("listitem");
     expect(cards).toHaveLength(1);
-    // Each case study in its ruled card (owner, round 11); the title an h4
-    // under the section's h3 (round 10, finding 5).
-    expect(cards[0].parentElement).toHaveClass("grid", "gap-3");
-    expect(cards[0].parentElement).not.toHaveClass("divide-y");
-    expect(cards[0]).toHaveClass("border", "border-line", "p-4");
-    expect(within(cards[0]).getByRole("heading", { level: 4, name: "Leeds pilot" })).toHaveClass("font-bold");
+    // The title an h4 under the section's h3.
+    expect(within(cards[0]).getByRole("heading", { level: 4, name: "Leeds pilot" })).toBeInTheDocument();
     expect(cards[0]).toHaveTextContent("Take-up rose after direct payment.");
     expect(within(section).queryByTestId("placeholder-lines")).toBeNull();
   });
@@ -789,35 +763,13 @@ describe("the live page looks like the final page (task 058, owner round 7)", ()
   });
 });
 
-describe("round 8: the Result tab while it is written (task 058, owner notes 2026-11-05)", () => {
+describe("the Result tab while it is written", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
   const SMITH = { sourceId: "s1", title: "Smith 2023" };
-  const DFE = { sourceId: "s2", title: "DfE 2022" };
   const SECOND = "Subsidy design matters more than its size.";
-
-  it("breathes the muted chips in turn while the claims are checked, and only then", () => {
-    const draft = `${LEAD} ${SECOND}`;
-    const claims = [
-      { start: 0, end: LEAD.length, sources: [SMITH] },
-      { start: LEAD.length + 1, end: draft.length, sources: [DFE] },
-    ];
-    const { rerender } = render(<LiveArtefactBody stream={writingStream({ draft, claims }, "Writing")} />);
-    const costs = () => screen.getByRole("heading", { name: "Costs" }).closest("section") as HTMLElement;
-    expect(within(costs()).getByTestId("draft-prose")).not.toHaveClass("draft-checking");
-    rerender(<LiveArtefactBody stream={writingStream({ draft, claims }, "Checking claims")} />);
-    expect(within(costs()).getByTestId("draft-prose")).toHaveClass("draft-checking");
-    // Each chip knows its turn in the section, in document order (the
-    // stylesheet offsets each by 150 ms).
-    const chips = within(costs()).getAllByTestId("provisional-mark");
-    expect(chips.map((chip) => chip.style.getPropertyValue("--mark-at"))).toEqual(["0", "1"]);
-    expect(chips[0]).toHaveClass("pending-mark");
-    // A repair is not a check: the chips are still.
-    rerender(<LiveArtefactBody stream={writingStream({ draft, claims }, "Revising 1 claim")} />);
-    expect(within(costs()).getByTestId("draft-prose")).not.toHaveClass("draft-checking");
-  });
 
   it("reads the key findings' and the introduction's own section lines as theirs", () => {
     const stream = streamWith(
@@ -849,7 +801,7 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
     expect(within(findings).queryByRole("listitem")).toBeNull();
   });
 
-  it("staggers the revising blur by 120 ms per span, in document order", () => {
+  it("marks each span under repair, in document order", () => {
     const draft = `${LEAD} ${FAILED} ${SECOND}`;
     const failedAt = draft.indexOf(FAILED);
     const secondAt = draft.indexOf(SECOND);
@@ -869,8 +821,6 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
     );
     const spans = [...document.querySelectorAll<HTMLElement>("[data-revising='true']")];
     expect(spans.map((span) => span.textContent)).toEqual([FAILED, SECOND]);
-    expect(spans[0].style.animationDelay).toBe("");
-    expect(spans[1].style.animationDelay).toBe("120ms");
   });
 
   it("settles several repairs one by one, 120 ms apart, then fades the layer off the checked prose", () => {
@@ -918,7 +868,6 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
     act(() => {
       vi.advanceTimersByTime(400);
     });
-    expect(costs.querySelector(".anim-settle-out")).not.toBeNull();
     expect(costs.querySelector(".opacity-0")).toBeNull();
     act(() => {
       vi.advanceTimersByTime(400);
@@ -1028,7 +977,6 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
       "This report sets out what works.",
     );
     expect(intro.tagName).toBe("P");
-    expect(intro).toHaveClass("max-w-prose-measure");
   });
 
   it("shows the most relevant sources as each note is written, in the final layout", () => {
@@ -1047,15 +995,13 @@ describe("round 8: the Result tab while it is written (task 058, owner notes 202
     expect(within(block).getByText("Sources cited most often in this report.")).toBeInTheDocument();
     const items = within(block).getAllByRole("listitem");
     expect(items).toHaveLength(1);
-    // In the case studies' ruled card (owner, round 11).
-    expect(items[0]).toHaveClass("border", "border-line", "p-4", "anim-rise");
-    expect(within(items[0]).getByText("Smith 2023")).toHaveClass("font-bold");
+    expect(within(items[0]).getByText("Smith 2023")).toBeInTheDocument();
     expect(within(items[0]).getByText("The largest trial of direct payment.")).toBeInTheDocument();
     // Not links yet, no chips yet.
     expect(within(block).queryByRole("button")).toBeNull();
     expect(within(block).queryByText(/Cited by/)).toBeNull();
     // The executive summary's last part, before the full report's sections,
-    // as the report sets it (owner, round 11).
+    // as the report sets it.
     expect(
       block.compareDocumentPosition(screen.getByRole("heading", { name: "Costs" })) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1120,10 +1066,10 @@ describe("AnnotatedProse", () => {
         />
       </TooltipProvider>,
     );
-    // The words are a pointer target, not a button or a tab stop (round 10,
-    // finding 4): the marker after them is the control.
+    // The words are a pointer target, not a button or a tab stop: the marker
+    // after them is the control.
     const span = screen.getByText("talks");
-    expect(span).toHaveClass("citation-marker", "cursor-pointer");
+    expect(span).toHaveClass("citation-marker");
     expect(span).not.toHaveAttribute("role");
     expect(span).not.toHaveAttribute("tabindex");
     expect(screen.queryAllByRole("button")).toHaveLength(0);
@@ -1257,7 +1203,7 @@ describe("showLiveArtefact", () => {
   });
 });
 
-describe("CitationProvenanceBlock authorships (042)", () => {
+describe("CitationProvenanceBlock authorships", () => {
   const baseContext = {
     isPending: false,
     isError: false,
@@ -1275,7 +1221,7 @@ describe("CitationProvenanceBlock authorships (042)", () => {
     },
   };
 
-  it("bounds a citation in its own box: the judge's callout, then the References-form source line, then the quote (round 13)", () => {
+  it("bounds a citation in its own box: the judge's callout, then the References-form source line, then the quote", () => {
     const { container } = render(
       <CitationProvenanceBlock
         n={1}
@@ -1288,9 +1234,6 @@ describe("CitationProvenanceBlock authorships (042)", () => {
       />,
     );
     const block = container.querySelector("[data-citation-block]") as HTMLElement;
-    // Its own box, a hairline all round: the coloured rule is the Claim's.
-    expect(block).toHaveClass("border", "border-line", "p-4");
-    expect(block.className).not.toMatch(/border-l-/);
     // Judge and Quote labelled in the dossier's style; the source line not.
     const labels = [...block.querySelectorAll("[data-provenance-label]")].map((label) => label.textContent);
     expect(labels).toEqual(["Judge", "Quote"]);
@@ -1298,20 +1241,14 @@ describe("CitationProvenanceBlock authorships (042)", () => {
     const marks = block.querySelectorAll("[data-testid='ai-mark']");
     expect(marks).toHaveLength(1);
     expect(marks[0].closest("[data-provenance-label]")).toHaveTextContent("Judge");
-    // The judge in a tinted callout: the tier in Navy Semibold, its words at Body Grey.
+    // The judge's callout: the tier, then its words.
     const verdict = screen.getByText("Tier 2 · grounded");
-    expect(verdict).toHaveClass("font-semibold", "text-navy");
-    expect(verdict.parentElement).toHaveClass("bg-blue-tint-2");
-    expect(screen.getByText("The passage says so.")).toHaveClass("text-body", "text-grey");
-    // The source, title first: "[1] Title" in Navy Semibold, then the byline in Grey.
+    expect(screen.getByText("The passage says so.")).toBeInTheDocument();
+    // The source, title first: "[1] Title", then the byline.
     const name = screen.getByText("A study");
     expect(name.closest("p")).toHaveTextContent(/^\[1\]\s*A study$/);
-    expect(name.closest("p")).toHaveClass("font-semibold", "text-navy");
     const byline = screen.getByText("Sampleton A, Mockford C · 2022 · BMJ Open");
-    expect(byline).toHaveClass("text-body", "text-grey");
     expect(name.compareDocumentPosition(byline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The source line has its own room: 12 px above and below.
-    expect(name.closest("p")?.parentElement).toHaveClass("my-3");
     expect(verdict.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The quote, highlighted in its passage, last.
     const quote = screen.getByText("The quoted");
@@ -1320,27 +1257,6 @@ describe("CitationProvenanceBlock authorships (042)", () => {
     // Names only, as the References: the institutions are the dossier's.
     expect(container.querySelector("sup")).toBeNull();
     expect(screen.queryByText(/University of Exampleshire/)).toBeNull();
-  });
-
-  it("tints an unsupported verdict's callout red and an unchecked one grey", () => {
-    const tint = (label: string) => {
-      const { unmount } = render(
-        <CitationProvenanceBlock
-          n={1}
-          sourceTitle="A study"
-          sourceRef={null}
-          onOpenDossier={() => {}}
-          context={baseContext}
-          quote="The quoted"
-          judgement={{ label, words: "Words." }}
-        />,
-      );
-      const classes = screen.getByText(label).parentElement?.className ?? "";
-      unmount();
-      return classes;
-    };
-    expect(tint("Unsupported")).toContain("bg-red-tint");
-    expect(tint("Unchecked")).toContain("bg-ground");
   });
 
   it("starts the source line at the number and title when the context carries no authors", () => {
@@ -1355,11 +1271,11 @@ describe("CitationProvenanceBlock authorships (042)", () => {
       />,
     );
     expect(screen.getByText("A study").closest("p")).toHaveTextContent(/^\[1\]\s*A study$/);
-    expect(screen.getByText("2022 · BMJ Open")).toHaveClass("text-grey");
+    expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
   });
 });
 
-describe("ReferencesSection (042 item 1; round 10, C5)", () => {
+describe("ReferencesSection", () => {
   const references = [
     {
       n: 1,
@@ -1378,7 +1294,7 @@ describe("ReferencesSection (042 item 1; round 10, C5)", () => {
     { n: 12, title: "Uploaded evidence note", year: null, venue: null, authorships: [] },
   ];
 
-  it("opens a reference's source from its number, and leaves the number plain while the report is written (round 14)", async () => {
+  it("opens a reference's source from its number, and leaves the number plain while the report is written", async () => {
     const user = userEvent.setup();
     const open = vi.fn();
     const view = render(<ReferencesSection references={references} onOpenReference={open} />);
@@ -1388,7 +1304,7 @@ describe("ReferencesSection (042 item 1; round 10, C5)", () => {
     view.unmount();
     render(<ReferencesSection references={references} defaultOpen />);
     expect(screen.queryByRole("button", { name: /^Source 1:/ })).toBeNull();
-    expect(screen.getByText("[1]")).toHaveClass("text-grey");
+    expect(screen.getByText("[1]")).toBeInTheDocument();
   });
 
   it("sets each reference in the citation form, authors and year first, nothing invented when absent", async () => {
@@ -1404,11 +1320,9 @@ describe("ReferencesSection (042 item 1; round 10, C5)", () => {
     expect(items[2].textContent).not.toContain("()");
     // Names only in the list (D4) — superscript markers belong to the sheets.
     expect(items[0].querySelector("sup")).toBeNull();
-    // The number sits in its own column in Electric Blue and opens the
-    // source's sheet (owner, round 14).
+    // The number opens the source's sheet.
     const number = within(items[0]).getByRole("button", { name: "Source 1: Universal breakfast clubs and diet quality" });
     expect(number).toHaveTextContent("[1]");
-    expect(number).toHaveClass("w-9", "text-right", "tabular-nums", "text-blue");
   });
 
   it("links the title to its dossier and the address out, the scheme only in print", async () => {

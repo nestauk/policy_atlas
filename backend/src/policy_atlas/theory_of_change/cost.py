@@ -1,4 +1,4 @@
-"""What one theory-of-change check walk cost, in tokens and US dollars (task 054, C30).
+"""What one theory-of-change check walk cost, in tokens and US dollars.
 
 Each step's ``component.completed`` event already carries its token totals
 (``usage_totals``). This adds them up per step and prices them with the model

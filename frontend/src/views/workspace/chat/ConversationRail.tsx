@@ -9,14 +9,13 @@ import { ChatIcon, PanelIcon, PlusIcon, iconButtonClass } from "../../../ui/bran
 
 const RAIL_BUTTON = iconButtonClass("chrome");
 
-/** The Task Agent's mark in the rail: the still fold mark, always (owner,
- *  round 8). */
+/** The Task Agent's mark in the rail: the still fold mark, always.*/
 const RAIL_MARK_SIZE = 11;
 
 /** How many recent chats the rail marks. */
 export const RAIL_RECENT = 4;
 
-/** Icon buttons name themselves on hover this fast (owner, 2026-09-05: the
+/** Icon buttons name themselves on hover this fast (the
  *  browser's own `title` delay is too slow to be useful). */
 export const RAIL_TOOLTIP_DELAY_MS = 150;
 
@@ -73,8 +72,8 @@ function RailButton({
   );
 }
 
-/** The slim conversation rail: one object on every task tab (owner request,
- *  2026-09-05). On the Agent tab it is the sidebar shut; on the other tabs
+/** The slim conversation rail: one object on every task tab.
+ *  On the Agent tab it is the sidebar shut; on the other tabs
  *  it is the Agent overlay shut — the toggle expands into whichever the tab
  *  has. It carries the toggle, New chat, the Task Agent and the most recent
  *  chats (one bubble each, the title as tooltip).
@@ -87,7 +86,7 @@ function RailButton({
  *     `currentId` are the chat marks and the one on show; `className` sets
  *     the rail's geometry (a column, or a bar that becomes a column at `lg`).
  *     The Task Agent's mark is the still fold mark named "Task Agent", with
- *     no run status or timer (owner, round 8: the run status bar and the trace
+ *     no run status or timer (the run status bar and the trace
  *     carry the run).
  */
 export function ConversationRail({

@@ -175,8 +175,7 @@ _PENDING_TTL = timedelta(minutes=10)
 _turn_locks_guard = threading.Lock()
 _turn_locks: dict[uuid.UUID, threading.Lock] = {}
 # The registry is keyed by caller-supplied task ids BEFORE authz resolves,
-# so it must stay bounded (the _sessions cache it replaced was LRU-128; the
-# bound was lost in the 027 port — security review, 2026-07-29). Evicting an
+# so it must stay bounded. Evicting an
 # unheld lock is safe: correctness rests on the phase-1 task row lock and
 # the transcript unique constraints, this lock only single-flights the
 # task_agent spend.
@@ -344,7 +343,7 @@ def _apply_scoping_patch(
         ]
     # A patch that carries a removed default back restores it (settled
     # below); its marker leaves ``removed_defaults`` first, or the plan model
-    # refuses the constraint as a revival before the restore is reached (L4).
+    # refuses the constraint as a revival before the restore is reached.
     resent = {c.get("default") for c in data.get("constraints", []) if c.get("default")}
     data["removed_defaults"] = [d for d in data.get("removed_defaults", []) if d not in resent]
     validated = expect_scoping_plan(validate_plan(OPTIONS_SCOPING, data))
@@ -468,15 +467,15 @@ def _task_agent_inputs(
         task_agent_state = row["task_agent_state"]
         if reply is None:
             raise RuntimeError("completed task_agent transcript row is incomplete")
-        # A code-authored line (task 054, J3) has no user message.
+        # A code-authored line has no user message.
         if row["user_message"]:
             turns.append({"role": "user", "text": row["user_message"]})
         turns.append({"role": "planner", "text": reply})
         # A gate turn — an answer, an ask-back, a recorded decision — is part
-        # of the conversation but carries no plan draft (task 044), so it adds
+        # of the conversation but carries no plan draft, so it adds
         # its exchange and leaves the draft where the last planning turn left
         # it. Only a row missing its *reply* is incomplete. A longlist turn's
-        # state is its pending action (task 045), never a draft either.
+        # state is its pending action, never a draft either.
         if task_agent_state is not None and not is_longlist_state(task_agent_state):
             previous_draft = cast("dict[str, object]", task_agent_state)
     if turns:
@@ -495,7 +494,7 @@ def _task_agent_inputs(
 
     plan_row = latest_approved_plan_row(conn, task_id)
     if plan_row is not None:
-        # The successor is seeded from the plan that ran (task 044).
+        # The successor is seeded from the plan that ran.
         executed = validate_plan(capability, plan_row["payload"])
         return [], spec_for(capability).task_agent.seed_draft(executed)
     return turns, previous_draft
@@ -540,7 +539,7 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
         user_message=row["user_message"],
         reply=row["reply"],
         # The planner's clarifying question lives only on the stored
-        # response (task 058, N10); the chips answer it.
+        # response; the chips answer it.
         question=projected.question if projected is not None else None,
         suggestions=row["suggestions"],
         part=row["part"],
@@ -548,7 +547,7 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
         created_at=row["created_at"],
         completed_at=row["completed_at"],
         kind=projected.kind if projected is not None else None,
-        # Read-time label mapping (C2), the same boundary the chat read model
+        # Read-time label mapping, the same boundary the chat read model
         # applies: the durable payload carries ``appraisal_score``, the wire
         # carries ``appraisal_label``.
         answer=_labelled_answer(projected.answer) if projected is not None else None,
@@ -614,9 +613,9 @@ def _phase_one_turn(
     """Authenticate, fence, and either replay or durably reserve one turn."""
     # The row lock serialises phase one across processes: without it, two
     # processes can both read "no pending turn" / the same max turn_index and
-    # the loser's INSERT dies on a unique constraint as a raw 500 (review
-    # finding, 2026-07-29). The transaction is short — the LLM call stays
-    # outside it (finding I2 rule).
+    # the loser's INSERT dies on a unique constraint as a raw 500.
+    # The transaction is short — the LLM call stays
+    # outside it.
     access = accessible_task(conn, task_id=task_id, user_id=user_id, write=True, for_update=True)
     capability = access.row["capability"]
     _expire_stale_pending_turns(conn, task_id)
@@ -637,10 +636,10 @@ def _phase_one_turn(
         if existing["status"] == "completed":
             return _response_from_row(existing)
 
-    # Parentless walks only (task 045, S15): a longlist walk's option searches
+    # Parentless walks only: a longlist walk's option searches
     # never fence the thread; their parent does.
     active = active_parentless_walk(conn, task_id)
-    # The Task Agent chat is open at the baseline gate (D9): a turn taken while
+    # The Task Agent chat is open at the baseline gate: a turn taken while
     # a scoping walk is *paused* is admitted and sorted. A running walk, and
     # every other capability's pause, keep the refusal they always had.
     gate = (
@@ -648,7 +647,7 @@ def _phase_one_turn(
         if active is not None
         else None
     )
-    # A theory-of-change check walk keeps the thread open (task 054, S7): the
+    # A theory-of-change check walk keeps the thread open: the
     # turn is admitted and answers questions; the plan stays as approved.
     toc_checking = (
         active is not None
@@ -662,7 +661,7 @@ def _phase_one_turn(
             "finish or stop the current run before replanning; use the run's check-ins to steer it",
         )
     # With no walk active, a scoping task that has a longlist sorts the turn
-    # into the longlist verbs (task 045, S11), read under the same row lock.
+    # into the longlist verbs, read under the same row lock.
     longlist = (
         read_longlist_surface(conn, task_id=task_id, capability=capability)
         if active is None
@@ -859,7 +858,7 @@ def _dispatch_gate_turn(
                 conversation_id=conversation_id,
             )
             if answer is None:
-                # The card resumed the walk while the sort was running (C7):
+                # The card resumed the walk while the sort was running:
                 # there is no longer a paused walk to answer over. The turn is
                 # still the user's and still durable — it says what happened,
                 # the same way the loser of a decision race does.
@@ -883,7 +882,7 @@ def _dispatch_gate_turn(
                     conversation_id=conversation_id,
                 )
             )
-            # Stored raw, returned labelled (C2): the score is the durable
+            # Stored raw, returned labelled: the score is the durable
             # fact and the label is derived on every read.
             return _labelled(answered)
 
@@ -895,7 +894,7 @@ def _dispatch_gate_turn(
                 gate=gate,
                 option_id=option_id,
                 carried_text=sort.carried_text,
-                # The utterance the carried instruction must be part of (S2):
+                # The utterance the carried instruction must be part of:
                 # what the planner is told is the user's own words, never the
                 # sort's paraphrase of them.
                 utterance=utterance,
@@ -923,7 +922,7 @@ def _dispatch_gate_turn(
             )
             if outcome.carried_text is not None:
                 # Durable now, because the planner call below can crash after
-                # it and the decision must not be lost with it (X6).
+                # it and the decision must not be lost with it.
                 _persist_half_turn(
                     engine,
                     task_id=task_id,
@@ -939,7 +938,7 @@ def _dispatch_gate_turn(
                 return _ContinuedTurn(carried_text=outcome.carried_text, decision=decision)
             reply = outcome.reply
             if outcome.follow_on == LONGLIST_PURPOSE and decision.opened_run is None:
-                # The decision stands but no walk opened (F12): say so.
+                # The decision stands but no walk opened: say so.
                 reply = gate_turns.CONFIRM_NOT_STARTED_REPLY
             result = finish(
                 TaskAgentTurnOut(
@@ -977,7 +976,7 @@ def _dispatch_gate_turn(
     except Exception:
         # A failure after the decision commit leaves the decision durable and
         # the row failed; the retry re-runs only the half that is still owed,
-        # because the fence then sees no active walk (X6).
+        # because the fence then sees no active walk.
         transcript_rows.fail(engine, task_id=task_id, transcript_id=transcript_id)
         raise
 
@@ -1130,8 +1129,7 @@ def create_task_agent_turn(
         # Phase 1 is deliberately short. The task_agent call below must remain
         # OUTSIDE any transaction: holding the task row lock (and a pool
         # connection) across a live LLM call blocked every mutation on the
-        # task — and via the global dispatch lock, run creation process-wide
-        # (review finding I2, 2026-07-21).
+        # task — and via the global dispatch lock, run creation process-wide.
         with engine.begin() as conn:
             phase_one = _phase_one_turn(
                 conn,
@@ -1177,14 +1175,14 @@ def create_task_agent_turn(
                 return _one_line_stream(sorted_turn)
             # "Change the plan" with an instruction: the decision is already
             # durable, the walk has ended, and this same row now continues as
-            # an ordinary planning turn on the user's own words (X6).
+            # an ordinary planning turn on the user's own words.
             planner_message = sorted_turn.carried_text
             carried_decision = sorted_turn.decision
         elif phase_one.longlist is not None:
             # While a longlist exists and no walk is active, the turn is
             # sorted into the longlist verbs and never reaches the planner:
             # a verb is proposed back and applied on a confirming turn
-            # (task 045, S11). Stored raw, returned labelled (C2).
+            # . Stored raw, returned labelled.
             with tracing.trace_scope(user_id=user.user_id):
                 return _one_line_stream(
                     _labelled(
@@ -1208,7 +1206,7 @@ def create_task_agent_turn(
             # gone, so there is no gate to sort against and the decision lives
             # only on the row. Read it back, or the thread would render this
             # turn as an ordinary reply and lose the decision that ended the
-            # run (X6).
+            # run.
             with engine.connect() as conn:
                 carried_decision = _stored_decision(conn, transcript_id)
 
@@ -1345,11 +1343,11 @@ def _planner_turn(
     sources: list[dict[str, Any]] = []
     if approved is not None and profile.after_approve is not None:
         # Outside any transaction, like the Task Agent call: options
-        # scoping proposes option designs here (D19) and adds the
-        # "did this touch the baseline's inputs" sentence (S4, C1).
+        # scoping proposes option designs here and adds the
+        # "did this touch the baseline's inputs" sentence.
         with tracing.trace_scope(user_id=user_id):
             approved, note = profile.after_approve(engine, task_id, approved, agent)
-        # A theory of change's sense check cites its sources with [n] (task 054).
+        # A theory of change's sense check cites its sources with [n].
         sources = list(getattr(note, "sources", None) or [])
         if note is not None:
             reply_text = (
@@ -1359,7 +1357,7 @@ def _planner_turn(
             )
     if profile.after_turn is not None:
         # Outside any transaction: the theory of change stores the edits the
-        # turn proposed and any clarification, and says so (task 054, C46, C49).
+        # turn proposed and any clarification, and says so.
         note = profile.after_turn(engine, task_id, turn, user_id)
         if note:
             reply_text = f"{reply_text.rstrip()}\n\n{note}"
@@ -1378,7 +1376,7 @@ def _planner_turn(
         part=part,
         conversation_id=conversation_id,
         # One turn, two halves: the decision that ended the walk and
-        # the planning reply that followed it are both this row's (X6).
+        # the planning reply that followed it are both this row's.
         kind="decision" if carried_decision is not None else None,
         decision=carried_decision,
         sources=[CitedSourceOut.model_validate(source) for source in sources],
@@ -1392,9 +1390,9 @@ def _planner_turn(
             # Re-check the run fence under the task row lock: a run may
             # have started during the out-of-transaction task_agent call, and
             # persisting a new approved plan under a live walk would hand
-            # continuation an unrelated plan (adversarial review,
-            # 2026-07-29). Mirror phase one: fail the turn, same conflict.
-            # The same parentless fence as phase one (task 045).
+            # continuation an unrelated plan. Mirror phase one: fail the turn,
+            # same conflict.
+            # The same parentless fence as phase one.
             run_started_meanwhile = active_parentless_walk(conn, task_id) is not None
         if run_started_meanwhile:
             conn.execute(
@@ -1435,10 +1433,10 @@ def _planner_turn(
             "a run started while this turn was being planned; "
             "finish or stop it, then retry the turn",
         )
-    # Round 14 (owner): at the step 1 decision itself, the question part
+    # At the step 1 decision itself, the question part
     # answered, Policy Atlas names the task from the refined question unless
     # the user has named it. After the commit, on its own thread as
-    # ``patch_plan`` does (task 058 review): the title call no longer holds up
+    # ``patch_plan`` does: the title call does not hold up
     # the stream's completed line or the turn lock. A naming failure is
     # logged there and never fails the committed turn.
     confirmed = _confirmed_question(turns, draft)
@@ -1768,7 +1766,7 @@ def _apply_plan_patch(plan: TaskPlan, patch: PlanPatchIn) -> TaskPlan:
         data["expected_artefact_shape"] = ""
     # Constant capability: the patch shape and the plan it amends are both
     # Evidence search (the caller passed a ``TaskPlan``). Through the registry
-    # all the same (C9).
+    # all the same.
     return expect_task_plan(validate_plan(EVIDENCE_SEARCH, data))
 
 
@@ -1816,12 +1814,12 @@ def patch_plan(
     scoped: tuple[ScopingPlan, ScopingPlan] | None = None
     edited_question: str | None = None
     if payload.scoping is not None and payload.scoping.your_options is not None:
-        # Model calls stay outside the locked transaction below (review
-        # finding I2): propose designs for the new or reworded options first.
+        # Model calls stay outside the locked transaction below:
+        # propose designs for the new or reworded options first.
         designs = _propose_patch_designs(engine, task_id, user.user_id, payload.scoping, agent)
     with engine.begin() as conn:
         # The task row lock, for the reason ``POST /runs`` and the turn route
-        # take it (X5): the "no running/paused walk" check below and the new
+        # take it: the "no running/paused walk" check below and the new
         # version's insert must be one atomic decision, or two concurrent
         # edits both read the same latest version and the loser surfaces
         # ``uq_plan_task_version`` as a raw 500.
@@ -1884,7 +1882,7 @@ def patch_plan(
             if "question" in payload.model_fields_set:
                 edited_question = patched.question
     if edited_question is not None:
-        # Round 14: an edited, approved question names the task too.
+        # An edited, approved question names the task too.
         in_background(
             lambda: name_task_from_question(
                 engine, titles, task_id=task_id, question=edited_question
@@ -2151,7 +2149,7 @@ def confirm_baseline(
     """
     idempotent = False
     with engine.begin() as conn:
-        # Locked for the same reason :func:`patch_plan` locks (X5): the walk
+        # Locked for the same reason :func:`patch_plan` locks: the walk
         # check and the new version's insert are one decision, and two
         # simultaneous confirms must serialise rather than race the plan's
         # version unique constraint into a 500.
@@ -2163,7 +2161,7 @@ def confirm_baseline(
                 status_code=422,
                 detail="confirm-baseline applies to options-scoping tasks only",
             )
-        # Parentless walks only (task 045, S15).
+        # Parentless walks only.
         if active_parentless_walk(conn, task_id) is not None:
             raise ApiConflict(
                 "run_active",

@@ -3,7 +3,9 @@ type: Integration quirk
 title: A scoped pgvector search keeps its chunk list NOT MATERIALIZED, fuses on ranks, and sizes its latency claim to the scope
 description: A MATERIALIZED CTE for the scope's chunk list makes the planner scan the whole chunk_embedding table (60 s a query on 7.5 GB); NOT MATERIALIZED keeps the probe by chunk id at about 100 ms a leg. pgvector sums in float32, so the SQL order can differ from a float64 Python order on near-ties; fuse on ranks and parity holds. A tokens rule must match [0-9A-Za-z]+ before lowering (lower-then-match differs on the Kelvin sign and the dotted capital I). "Under 100 ms" measured on 900-unit scopes does not carry to 9,000-unit scopes on a 128 MB buffer pool; compare search timings only across sessions with the same concurrent write load.
 tags: [retrieval, postgres, pgvector, planner, parity, "057"]
-timestamp: 2026-11-03
+generated:
+  by: process:okf-migrate
+  at: 2026-11-03
 ---
 
 # Rule

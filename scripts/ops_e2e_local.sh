@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local end-to-end check of the ops service (task 065, step 6): a real ops-mode
+# Local end-to-end check of the ops service: a real ops-mode
 # server serving the built pages and the ops routes, a real api-mode server,
 # one database. Needs the compose Postgres and a built backend/ops-ui/.
 #   DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_e2e_test bash scripts/ops_e2e_local.sh
@@ -21,8 +21,8 @@ PY
 trap cleanup EXIT
 cd "$repo/backend"
 uv run alembic upgrade head >/dev/null
-# The ops server runs as the least-privilege login, the way the deployed one does
-# (review stack, 2026-11-17): the master login sets LOGIN and a throwaway password.
+# The ops server runs as the least-privilege login, the way the deployed one does:
+# the master login sets LOGIN and a throwaway password.
 ops_db="$(uv run python - "$db" <<'PY'
 import sys; from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL, make_url

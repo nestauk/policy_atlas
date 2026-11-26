@@ -5,7 +5,7 @@ import { buttonVariants } from "./Button";
 import { cn } from "./cn";
 
 /*
- * The list-page header (task 058, lists polish; lead rulings 2026-11-05).
+ * The list-page header (lists polish).
  *
  * Tasks, Projects and a Project page share one header with fixed slots, so
  * nothing in it moves when you go from one page to the next:
@@ -24,7 +24,7 @@ import { cn } from "./cn";
  *   the title's height. Below md they sit above the title (the platform's
  *   large-title pattern), so the primary keeps its place even when a long
  *   project name wraps.
- * - The filters row is always reserved at 40 px (lead ruling P5), so the
+ * - The filters row is always reserved at 40 px, so the
  *   list starts at the same height on every page, filters or not.
  * - The title keeps one line box while its text is on its way (a project
  *   name still loading), so nothing shifts when it lands.
@@ -40,8 +40,8 @@ export const PAGE_TITLE_CLASS =
   "min-h-[1lh] text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title";
 
 /** Every header control that is not the primary: 40 px, Body Semibold, the
- *  primary's label size so the two read as one row (lead ruling, task 058
- *  consistency pass). Pair with `<Button variant="ghost">` (its grey, its
+ *  primary's label size so the two read as one row.
+ *  Pair with `<Button variant="ghost">` (its grey, its
  *  navy hover, its press); the ghost elsewhere stays Meta. */
 export const PAGE_CONTROL_CLASS = "h-10 whitespace-nowrap px-3 py-0 text-body";
 

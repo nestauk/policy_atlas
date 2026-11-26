@@ -3,7 +3,9 @@ type: Runbook
 title: Live-check drives — environment and product facts that cost debugging time
 description: Kill the dev API by PORT with LISTEN scope (uvicorn --reload's worker never has "uvicorn" in argv; SIGTERM drains SSE for minutes; unscoped lsof kills the test's own sockets); the dev DB is NOT migrated by make test — run alembic upgrade head before any live check on a schema slice; Playwright specs here are ESM (fileURLToPath shim for __dirname); an unattended plan takes ~6 approvals; findings rows need deep analysis depth.
 tags: [live-check, uvicorn, playwright, alembic, dev-environment]
-timestamp: 2026-10-21
+generated:
+  by: process:okf-migrate
+  at: 2026-10-21
 ---
 
 # Rules

@@ -3,7 +3,16 @@ type: Invariant
 title: Citation row written before GroundingError — fail evidence survives
 description: The citation row (and annotation) are inserted before GroundingError is raised, so a fabricated-quote failure leaves a durable DB record with verification_result='fail'.
 tags: [grounding, citation, flag-dont-drop, invariant]
-timestamp: 2026-06-29
+generated:
+  by: process:okf-migrate
+  at: 2026-06-29
+sources:
+  - resource: "../specs/system/provenance-grounding.md"
+    title: "[system/provenance-grounding.md](../specs/system/provenance-grounding.md) (flag, don't drop)"
+  - resource: "../tasks/003-source-snapshot/contract.md"
+    title: "[003-source-snapshot/contract.md](../tasks/003-source-snapshot/contract.md) (Fabricated quote \u2192 hard-fail; flag-don't-drop)"
+  - resource: "../tasks/003-source-snapshot/verification.md"
+    title: "[003-source-snapshot/verification.md](../tasks/003-source-snapshot/verification.md) (test_fail_annotation_survives_commit, test_produce_grounded_block_fabricated_quote_hard_fail)"
 ---
 
 # Status: RETIRED (2026-07-15, task 023 step-9 rider)
@@ -42,9 +51,3 @@ A direct caller of `produce_grounded_block` outside the harness that lets `Groun
 propagate past its own `engine.begin()` boundary will roll back the annotation and citation rows,
 losing the fail evidence. Verified by `test_fail_annotation_survives_commit` (committed transaction,
 fresh connection read-back).
-
-# Citations
-
-- [system/provenance-grounding.md](../specs/system/provenance-grounding.md) (flag, don't drop)
-- [003-source-snapshot/contract.md](../tasks/003-source-snapshot/contract.md) (Fabricated quote → hard-fail; flag-don't-drop)
-- [003-source-snapshot/verification.md](../tasks/003-source-snapshot/verification.md) (test_fail_annotation_survives_commit, test_produce_grounded_block_fabricated_quote_hard_fail)

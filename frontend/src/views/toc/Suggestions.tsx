@@ -90,7 +90,7 @@ export function pendingCount(proposals: Proposal[]): number {
 }
 
 /**
- * The suggestions, in the canvas's side panel (owner, 2026-11-04): a whole route
+ * The suggestions, in the canvas's side panel: a whole route
  * at a time where they come as routes (from the draft or the evidence), with
  * Accept or Reject; single edits from the review or the chat as before.
  * Hovering a route shows it faded on the canvas. Nothing changes until the
@@ -105,7 +105,7 @@ export function Suggestions({
   proposals: Proposal[];
   editor: Editor;
   onPreview: (preview: Preview | null) => void;
-  /** Whether connections an accept adds get their evidence check at once (owner, 2026-11-05): not before the theory's first check. */
+  /** Whether connections an accept adds get their evidence check at once: not before the theory's first check. */
   checkNew: boolean;
 }) {
   const [problems, setProblems] = useState<string[]>([]);

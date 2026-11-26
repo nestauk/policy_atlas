@@ -4,7 +4,7 @@ import { hasResult, type TabOptions } from "./lifecycle";
 import { hasLonglist, hasTaskResult, isBaselineArtefact, isScoping, isToc } from "./scopingActivity";
 
 /**
- * The results a task's lifecycle tabs open on (task 044, A17; task 045):
+ * The results a task's lifecycle tabs open on:
  * a scoping task's baseline and longlist. Only a scoping task pays for the
  * artefact read — the empty task id disables the query.
  *
@@ -20,7 +20,7 @@ export function useTabOptions(taskId: string): { options: TabOptions; baselineLo
     options: {
       hasBaseline: isBaselineArtefact(artefact.data),
       hasLonglist: hasLonglist(task.data),
-      // A theory of change's canvas is open from the start: the user may draw their own (owner, 2026-11-05).
+      // A theory of change's canvas is open from the start: the user may draw their own.
       hasToc: isToc(task.data),
     },
     baselineLoading: scoping && artefact.isLoading,
@@ -28,10 +28,10 @@ export function useTabOptions(taskId: string): { options: TabOptions; baselineLo
 }
 
 /**
- * Whether chats are open: they need a result to ask about (038 V8). Either
+ * Whether chats are open: they need a result to ask about. Either
  * source may be behind — the task read model until its next refetch, the run
  * stream until its replay reaches the final status frame. A scoping task has
- * a result once a baseline or a longlist exists (task 045, S15).
+ * a result once a baseline or a longlist exists.
  */
 export function useChatsEnabled(taskId: string): boolean {
   const task = useTask(taskId);

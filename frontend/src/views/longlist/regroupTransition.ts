@@ -17,7 +17,7 @@ function viewTransitionStart(): ViewTransitionStart | null {
 
 /**
  * The value on screen, moving its rows when their order or grouping changes
- * (round 10, finding 2; round 12: a shortlist toggle moves the row to the
+ * (a shortlist toggle moves the row to the
  * head of its group or grid cell the same way). Rows already on screen keep
  * their opacity and travel to their new place over 300 ms on the strong
  * ease-out (a View Transition, each row named by its option through

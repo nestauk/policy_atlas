@@ -570,8 +570,8 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
 #: The full-text snapshot, joined beside the envelope one (same table).
 _full_text_snapshot = source_snapshot.alias("full_text_snapshot")
 
-#: Where a collected full text came from: the per-task fetch address (task
-#: 057), else the shared full-text snapshot's own locator (older rows).
+#: Where a collected full text came from: the per-task fetch address,
+#: else the shared full-text snapshot's own locator (older rows).
 _FULL_TEXT_LOCATOR = func.coalesce(
     task_source_snapshot.c.fetched_from, _full_text_snapshot.c.source_locator
 ).label("full_text_locator")
@@ -609,13 +609,13 @@ def _full_text_url(full_text_status: str | None, locator: str | None) -> str | N
     return locator
 
 
-#: Residual bucket for sources whose provider sent no publisher country (task
-#: 031). A stable, public-vocabulary string: the frontend must not rename or
+#: Residual bucket for sources whose provider sent no publisher country.
+#: A stable, public-vocabulary string: the frontend must not rename or
 #: drop it, or the chart stops adding up to the population it draws.
 GEOGRAPHY_NOT_REPORTED = "Not reported"
 
 #: The evidence read's ``country`` value for the rows with no publisher
-#: country, the link Landscape's "Not reported" row uses (task 058, round 14).
+#: country, the link Landscape's "Not reported" row uses.
 COUNTRY_NONE = "none"
 
 
@@ -799,7 +799,7 @@ def funnel_out(conn: Connection, task_id: uuid.UUID) -> FunnelOut:
     )
     effective = _effective_screens(conn, task_id)
     statuses = [row.status for row in effective.values()]
-    # Distinct documents (task 058, round 13): a redrawn plan appraises a
+    # Distinct documents: a redrawn plan appraises a
     # document once per question; the `appraised=true` filter lists it once.
     appraised = int(
         conn.execute(
@@ -893,8 +893,7 @@ def landscape_out(
                         task_source_snapshot.c.task_source_snapshot_id.in_(relevant_ids),
                         # Membership against a SET of candidate snapshots, not
                         # equality against one column — tss_owns_snapshot's
-                        # `==` shape doesn't fit; stays hand-written (task 029
-                        # delta-review sweep).
+                        # `==` shape doesn't fit; stays hand-written.
                         (
                             task_source_snapshot.c.source_snapshot_id.in_(cited_snapshots)
                             | task_source_snapshot.c.full_text_snapshot_id.in_(cited_snapshots)
@@ -935,7 +934,7 @@ def landscape_out(
         year = _year(metadata)
         if year is not None:
             years[str(year)] += 1
-        # Honest absence (task 031, defect 3): a source whose provider sent no
+        # Honest absence (defect 3): a source whose provider sent no
         # publisher country is counted, never dropped, so the bars plus the
         # residual always equal the population drawn — at either scope, because
         # base_rows is already narrowed. An authorship country is never
@@ -1065,7 +1064,8 @@ def _source_reason_maps(
             tss_id = uuid.UUID(
                 str(
                     payload.get("task_source_snapshot_id")
-                    # Pre-038 rows carry the old key; `event_log` is never rewritten.
+                    # Rows written before the project-to-task rename carry the old
+                    # key; `event_log` is never rewritten.
                     or payload.get("project_source_snapshot_id")
                 )
             )
@@ -1245,7 +1245,7 @@ def evidence_page(
     ).all()
     screens = _effective_screens(conn, task_id)
     screen_reasons, classification_reasons = _source_reason_maps(conn, task_id)
-    # One resolver for every label reader (task 045, S5): own rows, then a
+    # One resolver for every label reader: own rows, then a
     # linked task's pinned walk for an inherited document, else absent.
     labels = labels_for_snapshots(
         conn, task_id=task_id, tss_ids=[row.task_source_snapshot_id for row in rows]
@@ -1286,7 +1286,7 @@ def evidence_page(
                 )
             ).scalars()
         )
-        # Round 14: on an options-scoping task a longlist theme's id lists
+        # On an options-scoping task a longlist theme's id lists
         # the documents of its options. The two id spaces never collide.
         | _longlist_theme_sources(conn, task_id, theme)
         if theme is not None
@@ -1312,8 +1312,7 @@ def evidence_page(
         ):
             continue
         # Python-side membership over an already-fetched row + a precomputed
-        # set, not a SQL join — tss_owns_snapshot doesn't fit here (task 029
-        # delta-review sweep).
+        # set, not a SQL join — tss_owns_snapshot doesn't fit here.
         row_cited = (
             row.source_snapshot_id in cited_snapshots
             or row.full_text_snapshot_id in cited_snapshots
@@ -1437,13 +1436,13 @@ def evidence_page(
     )
 
 
-#: Full-text failure reasons that are not access failures (task 057, S2): the
+#: Full-text failure reasons that are not access failures: the
 #: document was still being read when the stage stopped waiting (``not_ready``),
 #: the queue refused its message (``send_failed``), or the cloud function failed
 #: outside the per-document vocabulary (``worker_error``). Such a source is not
 #: ``unavailable``; it reads as screened in and not read yet (``relevant`` /
 #: ``not_selected``), and the next run tries it again. Defined once in
-#: ``ingest_full_text`` (task 057 review, Codex 9) and re-exported here.
+#: ``ingest_full_text`` and re-exported here.
 NOT_READ_YET_REASONS = _NOT_READ_YET_REASONS
 
 
@@ -1775,19 +1774,19 @@ def _finding_groups(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, dic
     return result
 
 
-#: The user's direct actions on the longlist (task 045, contract deliverable 9:
-#: "every direct action is logged as the user's turn in History"). Written by
+#: The user's direct actions on the longlist: every direct action is logged as
+#: the user's turn in History. Written by
 #: :mod:`policy_atlas.api.longlist_actions`, for the buttons and the chat verbs
 #: alike.
 OPTION_ADDED = "option.added"
 OPTION_EXCLUDED = "option.excluded"
 OPTION_INCLUDED = "option.included"
-#: The user's two shortlist buttons (task 055, P9): *add to shortlist* and
+#: The user's two shortlist buttons (P9): *add to shortlist* and
 #: *remove from shortlist*, written by the same module.
 OPTION_SHORTLISTED = "option.shortlisted"
 OPTION_UNSHORTLISTED = "option.unshortlisted"
-#: A reason given after the user's own one-click exclusion (task 058, round
-#: 13): the exclusion stands, its reason is filled in.
+#: A reason given after the user's own one-click exclusion:
+#: the exclusion stands, its reason is filled in.
 OPTION_EXCLUSION_REASON_ADDED = "option.exclusion_reason_added"
 OPTION_EVENT_KINDS: tuple[str, ...] = (
     OPTION_ADDED,
@@ -1797,10 +1796,10 @@ OPTION_EVENT_KINDS: tuple[str, ...] = (
     OPTION_UNSHORTLISTED,
     OPTION_EXCLUSION_REASON_ADDED,
 )
-#: The not-covered note rewritten alone for the places as they stand (task
-#: 058, round 14): one History line, Policy Atlas's.
+#: The not-covered note rewritten alone for the places as they stand:
+#: one History line, Policy Atlas's.
 SHORTLIST_NOTE_UPDATED = "shortlist.note_updated"
-#: Policy Atlas's shortlist proposal (task 055, A7): one event per proposal,
+#: Policy Atlas's shortlist proposal: one event per proposal,
 #: the record of its places, note, appetite and versions. Written by the
 #: ``shortlist`` component; ``SHORTLIST_PROPOSED`` is imported from there (top
 #: of this module) so the writer and the readers share one name. History
@@ -1808,7 +1807,8 @@ SHORTLIST_NOTE_UPDATED = "shortlist.note_updated"
 
 
 # The allowlisted audit events. The four lifecycle kinds appear under BOTH
-# generations: `event_log` is append-only, so rows written before task 038 say
+# generations: `event_log` is append-only, so rows written before the
+# project-to-task rename say
 # `project.renamed` / `project.archived` and must still reach the read model.
 _EVENT_KINDS = {
     "component.completed",
@@ -1837,7 +1837,8 @@ _OPTION_VERBS = {
 }
 
 #: The bare lifecycle kind of each stored lifecycle event type, both
-#: generations (``task.renamed`` and pre-038 ``project.renamed`` alike).
+#: generations (``task.renamed`` and, from before the project-to-task rename,
+#: ``project.renamed`` alike).
 _LIFECYCLE_KIND = {
     event_type: kind
     for kind in LIFECYCLE_EVENT_KINDS
@@ -2042,7 +2043,8 @@ def decisions_page(
                 continue
             if event["event_type"] != "steering.decision":
                 continue
-            # Pre-038 rows carry the old actor word; the set would drop them.
+            # Rows written before the orchestrator-to-agent rename carry the old
+            # actor word; the set would drop them.
             decided_by = canonical_actor(payload.get("decided_by"))
             actor = people.actor(None) if decided_by == "user" else history.SYSTEM
             option_id = payload.get("option_id")
@@ -2161,7 +2163,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         else []
     )
     snapshots = {row.source_snapshot_id for row in citation_rows}
-    # The cited snapshot's own basis (task 046) — not envelope-resolved: it
+    # The cited snapshot's own basis — not envelope-resolved: it
     # says whether THIS quote's snapshot is full text or an abstract only.
     text_basis_by_snapshot = (
         {
@@ -2217,7 +2219,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     )
     # The appraisal tier and the classified evidence type (the rubric's
     # scoring input, surfaced with the label so the UI can say WHY a citation
-    # carries a band) — both through the label resolver (task 045, S5), over
+    # carries a band) — both through the label resolver, over
     # the documents the citations can resolve to.
     citation_labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=set(tss_to_envelope))
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
@@ -2225,7 +2227,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         citations_by_annotation.setdefault(row.annotation_id, []).append(row)
     # Reference numbers go to documents in order of first citation, so the
     # walk below must be in one fixed order or a report could renumber between
-    # two loads (task 058, round 7). The order is the order the run saved and
+    # two loads. The order is the order the run saved and
     # numbered its sections live: body sections in report order, then the key
     # findings, then the case studies (``_save_rank``); within a block, claims
     # by their span; within a claim, citations by chunk, quote and id. The live
@@ -2305,7 +2307,8 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         )
         title = cast(str, spec.get("title") or "")
         focus = cast(str | None, spec.get("focus")) if isinstance(spec.get("focus"), str) else None
-        # Absent on every artefact synthesised before task 032 — the client
+        # Absent on every artefact synthesised before synthesis wrote a nav
+        # label — the client
         # falls back to a shortened title rather than treating it as an error.
         nav_label = (
             cast(str | None, spec.get("nav_label"))
@@ -2449,7 +2452,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     )
     reference_years = [reference.year for reference in refs_out if reference.year is not None]
     year_range = (min(reference_years), max(reference_years)) if reference_years else None
-    # Task most_relevant_notes from counts JSONB (task 034 S5).
+    # Task most_relevant_notes from counts JSONB.
     raw_counts = synthesis.get("counts")
     raw_mrs_notes = (
         raw_counts.get("most_relevant_notes", []) if isinstance(raw_counts, Mapping) else []
@@ -2470,7 +2473,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         else None
     )
     # What kind of artefact this is and how deep its pass went, exactly as the
-    # roll-up recorded them (task 044, C18): "baseline" / "scoping pass" for an
+    # roll-up recorded them: "baseline" / "scoping pass" for an
     # options-scoping baseline, absent for every Evidence search report. The
     # Result view reads these words; it never derives them.
     raw_template = raw_counts.get("template") if isinstance(raw_counts, Mapping) else None
@@ -2930,7 +2933,7 @@ def _public_backend_name(value: str) -> str | None:
     return {"openalex": "OpenAlex", "overton": "Overton"}.get(value)
 
 
-#: The search verbs that are passes, not written queries (round 11): the pass
+#: The search verbs that are passes, not written queries: the pass
 #: kind and its finished words (``ACTIVITY`` keys, many and one).
 _PASS_WORDS: dict[str, tuple[Literal["citations", "lookup"], str, str]] = {
     "fetch_citations": (
@@ -3041,10 +3044,10 @@ def _backend_details(
         else []
     )
     queries: dict[str, list[CoverageQueryOut]] = {name: [] for name in backend_names}
-    # Round 11: a citations or lookup pass is many id calls; it is one row,
+    # A citations or lookup pass is many id calls; it is one row,
     # named in words, in the order the passes ran (one per run, backend and
     # verb). Before, its calls were listed as queries, their ids as the text.
-    # Round 12: a row's ``query_id`` is its event's sequence (a pass's: its
+    # A row's ``query_id`` is its event's sequence (a pass's: its
     # first call's), the key the sources filter takes.
     passes: dict[tuple[Any, str, str], tuple[set[str], int, int]] = {}
     for run_id, payload, sequence in events:
@@ -3173,8 +3176,7 @@ def source_dossier_out(
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
     # Python-side membership over an already-fetched row + a precomputed set,
-    # not a SQL join — tss_owns_snapshot doesn't fit here (task 029
-    # delta-review sweep).
+    # not a SQL join — tss_owns_snapshot doesn't fit here.
     cited = row["source_snapshot_id"] in cited_ids or row["full_text_snapshot_id"] in cited_ids
     if cited:
         status, reason = "cited", None
@@ -3660,9 +3662,9 @@ def _chunk_metadata(
     return metadata if isinstance(metadata, Mapping) else {}
 
 
-# --- The options-scoping longlist (task 045, S12; contract deliverables 9, 11) ---
+# --- The options-scoping longlist ---
 #
-# Assembled, never written (D15): the option rows as they stand, the latest
+# Assembled, never written: the option rows as they stand, the latest
 # ``longlist_result`` (themes, coverage, judgements, guesses, counts) and the
 # membership rows behind "Show the documents". Read-only and deterministic;
 # the same rows always give the same read model.
@@ -3672,7 +3674,7 @@ def _chunk_metadata(
 #: because that module's in-scope check imports :func:`publication_country`
 #: from here. Pinned equal by a test.
 LONGLIST_IN_SCOPE_KEY = "in_scope_evidence"
-#: The ``judgements`` key of constrain's authority label (task 046, S18) —
+#: The ``judgements`` key of constrain's authority label —
 #: ``options_scoping.constrain.constrain.AUTHORITY_KEY``, not imported for the
 #: same reason. It holds no verdict and is never a judgement. Pinned equal by
 #: a test.
@@ -3686,8 +3688,9 @@ _DOCUMENT_ROLES = frozenset({"evaluated", "described", "recommended", "mentioned
 #: The role a linked finding's kind implies (the longlist component's rule).
 _LINKED_FINDING_ROLE: dict[str, str] = {"iof": "evaluated", "icf": "described"}
 _PROFILE_MARKS = frozenset({"less", "more"})
-#: The two lines that state a fact, not a comparison: never marked (R37).
-#: The one profile line a row may lack (rows built before task 055 hold eight).
+#: The two lines that state a fact, not a comparison: never marked.
+#: The one profile line a row may lack (rows built before this line was added
+#: hold eight).
 OPTIONAL_PROFILE_LINE = "potential_impact"
 _UNMARKED_LINES = frozenset({"who_decides", "dependencies"})
 _AUTHORITY_LABELS = frozenset({"within_your_power", "needs_action_by", "unclear"})
@@ -4258,7 +4261,7 @@ def _added_searches(
     all_ids = {rid for ids in record_ids.values() for rid in ids}
     if all_ids:
         # One extraction record can be listed by several searches' roll-ups
-        # (a shared document): credit it to every scope that lists it (A5).
+        # (a shared document): credit it to every scope that lists it.
         scopes_of: dict[uuid.UUID, list[uuid.UUID]] = {}
         for scope, ids in record_ids.items():
             for rid in ids:
@@ -4527,7 +4530,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 name=str(theme.get("name") or ""),
                 description=str(theme.get("description") or ""),
                 option_ids=option_ids,
-                # Round 14: each document once, however many of the theme's
+                # Each document once, however many of the theme's
                 # options hold it; the count `evidence?theme=` lists.
                 document_count=len(
                     set().union(*(documents_by_option.get(oid, set()) for oid in option_ids))
@@ -4777,7 +4780,7 @@ def _option_documents(
             )
             .where(fru.c.task_id.in_({m.unit_task_id for m in linked}))
             .where(fru.c.finding_id.in_([m.unit_id for m in linked]))
-            # Only a task this one is linked from (S2): a membership row's
+            # Only a task this one is linked from: a membership row's
             # task id is not trusted on its own.
             .where(
                 select(task_link.c.link_id)
@@ -4869,7 +4872,7 @@ def _option_documents(
             country = None  # a linked finding carries no study_country
             metadata, locator = _as_mapping(finding.metadata), finding.source_locator
             doc_id = tss_id if tss_id is not None else finding.source_snapshot_id
-            line_record = None  # a linked finding has no intervention record (C6)
+            line_record = None  # a linked finding has no intervention record
         evidence_type, tier = _label_fields(label)
         title = _title(metadata, locator)
         out.append(
@@ -4969,7 +4972,7 @@ def _place_sentences_out(
     ]
 
 
-#: A child walk's status → the option row's search status (task 058, N22).
+#: A child walk's status → the option row's search status.
 _SEARCH_STATUS: dict[str, OptionSearchStatus] = {
     "running": "searching",
     "paused": "searching",

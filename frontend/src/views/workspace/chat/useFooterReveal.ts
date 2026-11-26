@@ -8,7 +8,7 @@ const OVERSCROLL_TO_OPEN = 80;
 /** Scrolling this far back up hides the footer again. */
 const HIDE_BEYOND = 120;
 
-/** The Agent tab's footer reveal (038 V8, owner 2026-09-05): the site footer
+/** The Agent tab's footer reveal: the site footer
  *  under the conversation opens only when the reader keeps scrolling down
  *  while already at the transcript's end — a deliberate nudge, not merely
  *  arriving there — so the composer can rest at the bottom of the screen

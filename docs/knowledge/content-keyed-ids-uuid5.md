@@ -3,7 +3,14 @@ type: Convention
 title: Content-keyed identity via uuid5 — deterministic ids beat run-keyed uuid4 where fixtures pin byte-equality
 description: 028's theme_id = uuid5(namespace, f"{task_id}:{theme_name}") keeps stub runs byte-identical across re-runs and gives bookmarks/filters a durable key with no new table — but the identity is only as stable as the content it hashes; a re-characterise that reproduces a theme name byte-identically keeps its id, any wording drift mints a new one. Renames preserve the id by design (the payload name changes, the id does not).
 tags: [identity, uuid5, determinism, themes, fixtures, task-028]
-timestamp: 2026-08-05
+generated:
+  by: process:okf-migrate
+  at: 2026-08-05
+sources:
+  - resource: "backend/src/policy_atlas/evidence_search/corpus/characterise.py"
+    title: "`backend/src/policy_atlas/evidence_search/corpus/characterise.py` (theme_id minting)"
+  - resource: "backend/src/policy_atlas/api/continuation.py"
+    title: "`backend/src/policy_atlas/api/continuation.py` (`_apply_theme_renames` keeps ids)"
 ---
 
 # Rule
@@ -29,10 +36,3 @@ Where an entity needs a durable public id but no dedicated table —
   consumers will otherwise assume table-grade durability.
 - Filters must key on the id, never the name
   (`source_tag.theme_id`), because tag rows keep historical names.
-
-# Citations
-
-- `backend/src/policy_atlas/evidence_search/corpus/characterise.py`
-  (theme_id minting)
-- `backend/src/policy_atlas/api/continuation.py` (`_apply_theme_renames`
-  keeps ids)

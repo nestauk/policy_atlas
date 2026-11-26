@@ -101,9 +101,9 @@ class StageFailedFrame(_StageFrameBase):
 
 
 #: What a live-artefact section is, so the page orders live sections by the
-#: same rule as the saved report (task 058, round 7). ``intro`` is the short
+#: same rule as the saved report. ``intro`` is the short
 #: paragraph the saved report shows under "Full report", before the body
-#: sections (round 8).
+#: sections.
 LiveSectionRole = Literal["key_findings", "case_studies", "body", "intro"]
 
 
@@ -429,7 +429,7 @@ class ArtefactSourceNoteFrame(BaseModel):
     occurred_at: datetime
 
 
-#: What a search query is (task 058, round 9): a written topic query, a
+#: What a search query is: a written topic query, a
 #: meaning-based (semantic) query, a pass following citations, or a pass
 #: looking up cited works by id.
 SearchQueryKind = Literal["topic", "semantic", "citations", "lookup"]

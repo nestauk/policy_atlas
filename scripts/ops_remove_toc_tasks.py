@@ -2,7 +2,7 @@
 """Permanently delete theory-of-change tasks, so the database change can be undone.
 
 What it is for
-    Task 054 added a database revision (``9127f849697f``) with the theory-of-change
+    Database revision ``9127f849697f`` adds the theory-of-change
     tables. Undoing that revision (an Alembic "downgrade") refuses while any
     theory-of-change task exists, because dropping the tables would leave those
     tasks half-deleted. This script removes those tasks completely, so the
@@ -14,7 +14,7 @@ What it deletes
     (boxes, links, pathways, band items, judgements, figures), its walks (runs), intent
     records (scopes), events, document membership rows, plans, Task Agent
     transcripts and conversations. The documents themselves (``source_snapshot``)
-    are shared between tasks and are kept. Uploaded files (increment 5) are
+    are shared between tasks and are kept. Uploaded files are
     deleted from the upload store (S3, or the local folder) after the database
     change commits; a file that cannot be deleted is logged with its key.
 

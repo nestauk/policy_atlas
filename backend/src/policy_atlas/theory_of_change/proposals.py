@@ -1,4 +1,4 @@
-"""Edits Policy Atlas proposes, waiting for the user (task 054, C45, C46).
+"""Edits Policy Atlas proposes, waiting for the user.
 
 The review after edits and the Task Agent's chat both return edits from one
 closed list (:class:`EditOpWire`). They are stored as one ``toc_proposal`` row;
@@ -201,7 +201,7 @@ def apply_op(
     op: dict[str, Any],
     created: dict[str, str],
 ) -> None:
-    """Apply one accepted edit as the user's own (C45).
+    """Apply one accepted edit as the user's own.
 
     Args:
         conn: Open transaction.

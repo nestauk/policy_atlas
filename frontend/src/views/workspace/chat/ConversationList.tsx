@@ -18,7 +18,7 @@ export type ConversationRow = components["schemas"]["ConversationListItemOut"];
  *
  * The list body itself, with no chrome of its own: the Agent tab mounts it
  * in its sidebar, and the overlay mounts the same body behind its header's
- * list toggle (038 V8 — one list, two frames). Rows carry a
+ * list toggle (one list, two frames). Rows carry a
  * title and nothing else — the selected row and the pinned Task Agent are
  * marked the way the Result tab's contents nav marks its place (a 2px blue
  * rule on the left), and a row's actions surface on hover or focus.
@@ -71,7 +71,7 @@ export function ConversationList({
   // The Task Agent is always listed: a run closes the task_agent lineage, and
   // the active listing then carries no task_agent row at all — the row here is
   // the task_agent thread itself (`TASK_AGENT_TAB_ID`), which every consumer
-  // resolves to the Task Agent (038 V8 build finding on completed tasks).
+  // resolves to the Task Agent (this matters on completed tasks).
   const pinned: ConversationRow =
     activeRows.find((row) => row.id === taskAgentId) ?? syntheticRow(TASK_AGENT_TAB_ID, "task_agent", COPY.taskAgent);
   const rest = activeRows.filter((row) => row.id !== pinned.id);
@@ -150,7 +150,7 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
   const isTaskAgent = row.kind === "task_agent";
   // A task_agent row is named by its label, never by the stored title (the
   // runtime writes "Planning" there): exactly one is the Task Agent, and any
-  // older lineage reads "Earlier plan" (contract § V8, invariant I8 / A10).
+  // older lineage reads "Earlier plan".
   const label = isTaskAgent ? (row.id === taskAgentId ? COPY.taskAgent : COPY.earlierPlan) : scrub(row.title);
   const selected = row.id === selectedId;
   const cancelled = useRef(false);
@@ -201,7 +201,7 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
       >
         {isTaskAgent && <FoldMarkIcon size={10} className="text-blue" />}
         {/* A chat's title, written by the backend from its first message
-            and put in the cached reads (round 14), is revealed as the task's
+            and put in the cached reads, is revealed as the task's
             name is; the reader's own rename remounts the label and commits. */}
         {isTaskAgent ? <span className="truncate">{label}</span> : <ChangingText text={row.title} testIdPrefix="chat-title" />}
       </button>

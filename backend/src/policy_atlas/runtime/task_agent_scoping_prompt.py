@@ -58,18 +58,18 @@ from policy_atlas.runtime.task_agent_prompt import (
 TASK_AGENT_SCOPING_PROMPT_VERSION = "task_agent_scoping_v7"
 
 # Reasoning model: the cap covers reasoning and output tokens.
-SCOPING_MAX_OUTPUT_TOKENS = 16_384
+SCOPING_MAX_OUTPUT_TOKENS = 18_432
 
-# One linked task's context is fenced whole (owner: no size cap, the reports
+# One linked task's context is fenced whole (no size cap: the reports
 # are nowhere near long enough). This is a bound against a runaway artefact,
 # not a filter: well above any report the product has written.
 LINKED_CONTEXT_MAX = 60_000
 
 # Depth labels the user sees. Ids are stable option ids, never shown; the
-# labels and subs are the screen words (A8: never the internal keys).
+# labels and subs are the screen words (never the internal keys).
 DEPTH_OPTION_IDS: dict[str, str] = {"rapid_pass": "rapid", "standard_pass": "standard"}
 
-# Risk appetite option ids → plan values (task 055, contract S2, S26, A14).
+# Risk appetite option ids → plan values.
 # The same pattern as depth: stable ids, never shown; the labels are the
 # screen words.
 APPETITE_OPTION_IDS: dict[str, str] = {

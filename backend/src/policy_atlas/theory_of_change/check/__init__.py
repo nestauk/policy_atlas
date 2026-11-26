@@ -1,4 +1,4 @@
-"""The check walk: the steps that test a theory of change against the evidence (task 054).
+"""The check walk: the steps that test a theory of change against the evidence.
 
 One module per chain step, with its prompt beside it as ``*_prompt.py``:
 ``selecting`` (``toc_select`` and ``toc_search_new``), ``discover``, ``merge``,

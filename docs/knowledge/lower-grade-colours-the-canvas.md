@@ -1,31 +1,35 @@
 ---
 type: Domain concept
-title: A connection is coloured by the lower of its two grades, so a strict "holds here" judge greys the whole canvas
-description: Each link answers worked elsewhere and holds here; the canvas shows the lower grade. When a canvas looks empty, read the holds-here rate first: in task 054's first live run 12 of 20 links had no holds-here evidence because the judge did not count a UK study as England evidence, and the judge prompt, not the search, was the fix.
-tags: [theory-of-change, judge, grades, canvas, task-054]
-timestamp: 2026-11-05
+title: A link's verdict is a weighted score over its judged documents; a pathway shows its lowest link
+description: Each theory-of-change link gets one verdict from the judged documents (quality times relevance, weighted support). A pathway shows the lowest verdict of its links. When a canvas looks empty, read the judge's relevance scores before the search.
+tags: [theory-of-change, judge, verdict, canvas]
+generated:
+  by: claude-opus/5.5
+  at: 2026-11-20
+sources:
+  - id: grade
+    resource: backend/src/policy_atlas/theory_of_change/check/grade.py
+    title: link_verdict and lowest
+  - id: adr-0042
+    resource: docs/adr/0042-theory-of-change-task-kind.md
+    title: ADR 0042, theory of change task kind
 ---
 
 # Rule
 
-- The link's colour is `min(worked_elsewhere, holds_here)` (`check/grade.py`, the only
-  place a grade is decided).
-- Diagnose an empty-looking canvas in this order: the holds-here rate per link, then the
-  search (did the policy source answer: an Overton 401 falls back to academic sources without
-  failing, see [missing-source-key-fails-open](missing-source-key-fails-open.md)), then the
+- `check/grade.py` is the only place a verdict is decided. `link_verdict` weighs each judged
+  document by quality times relevance, then reads the weighted support and the share that
+  refutes. Below a minimum total weight the link is "Not enough evidence".
+- A pathway's verdict in the report is the lowest verdict of its links (`lowest`).
+- Diagnose an empty-looking canvas in this order: the judge's relevance scores (does a study
+  done in the United Kingdom count for England?), then the search (did the policy source
+  answer? see [missing-source-key-fails-open](missing-source-key-fails-open.md)), then the
   pool size.
-- A judge rule change is a prompt edit: re-pin the hash and replay on the fixed topics.
+- A change to the judge's rule is a prompt edit: re-pin the prompt hash and replay on fixed
+  topics.
 
 # Why
 
-Task 054's first live run (2026-10-26): a 2012 UK study was `challenges` for worked elsewhere
-and `not_about` for holds here, and 12 of 20 links had no holds-here evidence. The judge's
-holds-here definition was the target (`toc_judge_v2`: a study done in the stated place, or in
-the UK for England, answers holds here as it answers worked elsewhere).
-
-# Citations
-
-- `backend/src/policy_atlas/theory_of_change/check/grade.py`;
-  `check/judge_prompt.py`
-- [054 verification § First try, findings 2](../tasks/054-toc-integration/verification.md)
-  and § Iteration log, loop 1
+Low relevance makes each document weigh little, so many links fall below the minimum weight
+and the canvas shows "Not enough evidence" everywhere. The cause is then the judge, not the
+search.

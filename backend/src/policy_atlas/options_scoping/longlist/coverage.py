@@ -1,38 +1,38 @@
-"""The source-quality profile: an option's deterministic coverage (task 045, S8).
+"""The source-quality profile: an option's deterministic coverage.
 
 Per option, from its membership alone — no model call, the same inputs always
 give the same JSON: documents by evidence type and quality tier (through the
 label resolver, :func:`~policy_atlas.options_scoping.labels.labels_for_snapshots`),
 by role, settings, *tried on* (the units of the ``adjacent`` members), the
 evaluated countries and the outcome counts; flagged documents
-(``design_feature_not_stated``, D11) and ``abstract_only`` counted. Display
+(``design_feature_not_stated``) and ``abstract_only`` counted. Display
 and a later sort, never "how sure" (ruling 33).
 
-The setting pass (task 046, S11), on this read side only — the stored record
+The setting pass, on this read side only — the stored record
 is never rewritten: a setting that names a place is read as the record's
 study geography (when it has none) or left out of the facet, each a logged
 repair, and the remaining settings' spelling variants are grouped into one
 facet label (:data:`SETTING_FOLDS`).
 
-The outcome counts (R42, R56) give, in documents, how many evaluated the option
+The outcome counts give, in documents, how many evaluated the option
 (a member with role ``evaluated``) and, per plan outcome, how many documents of
 any role have a member whose ``outcome_tag`` is that outcome (case and
 whitespace folded, as the longlist reads the tag) and, separately, how many of
 those have an ``evaluated`` member with that tag; ``other`` and no tag count for
 no outcome. Counts only: no direction, no size. Given the list's Measures
-folding map (task 046, amendment 3, S21, S24), a plan outcome's row also
+folding map, a plan outcome's row also
 counts the documents whose records are tagged ``other`` or not tagged and
-whose Measures kind is that outcome's own text (A4), and
+whose Measures kind is that outcome's own text, and
 ``outcome_counts.other`` lists the other kinds, counting only such records.
 Without the map ``other`` is empty.
 
-**Counting grain (D16, A8, A20).** Every count is a count of *documents*,
+**Counting grain.** Every count is a count of *documents*,
 and documents are collapsed by DOI: two documents whose normalised DOI is
 the same count once; a document without a DOI counts as itself.
 
 **Labels.** Unknown and Non-evidence are their own evidence-type buckets
 (they are classification results); a document with no label (the resolver's
-``absent``) is ``not rated``; an Unrated appraisal (no score, task 056) is its
+``absent``) is ``not rated``; an Unrated appraisal (no score) is its
 own tier bucket, ``Unrated``, never folded into ``not rated`` or a score; an
 inherited label counts as its type and tier, and ``inherited_labels`` says how
 many documents' labels came through a link.
@@ -75,10 +75,10 @@ NOT_RATED = "not rated"
 #: membership, so it has no bucket).
 ROLE_BUCKETS: tuple[str, ...] = ("evaluated", "described", "recommended", "mentioned")
 
-#: At most this many *tried on* units per option (AM20).
+#: At most this many *tried on* units per option.
 TRIED_ON_MAX = 8
 
-#: The two folded facets and the record field each folds (R54, R55).
+#: The two folded facets and the record field each folds.
 FOLD_FIELDS: dict[str, str] = {"tried_on": "unit", "measures": "outcome"}
 
 #: The outcome tag of a record whose outcome is not a plan outcome.
@@ -162,18 +162,16 @@ class CoverageMember:
         setting: The record's setting text.
         outcome: The record's outcome text.
         study_geography: The record's study geography text.
-        programme_name: The record's programme name (task 046, amendment 3),
+        programme_name: The record's programme name,
             ``None`` for a linked finding.
-        study_country: The record's study country (task 046, amendment 3),
+        study_country: The record's study country,
             ``None`` for a linked finding.
         intervention: The record's intervention name.
-        unit_tag: The record's unit tag, ``None`` when not tagged
-            (task 046).
+        unit_tag: The record's unit tag, ``None`` when not tagged.
         outcome_tag: The record's outcome tag (a plan outcome's text or
-            ``other``), ``None`` when not tagged and for a linked finding
-            (R42).
+            ``other``), ``None`` when not tagged and for a linked finding.
         year: The document's publication year, ``None`` when absent or
-            malformed (task 055, A3).
+            malformed.
     """
 
     unit_kind: str
@@ -284,8 +282,7 @@ class _Tally:
         )
 
 
-#: Country adjectives read as a leading country word in a programme name
-#: (task 046, amendment 4, R88; S33).
+#: Country adjectives read as a leading country word in a programme name.
 COUNTRY_ADJECTIVES: tuple[str, ...] = (
     "british", "english", "scottish", "welsh", "irish", "american", "australian",
     "canadian", "dutch", "german", "french", "spanish", "swedish", "danish",
@@ -317,7 +314,7 @@ _COUNTRY_WORDS: frozenset[str] = frozenset(
 
 
 def fold_programme_name(name: str) -> tuple[str, str | None]:
-    """The fold keys of one programme name (task 046, amendment 4, R88; S33; contract review C16).
+    """The fold keys of one programme name.
 
     The key is the name with whitespace collapsed, casefolded, possessives
     and punctuation stripped, a leading "the " dropped and a trailing
@@ -344,7 +341,7 @@ def fold_programme_name(name: str) -> tuple[str, str | None]:
 
 
 def fold_programme_names(names: Iterable[str]) -> dict[str, str]:
-    """Group a programme's spellings and pick the shown one (task 046, amendment 4, R88; S33).
+    """Group a programme's spellings and pick the shown one.
 
     Two names fold when their keys are equal, when one's acronym key equals
     the other's key or acronym key, or when a leading country word stripped
@@ -437,7 +434,7 @@ def document_label(
 ) -> DocumentLabels | None:
     """The label one DOI-collapsed document counts under, as the coverage counts it.
 
-    Shared with the place sentences (task 046, amendment 4, R80; S31) so the
+    Shared with the place sentences so the
     two read one document's type and tier the same way.
 
     Args:
@@ -452,7 +449,7 @@ def document_label(
 
 
 def distinct_words(members: Iterable[CoverageMember], facet: str) -> list[str]:
-    """The distinct words of one folded facet over ``members`` (S21).
+    """The distinct words of one folded facet over ``members``.
 
     Whitespace collapsed, de-duplicated case-folded, sorted; each word shown
     in the first spelling of that order.
@@ -479,7 +476,7 @@ def distinct_words(members: Iterable[CoverageMember], facet: str) -> list[str]:
 
 
 def stored_folds(option_profile: object) -> dict[str, dict[str, str]] | None:
-    """The list's folding maps as ``option_profile`` stored them (S21).
+    """The list's folding maps as ``option_profile`` stored them.
 
     Args:
         option_profile: A ``longlist_result.option_profile`` value.
@@ -545,7 +542,7 @@ def fold_kind(lookup: Mapping[str, str], text: str | None) -> str | None:
 def plan_outcome_named(tag: str | None, plan_outcomes: Sequence[str]) -> str | None:
     """The plan outcome an ``outcome_tag`` names, in the plan's words.
 
-    Case and whitespace folded, as the outcome counts compare (R42).
+    Case and whitespace folded, as the outcome counts compare.
 
     Args:
         tag: The record's ``outcome_tag``, or ``None``.
@@ -561,7 +558,7 @@ def plan_outcome_named(tag: str | None, plan_outcomes: Sequence[str]) -> str | N
 
 
 def _untagged(member: CoverageMember) -> bool:
-    """A record tagged ``other`` or not tagged (A4)."""
+    """A record tagged ``other`` or not tagged."""
     return not member.outcome_tag or fold_text(member.outcome_tag) == OTHER_OUTCOME_TAG
 
 
@@ -588,11 +585,11 @@ def option_coverage(
     Args:
         members: The option's membership rows, as coverage reads them.
         labels: The label resolver's answer per ``tss_id``.
-        folded_seeds: The options discovery folded into this one (task 046),
+        folded_seeds: The options discovery folded into this one,
             named under ``folded``.
-        plan_outcomes: The plan's outcome texts, in plan order (R42).
+        plan_outcomes: The plan's outcome texts, in plan order.
         folds: The list's folding maps, ``{"tried_on": {word: kind},
-            "measures": {word: kind}}`` (S21); ``None`` leaves
+            "measures": {word: kind}}``; ``None`` leaves
             ``outcome_counts.other`` empty.
         where_country: The plan's Where as one country's short name (the
             caller resolves it, :func:`~.where_tried.resolve_country`); it
@@ -613,8 +610,8 @@ def option_coverage(
         short name, "not stated", "multiple countries" and "other" left out; a
         country the resolver does not know kept as written; the Where country
         first, then documents descending, then name) · ``outcomes_evaluated``
-        (the ``by_outcome`` rows with ``evaluated`` ≥ 1) (task 046, amendment
-        4, R76, R87; S29, S32) — every count in DOI-collapsed documents.
+        (the ``by_outcome`` rows with ``evaluated`` ≥ 1)
+        — every count in DOI-collapsed documents.
 
     A record's ``study_geography`` that is its own country's name (or a
     country's name on a record with no country) is read as the country
@@ -694,7 +691,7 @@ def option_coverage(
                 other_kinds.show(kind_key, kind)
                 if not _untagged(m):
                     continue
-                # A4: a record tagged other (or not tagged) whose kind is a
+                # A record tagged other (or not tagged) whose kind is a
                 # plan outcome counts on that outcome's row; any other kind
                 # counts under ``other``.
                 if kind_key in outcome_documents:
@@ -715,8 +712,7 @@ def option_coverage(
         abstract_only += int(all(m.basis == "abstract_only" for m in doc_members))
         if evaluated:
             # The evaluated country is read from the evaluating members only: a
-            # describing record of the same document names no evaluated place
-            # (review of task 046, 2026-10-12).
+            # describing record of the same document names no evaluated place.
             evaluated_top, _ = document_where(
                 (m.study_country, m.study_geography) for m in evaluated
             )
@@ -779,7 +775,7 @@ def option_coverage(
                 for outcome in plan_outcomes
             ],
             # Each Measures kind that is not a plan outcome, counting only
-            # records tagged other or not tagged (A4).
+            # records tagged other or not tagged.
             "other": [
                 {
                     "kind": kind,

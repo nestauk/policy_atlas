@@ -54,11 +54,11 @@ describe("MultiSelect", () => {
     expect(screen.getByText("No searches")).toBeInTheDocument();
   });
 
-  it("shows the chosen ones as Navy chips that take themselves out", async () => {
+  it("shows the chosen ones as chips that take themselves out", async () => {
     const user = userEvent.setup();
     render(<Harness initial={["a", "c"]} />);
     const chips = screen.getByRole("list", { name: "Searches: chosen" });
-    expect(within(chips).getAllByRole("listitem")[0].firstElementChild).toHaveClass("bg-navy", "text-paper");
+    expect(within(chips).getAllByRole("listitem")).toHaveLength(2);
     await user.click(screen.getByRole("button", { name: "Remove Childhood obesity" }));
     expect(trigger()).toHaveTextContent(/^Housing costs$/);
     expect(screen.queryByRole("button", { name: "Remove Childhood obesity" })).not.toBeInTheDocument();

@@ -422,7 +422,7 @@ def openalex_query(intent: str) -> str:
     OpenAlex's stemmed ``search`` answers HTTP 400 to a query containing ``?`` or ``*``
     ("Wildcards require exact (no-stem) search"), so a question-shaped intent loses its
     question mark here. The second allowed change to the intent text, after the Semantic
-    Scholar hyphen rule (D1).
+    Scholar hyphen rule.
     """
     return intent.rstrip("?").rstrip()
 

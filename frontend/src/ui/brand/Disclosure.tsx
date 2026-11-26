@@ -5,7 +5,7 @@ import { cn } from "./cn";
 import { ChevronIcon } from "./icons";
 
 /**
- * The one rotating chevron (task 058, consolidation batch B; DESIGN.md §
+ * The one rotating chevron (DESIGN.md §
  * Disclosure): the 12 px glyph pointing right when shut, turning down over
  * 200 ms on the strong ease-out as it opens, at a cut under reduced motion.
  * Grey, turning Navy with its control's hover: the control carries `group`.
@@ -34,7 +34,7 @@ export function DisclosureChevron({ open = false, className }: { open?: boolean;
 }
 
 /**
- * The report's one disclosure vocabulary (round 10, C7): the chevron, then
+ * The report's one disclosure vocabulary: the chevron, then
  * "Show" or "Hide", Grey Semibold Meta over a Line 2 underline that turns
  * Navy on hover, as the trace's "Show steps" and the search queries' "Show".
  * The chevron points right when shut and turns down as it opens (200 ms).

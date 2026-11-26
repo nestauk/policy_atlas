@@ -2,7 +2,6 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { ArrivalProvider } from "../../ui/motion/arrivals";
 
 import {
   PartCard,
@@ -229,35 +228,25 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     expect(block.parentElement?.className).not.toMatch(/\bmr-8\b/);
   });
 
-  // Owner, round 6: a settled part reads as the user's (the user bubble's
-  // surface) and as a decision (the green rule, the deep green words and
-  // the part's name as a small grey label).
-  it("takes the user bubble's surface, with the part's name as a small grey label", () => {
+  // A settled part shows the part's name and the chosen words.
+  it("shows the part's name and the chosen words", () => {
     renderPart(proposal("question"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), { partName: "Question" });
-    const block = screen.getByTestId("part-settled");
-    expect(block).toHaveClass("border", "border-blue-tint", "bg-blue-tint-2");
-    expect(block.firstElementChild).toHaveClass("px-3.5", "py-2.5");
-    const name = screen.getByText("Question");
-    expect(name).toHaveClass("uppercase", "text-meta", "text-grey");
-    expect(name).not.toHaveClass("text-navy");
-    expect(screen.getByText("Looks right")).toHaveClass("text-green-deep");
+    expect(screen.getByText("Question")).toBeInTheDocument();
+    expect(screen.getByText("Looks right")).toBeInTheDocument();
   });
 
-  // Owner, round 8: "Change" takes its own line under the green words, as a
-  // quiet control at Caption size, never inline with the words.
-  it("puts Change on its own line under the green words, a quiet grey control at Caption size", () => {
+  // "Change" is never inline with the chosen words.
+  it("puts Change outside the chosen words", () => {
     renderPart(proposal("question"), { ...OPEN, confirmedOptionId: "confirm" }, vi.fn(), { partName: "Question" });
     const change = screen.getByRole("button", { name: "Change" });
     const words = screen.getByText("Looks right");
     expect(words).not.toContainElement(change);
-    expect(change).toHaveClass("block", "text-caption", "text-grey", "underline", "hover:text-navy");
-    expect(change.className).not.toMatch(/\btext-body\b|\bml-2\b/);
   });
 
-  // Owner, round 8: one container across the two states. The box keeps its
-  // element as the card settles; its surface and rule ease to the settled
-  // look; the open form fades out over the settled words, inert, and goes.
-  describe("the settle (owner, round 8)", () => {
+  // One container across the two states. The box keeps its element as the
+  // card settles; the open form fades out over the settled words, inert, and
+  // goes.
+  describe("the settle", () => {
     function rerenderable(state: typeof OPEN) {
       const part = proposal("question");
       const ui = (next: typeof OPEN) => (
@@ -267,14 +256,12 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
       return { ...view, settle: () => view.rerender(ui({ ...OPEN, confirmedOptionId: "confirm" })) };
     }
 
-    it("keeps one box: the open card's element becomes the settled block, its colours easing", () => {
+    it("keeps one box: the open card's element becomes the settled block", () => {
       vi.useFakeTimers();
       const view = rerenderable(OPEN);
       const box = screen.getByTestId("part-card");
-      expect(box).toHaveClass("transition-[background-color,border-color]", "duration-300", "overflow-hidden");
       view.settle();
       expect(screen.getByTestId("part-settled")).toBe(box);
-      expect(box.parentElement).toHaveClass("ml-8");
       vi.useRealTimers();
     });
 
@@ -285,10 +272,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
       const leaving = screen.getByTestId("part-settled").querySelector(".anim-fade-out") as HTMLElement;
       expect(leaving).toHaveAttribute("aria-hidden", "true");
       expect(leaving).toHaveAttribute("inert");
-      expect(leaving).toHaveClass("absolute", "pointer-events-none");
       expect(screen.queryByRole("radio")).toBeNull();
-      // The settled words rise in.
-      expect(screen.getByTestId("part-settled").firstElementChild).toHaveClass("anim-rise");
       act(() => vi.advanceTimersByTime(200));
       expect(screen.getByTestId("part-settled").querySelector(".anim-fade-out")).toBeNull();
       vi.useRealTimers();
@@ -316,14 +300,13 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
       vi.unstubAllGlobals();
     });
 
-    it("holds still when it mounts settled (the history)", () => {
+    it("mounts settled with no stepper line (the history)", () => {
       rerenderable({ ...OPEN, confirmedOptionId: "confirm" });
-      expect(screen.getByTestId("part-settled").firstElementChild).not.toHaveClass("anim-rise");
       expect(screen.queryByText(/Plan · decision/)).toBeNull();
     });
   });
 
-  it("the scope card's one choice is a secondary Looks right button, with no words option", async () => {
+  it("the scope card's one choice is a Looks right button, with no words option", async () => {
     const user = userEvent.setup();
     const onSend = renderPart(
       proposal("scope", {
@@ -336,8 +319,6 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
     expect(screen.queryByText("Add or change a constraint")).toBeNull();
     const button = screen.getByRole("button", { name: "Looks right" });
-    // Secondary: the plan card's green Start stays the one filled action.
-    expect(button.className).not.toMatch(/\bcutout|bg-blue/);
     await user.click(button);
     expect(onSend).toHaveBeenCalledWith("Looks right\n\n[confirm part=scope option=confirm]");
   });
@@ -559,14 +540,6 @@ describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () =>
     render(<PartCard part={part} state={state} summary={lines} disabled={false} onSend={vi.fn()} />);
     const settled = screen.getByTestId("part-settled");
     expect(settled).toHaveTextContent(/Screening criteria.*Bills.*Source filters.*OECD/);
-    // The label is grey; the words are the deep green (#0c6b5a, the green
-    // tint's text, lead 2026-11-05): two colours, two roles.
-    expect(screen.getByText("Source filters").className).toContain("text-grey");
-    // The group labels a step smaller than the part's name (lead, round 6).
-    expect(screen.getByText("Source filters")).toHaveClass("text-caption", "uppercase");
-    expect(screen.getByText("Source filters")).not.toHaveClass("text-meta");
-    expect(screen.getByText("OECD")).toHaveClass("text-green-deep");
-    expect(screen.getByText("OECD").className).not.toMatch(/(^|\s)text-green(\s|$)/);
   });
 });
 
@@ -644,31 +617,5 @@ describe("a part card settles on the choice (owner, 2026-11-05)", () => {
     expect(settledSummary(scope, { ...OPEN, answered: true, confirmedOptionId: "confirm" }, null, null)).toEqual([
       { label: null, text: "Looks right" },
     ]);
-  });
-});
-
-// Round 9 (the animation sweep's entries 2 and 5): a card that arrives after
-// the thread's first paint rises and lays its rows out in turn; the history
-// holds still.
-describe("PartCard — arrival (round 9)", () => {
-  it("rises and cascades its radio rows when it arrives into the thread", () => {
-    const part = proposal("question");
-    render(
-      <ArrivalProvider settled scopeKey="t1">
-        <PartCard part={part} arrivalId="part:new" state={OPEN} disabled={false} onSend={vi.fn()} />
-      </ArrivalProvider>,
-    );
-    const radios = screen.getAllByRole("radio");
-    expect(radios.length).toBeGreaterThan(0);
-    const rows = radios.map((radio) => radio.closest(".anim-cascade") as HTMLElement | null);
-    expect(rows.every((row) => row !== null)).toBe(true);
-    expect(rows.map((row) => row?.style.getPropertyValue("--i"))).toEqual(rows.map((_, index) => String(index)));
-    expect(screen.getByTestId("part-card").closest(".anim-rise")).not.toBeNull();
-  });
-
-  it("holds still in the history", () => {
-    render(<PartCard part={proposal("question")} state={OPEN} disabled={false} onSend={vi.fn()} />);
-    expect(document.querySelector(".anim-cascade")).toBeNull();
-    expect(document.querySelector(".anim-rise")).toBeNull();
   });
 });

@@ -22,7 +22,7 @@ import { useChainStart, waitsForCheck } from "./workspace/tocWalks";
 const NO_STREAM = createInitialRunStreamState();
 
 /** The separator between items. A no-break space binds each "·" to the word
- *  before it, so a separator never starts a line (lead, 2026-11-05). */
+ *  before it, so a separator never starts a line. */
 const SEP = " · ";
 
 /** The sidebar shows from `md` up (`ChatSidePanel` is `max-md:hidden`);
@@ -57,7 +57,7 @@ type Shown = {
 /** Whether the reader is already on the view a link opens: the themes are
  *  the Sources tab's index, so only its own path counts; any other view
  *  counts with whatever sits under it. A link that names a Result view
- *  (`?view=baseline`, round 10) counts only on that view, or on the Result
+ *  (`?view=baseline`) counts only on that view, or on the Result
  *  tab with no view named: a baseline walk runs only while the task has no
  *  longlist (the plan offers no rebuild after one), so the Result tab is
  *  showing the baseline then. */
@@ -79,7 +79,7 @@ export function onLinkedView(pathname: string, href: string, search = ""): boole
 type Cause = { open: boolean; ticking: boolean; agentInSidebar: boolean; reconnecting: boolean; instant: boolean };
 
 /**
- * The run status bar (task 058, owner rounds 7 and 8): under the lifecycle tabs
+ * The run status bar: under the lifecycle tabs
  * on every tab but Agent, while a run is live or paused, and nowhere else.
  * It starts after the rail, so it belongs to the page beside the sidebar
  * (the shell places it at the top of the page's column). One line on paper
@@ -88,8 +88,8 @@ type Cause = { open: boolean; ticking: boolean; agentInSidebar: boolean; reconne
  * what it is doing in grey, and the run's elapsed time at the right in grey
  * tabular figures.
  *
- * The status bar is a bar of two controls (owner, round 9). Its words are the way
- * to the agent (owner, round 8, reversing contract D8's "status only"): they
+ * The status bar is a bar of two controls. Its words are the way
+ * to the agent: they
  * open the Task Agent in the sidebar, or the Agent tab below `md`, where the
  * sidebar does not show. After the time, the step in progress's view
  * ("Sources →", "Landscape →", "Themes →", "Report →") while the reader is
@@ -106,9 +106,8 @@ export function RunStatusBar() {
   const stream = live?.stream ?? NO_STREAM;
   const run = stream.run;
   const taskId = live?.taskId ?? "";
-  // The bar waits for the task's run read (owner, round 14: entering a
-  // finished task it flashed in and out while the stream replayed the
-  // run). It shows once that read has loaded, and never for the run the
+  // The bar waits for the task's run read, so it does not flash in and
+  // out on a finished task while the stream replays the run. It shows once that read has loaded, and never for the run the
   // read says has ended; a run newer than the read (just started) shows.
   const task = useTask(taskId);
   const latestRun = task.data?.latest_run ?? null;
@@ -117,7 +116,7 @@ export function RunStatusBar() {
     latestRun.capability_run_id === run?.id &&
     latestRun.status !== "running" &&
     latestRun.status !== "paused";
-  // A theory of change's automatic chain reads as one run (task 054, S10):
+  // A theory of change's automatic chain reads as one run:
   // the bar keeps its words between the draft and the check, and its timer
   // runs from the draft's start. Read from the stream alone: the bar has no
   // runs read.
@@ -132,15 +131,15 @@ export function RunStatusBar() {
   const wide = useSidebarAvailable();
   // While the Task Agent is open in the sidebar its trace says the same
   // words, so the status bar steps aside; it returns when the sidebar shuts or
-  // shows another conversation (lead, round 8).
+  // shows another conversation.
   // Closed Task Agent conversations count too: the one the sidebar shows
-  // closes when a walk ends (round 12).
+  // closes when a walk ends.
   const taskAgentRows = useConversations(taskId, { kind: "task_agent" }).data?.data ?? [];
   const agentInSidebar =
     wide && isTaskAgentConversation(activeConversationId, [...(conversations.data?.data ?? []), ...taskAgentRows]);
   const onPage = live !== null && live.tab !== null && live.tab !== "agent";
-  // A lapsed stream takes the bar's frame on every tab but Agent (owner,
-  // round 11): the reconnecting line replaces the bar's words, after the
+  // A lapsed stream takes the bar's frame on every tab but Agent:
+  // the reconnecting line replaces the bar's words, after the
   // rail, and the words come back when the stream returns. The Agent tab
   // shows it at the top of the Task Agent's column instead.
   const reconnecting = onPage && stream.connectionStatus === "reconnecting";
@@ -172,7 +171,7 @@ export function RunStatusBar() {
     setCause({ ...cause, ticking, agentInSidebar, reconnecting });
   }
 
-  // The step in progress's own view (owner, round 9): "Sources →",
+  // The step in progress's own view: "Sources →",
   // "Landscape →", "Themes →", "Report →" at the status bar's right end, the same
   // link the trace's running row carries, hidden while the reader is there.
   const rows = cardRows(stream.stages, stream.plan?.plan, run?.status);
@@ -233,7 +232,7 @@ export function RunStatusBar() {
         data-open={open}
         aria-hidden={open ? undefined : true}
         className={cn(
-          // Its own View Transition layer, held still (round 13, owner).
+          // Its own View Transition layer, held still.
           "grid shrink-0 [view-transition-name:run-status] [view-transition-class:shell-chrome]",
           "transition-[grid-template-rows,opacity] duration-200 ease-[var(--ease-out-strong)] motion-reduce:transition-none",
           open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
@@ -244,7 +243,7 @@ export function RunStatusBar() {
           {showReconnecting ? (
             <ReconnectingContent />
           ) : shown !== null && (
-            // Two controls on one bar (owner, round 9): the words open the
+            // Two controls on one bar: the words open the
             // Task Agent; the link after the time opens the step's view.
             <div className="flex items-stretch border-b border-line bg-paper text-meta leading-[1.55rem]">
             <button

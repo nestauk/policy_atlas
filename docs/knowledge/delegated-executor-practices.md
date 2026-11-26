@@ -3,7 +3,9 @@ type: Runbook
 title: Delegated-executor practices — Codex sandbox has no localhost DB; shared worktrees need ownership lists; killed workers resume by message
 description: Codex jobs cannot reach localhost Postgres, so delegated backend phases say "tests run lead-side" in the brief and the lead actually runs them before the gate; two codex jobs plus the lead can share one worktree when every brief carries an explicit file-ownership list; a fast-worker killed by a transient API stall resumes losslessly via SendMessage to the same agent id.
 tags: [codex, delegation, worktree, subagents, testing]
-timestamp: 2026-09-25
+generated:
+  by: process:okf-migrate
+  at: 2026-09-25
 ---
 
 # Rules

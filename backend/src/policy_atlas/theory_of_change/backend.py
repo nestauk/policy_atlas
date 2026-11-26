@@ -1,4 +1,4 @@
-"""The theory-of-change model seam (task 054): one backend for every ToC step.
+"""The theory-of-change model seam: one backend for every ToC step.
 
 Each method makes one call with its lead-authored prompt and returns the parsed
 wire with token usage; the step that calls it owns every semantic check (the
@@ -24,13 +24,14 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
     openai_kwargs,
     resolve_openai_client,
+    stream_turn,
     traced_parse,
     with_system_breakpoint,
 )
 from policy_atlas.core.usage import (
+    TokenUsage,
     UsageResult,
     log_usage,
-    token_usage_from_provider,
     usage_details,
     usage_metadata,
 )
@@ -170,7 +171,7 @@ class TocBackend(Protocol):
         on_text: Callable[[str], None],
         first_content_s: float | None,
     ) -> UsageResult[DraftResponse]:
-        """Write the same draft as :meth:`draft`, streamed (task 054, S12).
+        """Write the same draft as :meth:`draft`, streamed.
 
         One call, never retried. Each piece of the answer's JSON text goes to
         ``on_text`` as it arrives; the whole text is then parsed into
@@ -277,7 +278,7 @@ class TocBackend(Protocol):
         on_text: Callable[[str], None],
         first_content_s: float | None,
     ) -> UsageResult[ReportResponse]:
-        """Write the same report as :meth:`report`, streamed (task 054's 058 alignment, S4).
+        """Write the same report as :meth:`report`, streamed.
 
         One call, never retried. Each piece of the answer's JSON text goes to
         ``on_text`` as it arrives; the whole text is then parsed into
@@ -299,7 +300,7 @@ class TocBackend(Protocol):
         edits: list[str],
         report: dict[str, object] | None,
     ) -> UsageResult[ReviewResponse]:
-        """Review the theory's shape after the user's edits (``toc_review_v1``, C45)."""
+        """Review the theory's shape after the user's edits (``toc_review_v1``)."""
         ...
 
     def sense_check(
@@ -315,7 +316,7 @@ class TocBackend(Protocol):
         ...
 
     def import_theory(self, *, pages: list[str]) -> UsageResult[ImportResponse]:
-        """Transcribe an uploaded diagram (``toc_import_v1``, increment 5)."""
+        """Transcribe an uploaded diagram (``toc_import_v1``)."""
         ...
 
 
@@ -390,7 +391,7 @@ class OpenAITocBackend:
         )
 
     def draft_stream_request(self, messages: list[ChatCompletionMessageParam]) -> dict[str, Any]:
-        """The streamed draft call's request: :meth:`draft`'s request, streamed (task 054, S12).
+        """The streamed draft call's request: :meth:`draft`'s request, streamed.
 
         Args:
             messages: The draft call's messages (:func:`build_draft_messages`).
@@ -620,7 +621,7 @@ class OpenAITocBackend:
     def report_stream_request(
         self, messages: list[ChatCompletionMessageParam]
     ) -> dict[str, Any]:
-        """The streamed report call's request: :meth:`report`'s request, streamed (A12).
+        """The streamed report call's request: :meth:`report`'s request, streamed.
 
         Args:
             messages: The report call's messages (:func:`build_report_messages`).
@@ -725,18 +726,16 @@ class OpenAITocBackend:
         held: dict[str, Any] = {}
 
         def pieces() -> Iterator[str]:
-            completions: Any = self._client.chat.completions
-            stream = completions.create(**request)
+            # Sent here, not earlier, so the first-content watchdog covers the request.
+            stream = stream_turn(
+                self._client, label=step, **{k: v for k, v in request.items() if k != "stream"}
+            )
             held["stream"] = stream
-            for chunk in stream:
-                choices = getattr(chunk, "choices", None)
-                if choices:
-                    fragment = getattr(getattr(choices[0], "delta", None), "content", None)
-                    if isinstance(fragment, str) and fragment:
-                        yield fragment
-                chunk_usage = getattr(chunk, "usage", None)
-                if chunk_usage is not None:
-                    held["usage"] = chunk_usage
+            yield from stream
+
+        def streamed_usage() -> TokenUsage | None:
+            stream = held.get("stream")
+            return stream.usage if stream is not None else None
 
         def cancel() -> None:
             stream = held.get("stream")
@@ -750,12 +749,12 @@ class OpenAITocBackend:
                 text = consume(
                     pieces(), first_content_s=first_content_s, on_fragment=on_text, cancel=cancel
                 )
-                log_usage(f"{step}.usage", held.get("usage"))
+                log_usage(f"{step}.usage", streamed_usage())
                 wire = response_format.model_validate_json(text)
             except Exception as exc:
                 # The tokens used so far go with the failure, so the step's cost counts them.
-                raise StreamFailed(token_usage_from_provider(held.get("usage"))) from exc
-            usage = token_usage_from_provider(held.get("usage"))
+                raise StreamFailed(streamed_usage()) from exc
+            usage = streamed_usage()
             if span is not None:
                 span.update(
                     usage_details=usage_details(usage),
@@ -774,6 +773,7 @@ class OpenAITocBackend:
                 name=f"toc:{step.removeprefix('toc_')}",
                 as_type="generation",
             ) as span,
+            tracing.request_id_scope(span),
         ):
             return run(span)
 

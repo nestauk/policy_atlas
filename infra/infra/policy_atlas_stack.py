@@ -4,7 +4,7 @@
 # * Security groups: backend containers
 # * DB security group ingress rule so backend can reach RDS (port 5432)
 # * Listener rule on the shared ALB for host-header routing
-# * The queued document-ingest worker (task 057): queue, dead-letter queue,
+# * The queued document-ingest worker: queue, dead-letter queue,
 #   Lambda function and its dead-letter alarm (components/ingest_worker.py)
 #
 # Pre-requisites (deployed separately):
@@ -34,12 +34,13 @@ from aws_cdk import (
     aws_iam as iam,
 )
 from aws_cdk import Fn
-from infra.cognito_auth import CognitoAuth
+from infra.cognito_auth import CognitoAuth, sign_in_block
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
+from infra.components.security_headers import SecurityHeaders, content_security_policy
 from infra.components.waf import ApiFirewall
 
-# How the API reads documents' full text (task 057): "in_process" parses them
+# How the API reads documents' full text: "in_process" parses them
 # inside the API task as before; "queued" sends one message per document to
 # the ingest function. Set per environment in pa_config.json.
 INGEST_MODES = ("in_process", "queued")
@@ -48,7 +49,10 @@ INGEST_MODES = ("in_process", "queued")
 class PolicyAtlasStack(Stack):
     def __init__(self, scope: Stack, id: str, pa_config: dict,
                  certificate: acm.ICertificate, env_name: str,
-                 ops_allowlist_size: int = 1, **kwargs) -> None:
+                 ops_allowlist_size: int = 1,
+                 auth_certificate: acm.ICertificate | None = None,
+                 metabase_host: str | None = None,
+                 **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         pa_app_config = pa_config["policy_atlas_config"]
@@ -56,6 +60,8 @@ class PolicyAtlasStack(Stack):
         be_config = pa_app_config["backend"]
         ops_config = pa_app_config["ops"]
         self_signup_config = pa_app_config["self_signup"]
+        sign_in_config = sign_in_block(pa_app_config.get("sign_in"))
+        auth_domain = sign_in_config.get("domain")
 
         if type(ops_allowlist_size) is not int or not 1 <= ops_allowlist_size <= 8:
             raise ValueError("ops_allowlist_size must be an integer from 1 to 8")
@@ -76,11 +82,13 @@ class PolicyAtlasStack(Stack):
         shared_alb = shared_alb_imports.load_balancer
         shared_listener = shared_alb_imports.listener
 
-        # Task 064b: the firewall in front of the API (ADR 0047). Reads backend.waf
-        # from pa_config.json; nothing from it reaches the container.
+        # The firewall in front of the API, the ops pages and Metabase
+        # (ADR 0047). Reads backend.waf from pa_config.json; nothing from it
+        # reaches the container. metabase_host is None where the analytics
+        # stack is not deployed.
         ApiFirewall(self, "ApiFirewall",
             load_balancer_arn=shared_alb.load_balancer_arn,
-            api_host=be_domain,
+            hosts=[be_domain, ops_domain, *([metabase_host] if metabase_host else [])],
             domain_name=domain_name,
             waf_config=be_config.get("waf"),
         )
@@ -108,7 +116,7 @@ class PolicyAtlasStack(Stack):
         )
 
         # Which AI models the backend uses: a route name from the backend's
-        # committed file backend/src/policy_atlas/model_routes.toml (task 053).
+        # committed file backend/src/policy_atlas/model_routes.toml.
         # "openai-direct" calls OpenAI with OPENAI_API_KEY; a "bedrock-*" route
         # calls Amazon Bedrock with AWS_BEARER_TOKEN_BEDROCK. The Bedrock key is
         # only passed when a Bedrock route is chosen, because ECS refuses to start
@@ -116,7 +124,7 @@ class PolicyAtlasStack(Stack):
         # field to the app secret first, then switch the route in pa_config.json.
         model_route = be_config.get("model_route", "openai-direct")
         ingest_mode = be_config.get("ingest_mode")
-        # Task 054 (C15): the API creates theory-of-change tasks only where this
+        # The API creates theory-of-change tasks only where this
         # is "1". On in staging for colleagues to try; off in production until
         # the capability is complete.
         theory_of_change = "1" if be_config.get("theory_of_change") else "0"
@@ -192,6 +200,9 @@ class PolicyAtlasStack(Stack):
             domain_prefix=pa_app_config["cognito_domain_prefix"],
             email=pa_app_config.get("email"),
             extra_domains=[ops_domain],
+            sign_in=sign_in_config,
+            auth_certificate=auth_certificate,
+            hosted_zone=hosted_zone,
         )
         # One image build for three consumers: the API task, the migration
         # task and the ingest function (which starts it with another command).
@@ -209,9 +220,9 @@ class PolicyAtlasStack(Stack):
             model_route=model_route,
         )
 
-        # Files users give a task (task 054 increment 5; one bucket for every
-        # capability, owner 2026-11-03). Private, encrypted, HTTPS only, and kept
-        # if the stack is ever deleted: they are users' work. Only the backend
+        # Files users give a task (one bucket for every capability). Private,
+        # encrypted, HTTPS only, and kept if the stack is ever deleted: they are
+        # users' work. Only the backend
         # reads it; the browser never does.
         uploads_bucket = s3.Bucket(self, "UploadsBucket",
             bucket_name=be_config["upload_bucket_name"],
@@ -311,8 +322,8 @@ class PolicyAtlasStack(Stack):
             image=backend_image,
             # The login sync is idempotent and re-asserts the previous state on
             # failure, so it never fails the task after a committed migration:
-            # a public outage must not follow an ops-only step (review stack,
-            # 2026-11-17). deploy.sh checks the secret before starting ops.
+            # a public outage must not follow an ops-only step.
+            # deploy.sh checks the secret before starting ops.
             command=["sh", "-c", "alembic upgrade head && (python -m policy_atlas.ops.db_role sync || echo 'WARN: ops login sync failed; the ops service keeps its previous login')"],
             logging=ecs.LogDrivers.aws_logs(stream_prefix="Migrate",
                                             log_group=shared_log_group),
@@ -379,6 +390,15 @@ class PolicyAtlasStack(Stack):
         )
 
         # --- Ops service ---
+        # The sign-in addresses the browser talks to; both sites' Content
+        # Security Policies list them.
+        cognito_hosted_domains = [
+            f"https://{pa_app_config['cognito_domain_prefix']}.auth."
+            f"{self.region}.amazoncognito.com"
+        ]
+        if auth_domain:
+            # ADR 0049: our own sign-in address, beside the prefix address.
+            cognito_hosted_domains.append(f"https://{auth_domain}")
         # This runs the same image as the public API, but with only the credentials
         # and permissions needed by the operator-facing application.
         ops_task_def = ecs.FargateTaskDefinition(
@@ -403,8 +423,19 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_SELF_SIGNUP": "1" if self_signup_config["enabled"] else "0",
                 "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": str(self_signup_config["max_per_hour"]),
                 "OPS_UI_DIR": "/app/ops-ui",
+                # The ops pages' Content Security Policy (ADR 0048). The ops
+                # service sends it itself, because CloudFront does not serve
+                # these pages. csp_mode governs both sites.
+                "OPS_CONTENT_SECURITY_POLICY": content_security_policy(
+                    api_origin=None,
+                    cognito_region=self.region,
+                    cognito_hosted_domains=cognito_hosted_domains,
+                    waf_captcha=False,
+                    frame_ancestors="'none'",
+                ),
+                "OPS_CSP_MODE": pa_app_config.get("csp_mode") or "",
                 # The same limits as the API, so the ops pages' resolved
-                # limits agree with /me (review stack, 2026-11-17).
+                # limits agree with /me.
                 "RUNS_PER_USER": str(be_config["runs_per_user"]),
                 "TASK_QUOTA_PER_YEAR": str(be_config["task_quota_per_year"]),
                 "DB_POOL_SIZE": "5",
@@ -426,7 +457,7 @@ class PolicyAtlasStack(Stack):
             actions=[
                 "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
                 "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
-                "cognito-idp:AdminUserGlobalSignOut",
+                "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
             ],
             resources=[auth.user_pool.user_pool_arn],
         ))
@@ -438,7 +469,7 @@ class PolicyAtlasStack(Stack):
             service_name="policy-atlas-v3-ops-service",
             # Template-pinned at zero like the API's: deploy.sh scales it to
             # ops.desired_count only after the migration, the login sync and
-            # the public service are done (review stack, 2026-11-17).
+            # the public service are done.
             desired_count=0,
             min_healthy_percent=0,
             max_healthy_percent=100,
@@ -511,9 +542,16 @@ class PolicyAtlasStack(Stack):
         frontend_origin = cloudfront_origins.S3BucketOrigin.with_origin_access_control(
             frontend_bucket,
         )
-        # Review-stack hardening (026 step 7): baseline security headers (HSTS,
-        # X-Frame-Options, nosniff, referrer policy) on every response.
-        security_headers = cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS
+        # Task 064c / ADR 0048: application security headers on every response.
+        security_headers = SecurityHeaders(
+            self,
+            "SecurityHeaders",
+            csp_mode=pa_app_config.get("csp_mode"),
+            api_origin=f"https://{be_domain}",
+            cognito_region=self.region,
+            cognito_hosted_domains=cognito_hosted_domains,
+            waf_captcha=be_config["waf"]["captcha"],
+        ).policy
         # www is a courtesy alias only: 301 to the apex so Cognito callback
         # URLs and the API's single-origin CORS stay canonical (#53 follow-up).
         www_redirect = cloudfront.Function(self, "WwwRedirectFunction",

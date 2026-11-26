@@ -3,7 +3,9 @@ type: Integration quirk
 title: pip-audit's -r mode SIGABRTs under uv-managed CPython on macOS
 description: pip-audit's -r (requirements-file) mode unconditionally builds a throwaway venv via ensurepip, which crashes under uv-managed CPython on macOS; environment-mode audit over the synced lockfile closure is the CI-parity fix.
 tags: [pip-audit, uv, dependencies, integration-quirk, "016", security]
-timestamp: 2026-07-10
+generated:
+  by: process:okf-migrate
+  at: 2026-07-10
 ---
 
 # Rule

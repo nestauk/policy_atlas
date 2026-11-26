@@ -95,6 +95,15 @@ def expect_lookup(stubber: Stubber, *, email: str, sub: str | None) -> None:
     )
 
 
+def expect_enabled(stubber: Stubber, *, sub: str, enabled: bool = True) -> None:
+    """Queue the ``AdminGetUser`` that reads whether an existing account can sign in."""
+    stubber.add_response(
+        "admin_get_user",
+        {"Username": sub, "Enabled": enabled},
+        {"UserPoolId": POOL_ID, "Username": sub},
+    )
+
+
 def expect_status_lookup(stubber: Stubber, *, email: str, sub: str, status: str) -> None:
     """Queue one ``ListUsers`` by address answering with an account in ``status``.
 
@@ -210,13 +219,18 @@ def fresh_sub(label: str = "ops") -> str:
     return f"{label}-{uuid.uuid4()}"
 
 
-def expect_sub_lookup(stubber: Stubber, *, sub: str, status: str | None = None) -> None:
+def expect_sub_lookup(
+    stubber: Stubber, *, sub: str, status: str | None = None, email: str | None = None
+) -> None:
     """Queue one ``ListUsers`` by subject, answering with the account (and its status).
 
     ``Username`` is the subject, as in a pool whose sign-in alias is the email;
-    the resend addresses the account by it.
+    the resend addresses the account by it. ``email``, when given, is the
+    account's address attribute in the pool.
     """
     user: dict[str, Any] = {"Username": sub, "Attributes": [{"Name": "sub", "Value": sub}]}
+    if email is not None:
+        user["Attributes"].append({"Name": "email", "Value": email})
     if status is not None:
         user["UserStatus"] = status
     stubber.add_response(
@@ -246,6 +260,6 @@ def expect_resend(stubber: Stubber, *, username: str) -> None:
 
 
 def expect_lock_out(stubber: Stubber, *, sub: str) -> None:
-    """Queue the disable then the global sign-out of ``user offboard``, in that order."""
+    """Queue the disable then the global sign-out of ``user deactivate``, in that order."""
     for operation in ("admin_disable_user", "admin_user_global_sign_out"):
         stubber.add_response(operation, {}, {"UserPoolId": POOL_ID, "Username": sub})

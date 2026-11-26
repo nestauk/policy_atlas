@@ -3,7 +3,9 @@ type: Convention
 title: A limit for a mini model lives in the response schema or in code, never in the prose
 description: On gpt-5.4-mini a ceiling stated in words did not bind (three rounds of "at most 12 kinds" gave 53–125; "at most 220 characters" did nothing; a ban on slash-joined kinds was answered with quote-joined ones), while a maxItems on the Pydantic field held on the first try and a code cut or a one-retry did the rest. The memo key of a prompt-backed step is its prompt VERSION, so a text change without a version bump reuses old records.
 tags: [prompting, structured-output, mini-model, pydantic, folding, place-sentences, task-046]
-timestamp: 2026-10-12
+generated:
+  by: process:okf-migrate
+  at: 2026-10-12
 ---
 
 # Rule

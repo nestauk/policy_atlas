@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -222,3 +222,28 @@ def test_require_ops_allows_only_an_ops_row(engine: Engine, tmp_path: Path) -> N
         response = client.get("/api/v1/ops/organisations", headers=principal.headers)
         assert response.status_code == 200
         assert isinstance(response.json(), list)
+
+
+def test_ops_pages_send_the_content_security_policy_in_the_configured_mode(
+    tmp_path: Path,
+) -> None:
+    """Report-only keeps the framing ban enforced; enforce sends the full policy."""
+    base = _settings(tmp_path, service_role="ops", ops_ui_dir=_ui_bundle(tmp_path))
+    policy = "default-src 'self'; frame-ancestors 'none'"
+
+    def headers(**changes: Any) -> Any:
+        app = create_app(settings=replace(base, **changes))
+        with TestClient(app, raise_server_exceptions=False) as client:
+            return client.get("/people").headers
+
+    reported = headers(ops_csp=policy)
+    assert reported["content-security-policy"] == "frame-ancestors 'none'"
+    assert reported["content-security-policy-report-only"] == policy
+    enforced = headers(ops_csp=policy, ops_csp_enforced=True)
+    assert enforced["content-security-policy"] == policy
+    assert "content-security-policy-report-only" not in enforced
+    unset = headers()
+    assert unset["content-security-policy"] == "frame-ancestors 'none'"
+    assert "content-security-policy-report-only" not in unset
+    api = headers(service_role="api", ops_csp=policy)
+    assert "content-security-policy" not in api

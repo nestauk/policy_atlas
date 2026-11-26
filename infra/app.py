@@ -4,6 +4,7 @@ import json
 import aws_cdk as cdk
 from aws_cdk import Environment
 
+from infra.cognito_auth import sign_in_block
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
 from infra.analytics_stack import PaV3AnalyticsStack
@@ -107,6 +108,7 @@ if stage == "all":
         app,
         "PaV3CertStack",
         network_config=network_config,
+        auth_domain=sign_in_block(pa_config["policy_atlas_config"].get("sign_in")).get("domain"),
         env=cert_env,
         cross_region_references=True,
     )
@@ -135,9 +137,15 @@ if stage == "all":
         "PaV3AppStack",
         pa_config=pa_config,
         certificate=cert_stack.certificate,
+        auth_certificate=cert_stack.auth_certificate,
         env=pa_env,
         env_name=env_name,
         ops_allowlist_size=ops_allowlist_size,
+        # So the firewall's rules also cover Metabase, which shares the load balancer.
+        metabase_host=(
+            f"{metabase_config['metabase_subdomain']}.{metabase_config['domain_name']}"
+            if deploy_analytics else None
+        ),
         cross_region_references=True,
     )
 

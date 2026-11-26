@@ -1,4 +1,4 @@
-"""The plan-stage sense check: can this intervention cause this goal at all? (task 054, red team).
+"""The plan-stage sense check: can this intervention cause this goal at all? (red team).
 
 When the Task Agent makes a theory-of-change plan ready, one quick OpenAlex
 search on the whole intervention (two queries, six results each) and one
@@ -226,7 +226,7 @@ def run_sense_check(
         "key": key,
         **response.model_dump(exclude={"quotes"}),
         "documents": [{k: d[k] for k in ("id", "title", "year", "url")} for d in documents],
-        # Only quotes found word for word in their document count (C20).
+        # Only quotes found word for word in their document count.
         "quotes": _verified_quotes(response.quotes, documents),
     }
     with engine.begin() as conn:

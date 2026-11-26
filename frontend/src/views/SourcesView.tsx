@@ -76,7 +76,7 @@ import { ListFootRow, Pagination } from "../ui/brand/list/ListFoot";
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
   // The API's value stays "Included"; the set is named Relevant, as the
-  // funnel names it (owner, round 13).
+  // funnel names it.
   { key: "Included", label: "Relevant" },
   { key: "screened_out", label: "Screened out" },
 ] as const;
@@ -132,7 +132,7 @@ export function SourcesView() {
   const stream = useRunStream(taskId);
   // No explicit status → Included (the screened-in set), the owner default,
   // once screening has finished. Before that the screened-in set is empty or
-  // partial, so the default is All (task 058, N16).
+  // partial, so the default is All.
   const screened = stream.run !== null
     ? isFinished(stream.run.status) ||
       stream.stages.some((entry) => entry.stage === "screen" && entry.status === "completed")
@@ -141,7 +141,7 @@ export function SourcesView() {
     STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ??
     (screened || isScoping(task.data) ? "Included" : "all");
   const citedFilter = searchParams.get("cited") === "true";
-  // The funnel's Appraised and Full text accessed sets (round 13): the
+  // The funnel's Appraised and Full text accessed sets: the
   // evidence read's `appraised` and `depth` filters.
   const appraisedFilter = searchParams.get("appraised") === "true";
   const fullTextFilter = searchParams.get("depth") === "full_text";
@@ -151,19 +151,19 @@ export function SourcesView() {
     (value) => value === searchParams.get("strength"),
   );
   const countryFilter = searchParams.get("country") ?? undefined;
-  // One search query's results (round 12): the coverage row's `query_id`.
+  // One search query's results: the coverage row's `query_id`.
   const rawQuery = searchParams.get("query");
   const queryFilter = rawQuery !== null && /^\d+$/.test(rawQuery) ? rawQuery : undefined;
   const yearFrom = parseYearParam(searchParams.get("year_from"));
   const yearTo = parseYearParam(searchParams.get("year_to"));
   const rawPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
-  // 25 a page unless the reader chose more (round 12): the URL names a size
+  // 25 a page unless the reader chose more: the URL names a size
   // other than 25; otherwise the size they last chose on this task.
   const requestedPageSize =
     sourcesPageSize(searchParams.get("page_size")) ?? sourcesPageSizeChoice.read(taskId) ?? DEFAULT_SOURCES_PAGE_SIZE;
   const sourceId = searchParams.get("source");
-  // Task 046, amendment 3 (R67): an option card's document link adds the
+  // An option card's document link adds the
   // option, so the dossier's slot reads "In this option"; a row here opens
   // the document with no option (its records under every option).
   const optionId = searchParams.get("option");
@@ -173,11 +173,11 @@ export function SourcesView() {
   const sortOrder: SortOrder | null =
     sortField !== null && (requestedOrder === "asc" || requestedOrder === "desc") ? requestedOrder : null;
   const themeFilter = searchParams.get("theme") ?? undefined;
-  // Themes without a stable id predate 028 strand 8 and can't be filtered
+  // Themes stored without a stable id (no `theme_id`) can't be filtered
   // on (the `theme` param binds to `ThemeOut.theme_id`) — omit them rather
   // than offer a selection that can never round-trip.
-  // An options-scoping task's themes are the longlist's option clusters
-  // (round 14): the evidence read takes their ids, and the filter names them.
+  // An options-scoping task's themes are the longlist's option clusters:
+  // the evidence read takes their ids, and the filter names them.
   const scoping = isScoping(task.data);
   const longlist = useLonglist(scoping ? taskId : "");
   const landscapeThemeOptions = (landscape.data?.themes ?? []).filter(
@@ -195,8 +195,8 @@ export function SourcesView() {
     .filter((country) => country !== "Not reported")
     .sort();
   const notReportedCount = normaliseGeographies(landscape.data?.geographies ?? {})["Not reported"] ?? 0;
-  // No explicit sort → the relevance spectrum, descending (owner default:
-  // confidently relevant → uncertain → confidently irrelevant).
+  // No explicit sort → the relevance spectrum, descending
+  // (confidently relevant → uncertain → confidently irrelevant).
   const effectiveSort = sortField ?? "relevance";
   const effectiveOrder = sortField !== null ? sortOrder : "desc";
   // A filter besides the screening toggles narrows the view; "Clear
@@ -223,9 +223,9 @@ export function SourcesView() {
   const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
   // While a stage that feeds this table runs, the table refetches every 5 s
-  // and the cells it will fill pulse until their values land (owner, round 8).
+  // and the cells it will fill pulse until their values land.
   const live = liveStages(stream);
-  // The search queries, live as they go out (owner, round 9).
+  // The search queries, live as they go out.
   const searching = live.has("acquire");
   const groups = queryGroups(stream.liveSearchQueries, coverage.data?.backends_detail, searching);
   const appliedQuery = queryFilter !== undefined ? findQueryRow(groups, queryFilter) : undefined;
@@ -315,8 +315,8 @@ export function SourcesView() {
       : `${formatCount(totalItems)} ${totalItems === 1 ? "source" : "sources"}`;
 
   // While the search runs and nothing has landed, the queries are the page:
-  // the table waits for the first results (owner, round 9), and the filter
-  // bar waits with it (round 12). A filter the reader set keeps the bar, so
+  // the table waits for the first results, and the filter
+  // bar waits with it. A filter the reader set keeps the bar, so
   // it can always be cleared.
   // A search from before queries were linked to their results keeps no
   // records (the server's rule): a query that returned some, filtered on
@@ -334,11 +334,11 @@ export function SourcesView() {
   return (
     // The column is the table's container: its widths and the stacked row
     // follow the column, not the window, so the source stays readable when
-    // the sidebar narrows the page (round 12).
+    // the sidebar narrows the page.
     <main className="@container/sources py-8">
       <SearchQueries groups={groups} searching={searching} hrefFor={queryHref} />
       {/* The finished search as its own one-line section above the filter
-          bar (owner, round 12: the search came before the filtering), 24 px
+          bar (the search came before the filtering), 24 px
           clear of the bar, so the bar reads as the table's own head; hidden
           while the live list shows. */}
       {!searching && groups.length > 0 && (
@@ -346,7 +346,7 @@ export function SourcesView() {
           <QueriesSummary groups={groups} hrefFor={queryHref} />
         </div>
       )}
-      {/* The filter bar (task 058, rounds 11 and 12): filters only, one row
+      {/* The filter bar: filters only, one row
           above the table it scopes, every control a 32 px outline box at
           Meta size on one baseline, 12 px apart on every line when it wraps;
           an applied filter a filled Navy chip with its ×. */}
@@ -356,7 +356,7 @@ export function SourcesView() {
         aria-label="Filter sources"
         className={cn("mb-4 flex flex-col items-start gap-2", groups.length > 0 && searching && "mt-8")}
       >
-        {/* Two rows (round 12): the screening switch alone, then the facets
+        {/* Two rows: the screening switch alone, then the facets
             wrapping as they must, 8 px between the rows, nothing squeezed. */}
         <div role="group" aria-label="Screening" className="flex">
           {STATUS_FILTERS.map((filter, index) => (
@@ -418,7 +418,7 @@ export function SourcesView() {
           value={countryFilter ?? ""}
           options={[
             ...[...new Set([...countryOptions, ...(countryFilter && countryFilter !== NO_COUNTRY ? [countryFilter] : [])])].map((value) => ({ value, label: scrub(value) })),
-            // The sources with no publisher country (round 14), last, as the
+            // The sources with no publisher country, last, as the
             // Landscape pins them.
             ...(notReportedCount > 0 || countryFilter === NO_COUNTRY ? [{ value: NO_COUNTRY, label: "Not reported" }] : []),
           ]}
@@ -435,7 +435,7 @@ export function SourcesView() {
             next.delete("page");
           })}
         />
-        {/* One search query's results (round 12): set from the query's link,
+        {/* One search query's results: set from the query's link,
             shown as the Country chip is, its × clearing it. */}
         {queryFilter !== undefined && (
           <FilterChip
@@ -448,7 +448,7 @@ export function SourcesView() {
             {`Query: ${appliedQuery !== undefined ? queryChipLabel(scrub(appliedQuery.query)) : "…"}`}
           </FilterChip>
         )}
-        {/* The funnel's sets (round 13), set from its rows, each a chip whose
+        {/* The funnel's sets, set from its rows, each a chip whose
             × clears it. */}
         {appraisedFilter && <SetChip words="Appraised" onClear={() => setFacet("appraised", undefined)} />}
         {fullTextFilter && <SetChip words="Full text accessed" onClear={() => setFacet("depth", undefined)} />}
@@ -511,7 +511,7 @@ export function SourcesView() {
           ))}
 
         {/* A search that ran before queries were linked to their results
-            cannot filter: the table's empty state says so (round 12). */}
+            cannot filter: the table's empty state says so. */}
         {preChangeQuery && (
           <ListEmpty
             frameClassName={SOURCES_FRAME_CLASS}
@@ -566,7 +566,7 @@ export function SourcesView() {
                 </tbody>
               </table>
             </div>
-            {/* The line under the table (owner, round 12): Download CSV at the
+            {/* The line under the table: Download CSV at the
                 left; at the right the page size, the range, then the page
                 controls. */}
             <ListFootRow
@@ -666,7 +666,7 @@ function SourcesHeaderRow({
  * the text depth, plain Meta text in fixed columns. Below `lg` the same
  * markup stacks (`sources.css`): the title, "Venue · Year · Origin", then
  * the values in column order joined by " · ", each placeholder in its slot.
- * The cells' hover reasons stay out of the tab order (lead, round 10); the
+ * The cells' hover reasons stay out of the tab order; the
  * title is the keyboard's way to the same words in the dossier.
  */
 function SourceRow({
@@ -731,8 +731,8 @@ function SourceRow({
         )}
       </td>
       <td role="cell" className="sources-cell sources-value sources-cell-status">
-        {/* While the full texts are collected a source not yet read says so
-            (owner, round 14), settling to its depth when the fetch ends. */}
+        {/* While the full texts are collected a source not yet read says so,
+            settling to its depth when the fetch ends. */}
         {pulses.status && <Collecting />}
         {!pulses.status && depth !== null && (
           <span className={cn("sources-nowrap", fade("status"))}>
@@ -750,7 +750,7 @@ function SourceRow({
 const STACKED_ONLY = "@min-[54rem]/sources:hidden";
 
 /**
- * The Status cell's word (round 12): the tone square (green full text,
+ * The Status cell's word: the tone square (green full text,
  * yellow abstract, red neither) and the word. "Full text" links to the
  * document's own address when the text was collected and the row carries it,
  * opening in a new tab as the report's addresses do; "Abstract only" and
@@ -780,7 +780,7 @@ function fullTextHref(item: Pick<EvidenceItem, "read_in_full" | "full_text_url">
   return item.read_in_full && item.full_text_url ? safeHref(item.full_text_url) : undefined;
 }
 
-/** A set the funnel opened the table on (round 13): the applied Navy chip,
+/** A set the funnel opened the table on: the applied Navy chip,
  *  its × clearing it, as Cited is. */
 function SetChip({ words, onClear }: { words: string; onClear: () => void }) {
   return (
@@ -790,7 +790,7 @@ function SetChip({ words, onClear }: { words: string; onClear: () => void }) {
   );
 }
 
-/** The Status of a source whose full text is being collected (round 14):
+/** The Status of a source whose full text is being collected:
  *  "Collecting…" in Grey on the soft breathe, a Line 2 square in the tone
  *  square's slot, one rhythm; still under reduced motion. */
 function Collecting() {
@@ -802,7 +802,7 @@ function Collecting() {
   );
 }
 
-/** A cited source, under its Status (round 12, in place of the chip): a
+/** A cited source, under its Status (in place of the chip): a
  *  12 px Green tick and the word, Meta Ink. */
 function CitedMark() {
   return (
@@ -824,7 +824,7 @@ function CitedMark() {
   );
 }
 
-/** The title's second line: "Venue · Origin" (lead, round 10: Origin folds
+/** The title's second line: "Venue · Origin" (Origin folds
  *  in here). While the table stacks the year joins it after the venue, its
  *  column hidden. */
 function SourceMetaLine({ item }: { item: EvidenceItem }) {
@@ -854,7 +854,7 @@ function SourceMetaLine({ item }: { item: EvidenceItem }) {
 /** The list's loading state in the table's own frame: the real header row
  *  and six rows at about the real row height, a placeholder bar where the
  *  title and its line will sit and one in every value column, each sized to
- *  its column (owner, round 13: Relevant and Status were blank). They breathe
+ *  its column (Relevant and Status included). They breathe
  *  together, and hold still under reduced motion. */
 function SourcesLoading({ header }: { header: ReactNode }) {
   return (
@@ -941,9 +941,8 @@ function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screen
 
 
 /** Downloads the whole source list (every page, no filters) as a CSV file.
- *  An outline control at the filter bar's right end (round 11): the table
- *  has no single forward action, so nothing here takes the blue primary
- *  (lead, round 10). */
+ *  An outline control at the filter bar's right end: the table
+ *  has no single forward action, so nothing here takes the blue primary.*/
 function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?: string }) {
   const client = useApiClient();
   const [downloading, setDownloading] = useState(false);
@@ -998,8 +997,8 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
     }
   };
 
-  // The quiet control with the download glyph (round 12: the outline box
-  // read as one more filter), at the end of the line under the table.
+  // The quiet control with the download glyph (an outline box
+  // would read as one more filter), at the end of the line under the table.
   return (
     <span className="flex items-center gap-3">
       {failed && <span role="alert" className="text-meta text-red">The download failed. Try again.</span>}
@@ -1018,7 +1017,7 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
   );
 }
 
-/** The strength column's legend (round 12): each tone square beside the
+/** The strength column's legend: each tone square beside the
  *  tiers it marks, in the sort's order. */
 function StrengthLegend() {
   return (
@@ -1059,7 +1058,7 @@ function SelectChevron() {
 }
 
 /**
- * A filter's trigger in the filter bar (round 11). Idle, the outline box
+ * A filter's trigger in the filter bar. Idle, the outline box
  * with the facet's name and a chevron ("Evidence type"); applied, the
  * filled Navy chip with the facet and its value ("Strength: Moderate") and
  * a × that clears it. The words open the choices either way.
@@ -1176,7 +1175,7 @@ function YearFilter({
 }
 
 /** One facet dropdown in the sources filter bar: the app's one dropdown
- *  (`Select`, round 12) with the bar's own trigger. With `allLabel` the list
+ *  (`Select`) with the bar's own trigger. With `allLabel` the list
  *  opens on an "all" choice (value "") and a chosen value turns the control
  *  into the applied chip; without it (Sort) every choice is one of
  *  `options` and the control stays an outline box naming its value. */
@@ -1220,7 +1219,7 @@ function FilterSelect({
   );
 }
 
-/** A value on its way (owner, round 8): a short grey bar, breathing on the
+/** A value on its way: a short grey bar, breathing on the
  *  status mark's 1.6 s rhythm, in the cell the running stage will fill. It
  *  sits where the value will, and holds still under reduced motion. */
 function CellPulse({ width }: { width: string }) {
@@ -1324,7 +1323,7 @@ function SourceDossier({
   );
 }
 
-/** The authors line with superscript affiliation markers (042 D5). Renders
+/** The authors line with superscript affiliation markers. Renders
  *  nothing when the source carries no authors (honest absence). Shared by the
  *  dossier header and the citation block in ArtefactView. */
 export function AuthorsLine({
@@ -1349,7 +1348,7 @@ export function AuthorsLine({
   );
 }
 
-/** The numbered institutions under the year line (042 D5): deduped, ordered
+/** The numbered institutions under the year line: deduped, ordered
  *  by first appearance, numbers matching the AuthorsLine markers. */
 export function InstitutionsLine({
   authorships,
@@ -1372,8 +1371,8 @@ export function InstitutionsLine({
   );
 }
 
-/** The labelled lines of one intervention profile record, in its own words
- *  (task 046, amendment 3, R67). A field the record does not state is left out. */
+/** The labelled lines of one intervention profile record, in its own words.
+ * A field the record does not state is left out. */
 const RECORD_LINES = [
   ["Intervention", "intervention"],
   ["Setting", "setting"],
@@ -1434,7 +1433,7 @@ export function useDossierRecords(
 }
 
 /** The source sheet's loading line, one copy for every route into it (the
- *  report, the Sources table, the option card; owner, round 13). */
+ *  report, the Sources table, the option card). */
 export const DOSSIER_LOADING_LINE = "Loading source details…";
 
 /** Full source provenance, used by every route into the source dossier sheet.
@@ -1443,7 +1442,7 @@ export const DOSSIER_LOADING_LINE = "Loading source details…";
  *  profile records; when there are any they fill the findings slot, under "In this
  *  option" when the dossier was opened from an option card (`optionId`) or
  *  "Records" otherwise, one per option. With none, the slot shows the
- *  findings as on an Evidence search task (task 046, amendment 3, R67). */
+ *  findings as on an Evidence search task. */
 export function SourceDossierBody({
   records: dossierRecords,
   source,
@@ -1480,7 +1479,7 @@ export function SourceDossierBody({
   const hasInstitutions = numberedAuthorships(source.authorships).institutions.length > 0;
   const shownDetails = details.filter(([, value]) => value !== null && value !== undefined);
   return (
-    // One type scale (round 12): the sheet's title, Body for the reference
+    // One type scale: the sheet's title, Body for the reference
     // line and every sentence, Meta for the labels and the facts. No chips
     // and no bold below the title; the facts are ruled lists with their
     // labels at Meta Grey; the actions at the foot.

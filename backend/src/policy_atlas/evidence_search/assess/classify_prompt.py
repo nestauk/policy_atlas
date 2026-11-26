@@ -41,33 +41,31 @@ from policy_atlas.core.schema import EVIDENCE_TYPES
 
 CLASSIFY_PROMPT_VERSION = "classify_v2"
 
-# classify moved gpt-5.5 → 5.4-mini and buys back judgment depth with effort
-# (018 A1). The A1 xhigh hypothesis FAILED its 018 C2 validation: at xhigh the
+# classify moved gpt-5.5 → 5.4-mini and buys back judgment depth with effort.
+# xhigh fails validation: at xhigh the
 # model exhausted the full 16K completion cap on reasoning alone
 # (LengthFinishReasonError on a 2.2K-token doc) before emitting an answer;
 # at high, all 26 pinned-task docs completed with 4/26 plausible boundary
-# flips vs the recorded gpt-5.5 labels (evidence: 018 C2 classify A/B).
+# flips vs the recorded gpt-5.5 labels.
 CLASSIFY_MODEL = route().model_for("classify_document")
 CLASSIFY_EFFORT = route().effort_for("classify_document")
 
-# Reasoning model: the cap covers reasoning + output tokens (extract's 011
-# lesson). Sized from Langfuse (task 057 review, 2026-11-03, 3,850 calls since
-# 2026-10-28, reasoning included, some at the old high effort): p99 1,915,
+# Reasoning model: the cap covers reasoning + output tokens. Sized from
+# Langfuse (3,850 calls, reasoning included, some at the old high effort): p99 1,915,
 # max 3,610; the 9-way discrimination reasons longer than the screens. Bedrock
 # reserves input + this cap against the tokens-per-minute quota before the
-# call runs, so the cap is a bound on the burst, not just on the answer
-# (was 16_384).
+# call runs, so the cap is a bound on the burst, not just on the answer.
 CLASSIFY_MAX_OUTPUT_TOKENS = 8_192
 
-# Open-tag bounds (contract decision 6, the 009 provider-tag bounds).
+# Open-tag bounds (the 009 provider-tag bounds).
 TAGS_MAX_PER_DOC = 10
 TAG_MAX_CHARS = 100
 
-# Input-side caps at prompt assembly (contract M10, plan-pinned).
+# Input-side caps at prompt assembly (plan-pinned).
 CLASSIFY_TITLE_MAX = 500
 CLASSIFY_ABSTRACT_MAX = 5_000
 PRIOR_FIELD_MAX = 500
-# Label priors (task 015): source_tag rows carried as data records.
+# Label priors: source_tag rows carried as data records.
 LABEL_PRIORS_MAX = 30
 LABEL_TAG_MAX = 200  # tags are write-bounded at 200; sanitized again on read
 LABEL_PROVENANCE_MAX = 50  # tag_type / asserted_by vocabulary tokens

@@ -1,6 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
+import { Button } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { InfoHint } from "../ui/brand/InfoHint";
 import { SortArrow, type SortOrder } from "../ui/brand/SortableColumnHeader";
@@ -37,7 +38,7 @@ export function FailedLine({ message, onRetry }: { message: string; onRetry: () 
   );
 }
 
-/** The toast after a write: its summary (owner, 2026-11-18: no "· recorded"). */
+/** The toast after a write: its summary (no "· recorded"). */
 export function useRecordedToast() {
   const { toast } = useToast();
   return (summary: string) => toast({ title: summary, tone: "default" });
@@ -125,7 +126,7 @@ export interface SearchOption {
 }
 
 /**
- * A searchable dropdown (owner pass, 2026-11-18): the select's trigger, and a
+ * A searchable dropdown: the select's trigger, and a
  * popover with a filter field at its top (focused as it opens; typing
  * narrows the list by name) over the choices. With `create`, when the typed
  * name matches no choice exactly, a last row offers to create it. Enter takes
@@ -390,7 +391,7 @@ function compareValues(a: SortValue, b: SortValue, order: SortOrder): number {
 }
 
 /**
- * Click-to-sort for an ops table (owner, 2026-11-18): the first click on a
+ * Click-to-sort for an ops table: the first click on a
  * column sorts ascending, the next reverses it. Unsorted, rows keep the
  * server's order.
  */
@@ -522,7 +523,7 @@ export function Panel({ title, children, className }: { title: string; children:
   );
 }
 
-/** The red fill of the one destructive confirm (Offboard). */
+/** The red fill of the destructive confirms (Deactivate, Delete). */
 export const DANGER_CLASS = "bg-red hover:bg-red/90";
 
 /**
@@ -587,6 +588,26 @@ export function Dialog({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+/** An action that failed, as a dialog, so a long table cannot hide it. */
+export function FailedDialog({ message, onRetry, onClose }: { message: string; onRetry: () => void; onClose: () => void }) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={message}
+      description="Some or all of it did not go through. Try again, or close and check the list."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={onRetry}>Try again</Button>
+        </>
+      }
+    />
   );
 }
 

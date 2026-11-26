@@ -55,6 +55,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.ops import commands
 from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
+from policy_atlas.ops.sweep import TERMINAL_OUTCOMES
 
 log = structlog.get_logger()
 
@@ -120,13 +121,13 @@ def _cognito_refusal(error: ClientError) -> str:
 
 
 def _not_self(actor: AuthenticatedUser, user_id: str) -> str:
-    """Refuse the caller as a subject of de-enrol or offboard.
+    """Refuse the caller as a subject of de-enrol or deactivate.
 
     "Select everyone shown" includes the operator; locking yourself out is
     never what a bulk action meant (review stack, 2026-11-17). The CLI can.
     """
     if user_id == actor.user_id:
-        raise OpsError("you cannot de-enrol or offboard your own account from here")
+        raise OpsError("you cannot de-enrol or deactivate your own account from here")
     return user_id
 
 
@@ -246,6 +247,23 @@ def create_organisation(
     _queue_log(request, actor=actor.user_id, action="org.create", target=str(created.org_id),
                outcome="ok", action_id=action_id)
     return _organisation_out(conn, created.org_id)
+
+
+@router.delete("/organisations/{org_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_organisation(
+    org_id: uuid.UUID, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> Response:
+    """Delete an organisation nothing points at; otherwise say what is still in it."""
+    try:
+        commands.delete_organisation(conn, org_id=org_id)
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    except OpsError as exc:
+        raise ApiConflict("ops_refused", str(exc)) from None
+    _audit(request, conn, actor=actor.user_id, action="organisation.delete", target=str(org_id))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/organisations/{org_id}/quota", response_model=OrganisationOut)
@@ -402,7 +420,7 @@ def create_person(
     try:
         enrolled = commands.ensure_account_enrolled(
             conn, cognito, pool_id=pool_id, email=body.email,
-            display_name=body.display_name, org=org,
+            display_name=body.display_name, org=org, reactivate=True,
         )
     except EnrolledElsewhere as exc:
         raise ApiConflict("enrolled_elsewhere", str(exc)) from None
@@ -411,6 +429,8 @@ def create_person(
     except ClientError as exc:
         raise ApiConflict("ops_refused", _cognito_refusal(exc)) from None
     outcome = "invited" if enrolled.invitation_sent else "enrolled"
+    if enrolled.reactivated:
+        outcome = f"reactivated, {outcome}"
     action_id = commands.record_action(conn, actor=actor.user_id, action="person.create",
                                        target=enrolled.user_id, outcome=outcome)
     _queue_log(request, actor=actor.user_id, action="person.create", target=enrolled.user_id,
@@ -424,6 +444,7 @@ def create_person(
     return PersonCreatedOut(
         person=_person_out(conn, row, settings=settings, task_counts={}),
         invitation_sent=enrolled.invitation_sent,
+        reactivated=enrolled.reactivated,
     )
 
 
@@ -495,17 +516,31 @@ def de_enrol_people(
                  ).summary())
 
 
-@router.post("/people/offboard", response_model=BulkOut)
-def offboard_people(
+@router.post("/people/deactivate", response_model=BulkOut)
+def deactivate_people(
     body: BulkSubjects, request: Request, actor: Annotated[AuthenticatedUser, Depends(require_ops)],
     conn: Annotated[Connection, Depends(get_conn)],
     identity: Annotated[Identity, Depends(get_identity)],
 ) -> BulkOut:
-    """Disable and offboard every selected person independently."""
+    """Disable and mark every selected person independently; they keep their organisation."""
     cognito, pool_id = _identity(identity)
     return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
-                 action="person.offboard", run=lambda user_id: commands.offboard_user(
+                 action="person.deactivate", run=lambda user_id: commands.deactivate_user(
                      conn, cognito, pool_id=pool_id, sub=_not_self(actor, user_id)
+                 ).summary())
+
+
+@router.post("/people/reactivate", response_model=BulkOut)
+def reactivate_people(
+    body: BulkSubjects, request: Request, actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+    identity: Annotated[Identity, Depends(get_identity)],
+) -> BulkOut:
+    """Turn every selected person's login back on; roles are not restored."""
+    cognito, pool_id = _identity(identity)
+    return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
+                 action="person.reactivate", run=lambda user_id: commands.reactivate_user(
+                     conn, cognito, pool_id=pool_id, sub=user_id
                  ).summary())
 
 
@@ -529,7 +564,7 @@ def resend_people(
     )
     cooling = [item for item in result.results if item.outcome == "too_soon"]
     if len(cooling) == len(result.results):
-        # Contract B4: one person inside the hour is a 429; the message
+        # One person inside the hour is a 429; the message
         # carries the retry time (the envelope handler builds the response,
         # so a header set here would not reach the client).
         raise ApiCapacity("resend_cooldown", cooling[0].message)
@@ -601,13 +636,13 @@ def list_requests(
     rejected: bool = False,
 ) -> RequestsOut:
     """List waitlist rows still waiting for a decision, and the rejected ones when asked."""
-    # Only requests still waiting for a decision (owner, 2026-11-18): an
+    # Only requests still waiting for a decision: an
     # invited person is on People, a rejected request is gone.
     rows = conn.execute(
         select(waitlist_entry)
         .where(
             waitlist_entry.c.account_created_at.is_(None),
-            # Rejected rows are kept as a record and shown on request (owner, 2026-11-18).
+            # Rejected rows are kept as a record and shown on request.
             true() if rejected else waitlist_entry.c.rejected_at.is_(None),
         )
         .order_by(waitlist_entry.c.created_at, waitlist_entry.c.entry_id)
@@ -616,7 +651,7 @@ def list_requests(
     terminal = set(conn.execute(
         select(ops_action.c.target).where(
             ops_action.c.actor_user_id == "sweep", ops_action.c.action == "invite",
-            ops_action.c.outcome.in_(("enrolled_elsewhere", "refused")),
+            ops_action.c.outcome.in_(TERMINAL_OUTCOMES),
             ops_action.c.target.in_(ids),
         )
     ).scalars()) if ids else set()

@@ -3,7 +3,16 @@ type: Invariant
 title: Dispatch gated on a backend capability fails closed when the capability is missing
 description: A hasattr-gated dispatch to a required enforcement mechanism (Overton's search_with_post_filter) must raise when the method is absent — falling through to the plain path silently drops the enforcement with no provenance trace.
 tags: [fail-closed, search-backends, post-filter, dispatch, country-filters]
-timestamp: 2026-07-12
+generated:
+  by: process:okf-migrate
+  at: 2026-07-12
+sources:
+  - resource: "src/policy_atlas/search_loop.py"
+    title: "`src/policy_atlas/search_loop.py` (`execute_plan` post-filter dispatch)"
+  - resource: "tests/test_search_wire.py"
+    title: "`tests/test_search_wire.py` (`test_overton_post_filter_without_capable_backend_fails_closed`)"
+  - resource: "../tasks/019-folding-pass/verification.md"
+    title: "[019 verification.md \u00a7 Review findings](../tasks/019-folding-pass/verification.md) (convergent finding, adopted)"
 ---
 
 # Rule
@@ -35,11 +44,3 @@ Overton silent-zero: a well-formed run that silently means something else.
   relax the raise.
 - New optional backend methods: ask "is this capability *selecting* or *enforcing*?"
   Enforcing capabilities get the raise treatment.
-
-# Citations
-
-- `src/policy_atlas/search_loop.py` (`execute_plan` post-filter dispatch)
-- `tests/test_search_wire.py`
-  (`test_overton_post_filter_without_capable_backend_fails_closed`)
-- [019 verification.md § Review findings](../tasks/019-folding-pass/verification.md)
-  (convergent finding, adopted)

@@ -1,7 +1,7 @@
 """Langfuse telemetry wrappers for live model traffic.
 
-Telemetry is the third runtime egress destination in task 009: user-operated
-Langfuse instances. By decision 13, traces carry full I/O payloads for eval-ready
+Telemetry is a runtime egress destination: user-operated
+Langfuse instances. Traces carry full I/O payloads for eval-ready
 spans, while keys remain env-only. Without both Langfuse keys this module is a
 no-op, keeping the suite deterministic and egress-free and avoiding SDK auto-init.
 """
@@ -15,6 +15,8 @@ import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, Future
 from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Any, Literal
 
@@ -40,9 +42,8 @@ _ObservationType = Literal["embedding", "generation", "span", "tool"]
 log = structlog.get_logger()
 
 #: Attempts per model call under :func:`traced_attempts`: the call and two retries
-#: (task 057, D12; raised from one retry on 2026-11-03 after the fixed-question runs lost
-#: a whole run to two consecutive stalls on one step, measured at 4 to 6% stalls per
-#: call on Bedrock; three attempts is what the SDK gave before this task, now traced).
+#: (one retry is too few: two consecutive stalls on one step can lose a whole run, and
+#: stalls measured 4 to 6% per call on Bedrock).
 #: The OpenAI clients never retry on their own (``max_retries=0``).
 MODEL_CALL_ATTEMPTS = 3
 #: The longest wait before the retry that a provider's ``Retry-After`` header can ask for.
@@ -207,14 +208,14 @@ _RETRYABLE_BOTOCORE_CODES = frozenset(
 def _retryable(exc: BaseException) -> bool:
     """Whether a failed model request is worth one more try.
 
-    The same failures the OpenAI SDK retried on its own before task 057: a
+    The same failures the OpenAI SDK would retry on its own: a
     timeout, a dropped connection, "too many requests" (429) and a server
     error (5xx). Anything else (a bad request, a refused key, an answer that
     does not parse) would fail the same way again. On the Bedrock routes the
     botocore equivalents count too: a throttle or not-ready error code, a read
     or connect timeout and an unreachable endpoint.
     """
-    # task 057 review: code-review 1 - the bedrock-claude backend runs botocore
+    # The bedrock-claude backend runs botocore
     # with max_attempts=1, so its passing failures must be retried here.
     if isinstance(exc, botocore.exceptions.ClientError):
         return exc.response.get("Error", {}).get("Code") in _RETRYABLE_BOTOCORE_CODES
@@ -248,9 +249,80 @@ def _retry_wait_s(exc: BaseException) -> float:
     return DEFAULT_RETRY_WAIT_S
 
 
+@dataclass
+class RequestIdHolder:
+    """Where one attempt's provider request id is written.
+
+    Attributes:
+        started_at: When the attempt started (ISO 8601, in UTC).
+        request_id: The provider's id for the request, once a response (or an
+            HTTP error) has come back; ``None`` until then.
+    """
+
+    started_at: str
+    request_id: str | None = None
+
+    def metadata(self) -> dict[str, str]:
+        """The trace metadata for the attempt: its request id, or its start time when it has none.
+
+        An attempt cut before any response has no id; its start time lets it be
+        found in AWS's audit log (CloudTrail) by time.
+
+        Returns:
+            ``{"request_id": ...}``, or ``{"started_at": ...}`` when there is no id.
+        """
+        if self.request_id is not None:
+            return {"request_id": self.request_id}
+        return {"started_at": self.started_at}
+
+
+_REQUEST_ID: contextvars.ContextVar[RequestIdHolder | None] = contextvars.ContextVar(
+    "model_request_id", default=None
+)
+
+
+@contextmanager
+def request_id_scope(span: Any | None = None) -> Iterator[RequestIdHolder]:
+    """Collect the provider's request id of the model request sent inside the scope.
+
+    In plain terms: every model request made inside the ``with`` block writes the
+    id the provider gave it into a fresh holder (``core.openai_client`` does the
+    writing). The holder is an object, so a thread that runs under a copy of this
+    context (the Theory of change stream pump) writes into the same one. Scopes
+    nest; the innermost one receives the id.
+
+    Args:
+        span: Optional open observation. When given, the holder's
+            :meth:`RequestIdHolder.metadata` is added to its metadata as the scope
+            closes, whether the block returned or raised.
+
+    Yields:
+        The holder.
+    """
+    holder = RequestIdHolder(started_at=datetime.now(UTC).isoformat())
+    token = _REQUEST_ID.set(holder)
+    try:
+        yield holder
+    finally:
+        _REQUEST_ID.reset(token)
+        if span is not None:
+            span.update(metadata=holder.metadata())
+
+
+def note_request_id(request_id: str | None) -> None:
+    """Write a provider request id into the current :func:`request_id_scope`, if any.
+
+    Args:
+        request_id: The id, or ``None`` (ignored) when the response carried none.
+    """
+    holder = _REQUEST_ID.get()
+    if holder is not None and request_id:
+        holder.request_id = request_id
+
+
 def _verb(step: str) -> str | None:
     # The word list is a leaf module; imported here so the core package does
-    # not load the API package at import time (task 058, N1).
+    # not load the API package at import time.
     from policy_atlas.api.stage_vocabulary import STEP_VERBS
 
     return STEP_VERBS.get(step)
@@ -272,17 +344,19 @@ def traced_attempts[T](
 
     In plain terms: the request is sent; if it times out or fails for a passing
     reason (see :func:`_retryable`) it is sent again after a short wait, up to
-    :data:`MODEL_CALL_ATTEMPTS` attempts (three today; task 057 review:
-    code-review 9). Every attempt opens its own Langfuse generation and, before
+    :data:`MODEL_CALL_ATTEMPTS` attempts (three today). Every attempt opens
+    its own Langfuse generation and, before
     the request goes out, stamps it with the step name, the attempt number
     (1 to :data:`MODEL_CALL_ATTEMPTS`) and a call id the attempts share. A
     request that never comes back is therefore still visible and countable. A
     failed attempt's generation is marked ``ERROR`` with the error class and
-    message. Task 057, contract D12.
+    message. Each attempt runs in its own :func:`request_id_scope`, so its
+    metadata gains the provider's ``request_id``, or, for an attempt that got no
+    response, its ``started_at`` time (never an earlier attempt's id).
 
     Args:
         client: Langfuse client, or ``None`` to run the same attempts untraced.
-        name: Observation name (unchanged from before task 057: saved views
+        name: Observation name (keep it stable: saved views
             in Langfuse depend on it).
         step: The route step name.
         call: Zero-argument function that makes the provider request and
@@ -318,6 +392,7 @@ def traced_attempts[T](
                 with (
                     _session_scope(session_id),
                     _observation(client, name=name, as_type="generation") as span,
+                    request_id_scope() as request_id,
                 ):
                     span.update(
                         metadata={
@@ -332,9 +407,12 @@ def traced_attempts[T](
                         result = call()
                     except Exception as exc:
                         span.update(
-                            level="ERROR", status_message=f"{type(exc).__name__}: {exc}"
+                            level="ERROR",
+                            status_message=f"{type(exc).__name__}: {exc}",
+                            metadata=request_id.metadata(),
                         )
                         raise
+                    span.update(metadata=request_id.metadata())
                     if update is not None:
                         update(span, result)
                     if after is not None:
@@ -363,9 +441,7 @@ def traced_attempts[T](
 def trace_scope(session_id: uuid.UUID | None = None, user_id: str | None = None) -> Iterator[None]:
     """Propagate session/user ids to every observation opened inside the scope.
 
-    SDK 4.13 has no ``update_current_trace`` (the pre-fix code silently no-opped
-    on every trace, chat and task_agent alike — confirmed live, sessionId null
-    since 2026-08-09): the v4 seam is ``propagate_attributes``, which only
+    SDK 4.13 has no ``update_current_trace``: the v4 seam is ``propagate_attributes``, which only
     reaches observations OPENED while its context is active. Callers must
     therefore wrap the WHOLE observation-creation call in this scope, never
     update a session after the observation already opened. Scopes nest:
@@ -503,7 +579,7 @@ class TracedThemeGroupingBackend:
             intent: Evidence-scope intent.
             min_themes: Requested minimum theme count.
             max_themes: Requested maximum theme count.
-            guidance: B5 ``characterise.guidance``, forwarded to the wrapped
+            guidance: ``characterise.guidance``, forwarded to the wrapped
                 backend unchanged.
 
         Returns:
@@ -595,7 +671,7 @@ def component_span(
         task_id: Current task id.
         component: Component name.
         session_id: Optional Langfuse session id shared by the Task's traces
-            (task 038, V9: no longer the conversation id).
+            (no longer the conversation id).
         conversation_id: Optional chat/task_agent conversation id recorded in
             trace metadata next to ``task_id``, so one chat is still
             filterable now that ``session_id`` groups by task.
@@ -693,7 +769,7 @@ def extraction_score_summary(
 ) -> None:
     """Attach the extract run's grounding scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern; task 011 rev 1.4 — extraction quality
+    Follows the ``score_summary`` pattern, so extraction quality is
     measurable from the first live run.
 
     Args:
@@ -760,8 +836,7 @@ def grouping_score_summary(
 ) -> None:
     """Attach the group run's partition scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``extraction_score_summary``
-    (task 012).
+    The 009 ``score_summary`` pattern, mirroring ``extraction_score_summary``.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
@@ -836,8 +911,7 @@ def synthesis_score_summary(
 ) -> None:
     """Attach the synthesise run's claim/citation scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
-    (task 012).
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
@@ -920,8 +994,8 @@ def screening_score_summary(
 ) -> None:
     """Attach the screen run's consensus/demotion scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
-    (task 014). ``summary`` may be a stage-1 (envelope) or stage-2 (full-text)
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``.
+    ``summary`` may be a stage-1 (envelope) or stage-2 (full-text)
     screen component summary; the stage-specific scores are only emitted when
     the corresponding keys are present.
 
@@ -970,8 +1044,7 @@ def classification_score_summary(
 ) -> None:
     """Attach the classify run's evidence-type scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
-    (task 014).
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.

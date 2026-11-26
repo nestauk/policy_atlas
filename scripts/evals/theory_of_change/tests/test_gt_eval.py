@@ -23,7 +23,7 @@ def test_parse_dataset() -> None:
         and "Intervention-first brief" not in gt["notes"]
     )
     assert "## Assumptions and risks" in gt["notes"]
-    # EPPS weak set: edge 18 (A9-A11) and edges 22-24 (A13), 0-based.
+    # EPPS weak set: edge 18 (A9-A11) and edges 22-24, 0-based.
     assert g.gt_weak_edges(gt) == [17, 21, 22, 23]
     cf = g.load_case("cf_individual")
     assert {cf["edges"][i]["status"] for i in g.gt_weak_edges(cf)} <= {

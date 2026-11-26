@@ -29,8 +29,8 @@ export function useComposerSeed(apply: (text: string) => void): void {
 }
 
 /**
- * Put text in the Task Agent composer from elsewhere on the page (task 044,
- * C18: a scoping plan section's Edit action has no inline editor of its own —
+ * Put text in the Task Agent composer from elsewhere on the page (a
+ * scoping plan section's Edit action has no inline editor of its own —
  * the fields are Task Agent-negotiated, so "editing" them is a conversational
  * turn, seeded here rather than built as a second typed-field editor).
  */

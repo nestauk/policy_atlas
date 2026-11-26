@@ -3,7 +3,9 @@ type: Integration quirk
 title: str(engine.url) hides the password; use render_as_string(hide_password=False) when the value is handed on
 description: SQLAlchemy prints a URL's password as three asterisks in str(). A script that passes str(url) to another process sends a broken connection string. Render with hide_password=False, and keep that value out of logs.
 tags: [sqlalchemy, database, secrets, integration-quirk, "065"]
-timestamp: 2026-11-17
+generated:
+  by: process:okf-migrate
+  at: 2026-11-17
 ---
 
 # Rule

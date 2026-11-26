@@ -3,7 +3,9 @@ type: Architecture note
 title: Quote-in-context reads come in two keyings — artefact citation-table ids and durable chunk ids
 description: repository.chunk_context_out resolves only artefact citation-table ids; chat citations carry durable chunk ids, so 029 added the chunk-keyed variant (chunk_quote_context_out + GET /tasks/{id}/chunks/{chunk_id}/context?quote=). Any future non-artefact citation surface needs the chunk-keyed read, not the artefact one.
 tags: [chunk-context, citations, read-models, chat, api]
-timestamp: 2026-08-11
+generated:
+  by: process:okf-migrate
+  at: 2026-08-11
 ---
 
 # Rule

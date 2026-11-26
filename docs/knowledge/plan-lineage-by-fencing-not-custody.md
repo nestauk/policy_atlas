@@ -3,7 +3,14 @@ type: Invariant
 title: The continuation reducer's plan selection is correct by fencing, not by custody
 description: continuation_state.build() picks the latest APPROVED plan task-wide with no join to the specific walk — that is only the parked walk's own lineage because steering amendments supersede within-lineage and Task Agent turns 409 run_active while a walk is running/parked. Remove the fence and plans cross-contaminate silently.
 tags: [continuation, planning, invariant, review-lesson]
-timestamp: 2026-09-24
+generated:
+  by: process:okf-migrate
+  at: 2026-09-24
+sources:
+  - resource: "backend/src/policy_atlas/runtime/continuation_state.py"
+    title: "`backend/src/policy_atlas/runtime/continuation_state.py` (`build()`, latest- approved plan selection)"
+  - resource: "backend/src/policy_atlas/api/routers/task_agent.py"
+    title: "`backend/src/policy_atlas/api/routers/task_agent.py` (`create_task_agent_turn`, the `run_active` 409 check)"
 ---
 
 # Rule
@@ -48,10 +55,3 @@ latest and could never fire. An opener acting on a confirmation takes the
 confirmed version (`out.version`; gate paths pass the gate walk's version via
 `longlist_start.plan_row_of_walk`) — the same rule as
 [read-model-refs-pin-by-fk](read-model-refs-pin-by-fk.md).
-
-# Citations
-
-- `backend/src/policy_atlas/runtime/continuation_state.py` (`build()`, latest-
-  approved plan selection)
-- `backend/src/policy_atlas/api/routers/task_agent.py` (`create_task_agent_turn`,
-  the `run_active` 409 check)

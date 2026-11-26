@@ -67,21 +67,39 @@ def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
     parser = build_parser()
     cases = {
         "org-create": dict(ENV="staging", NAME="An Org"),
+        "org-domain-add": dict(ENV="staging", DOMAIN="b.org", ORG="An Org"),
+        "org-domain-remove": dict(ENV="prod", DOMAIN="b.org"),
         "user-create": dict(ENV="staging", EMAIL="a@b.org", NAME="A Name", ORG="An Org"),
         "user-enrol": dict(ENV="prod", EMAIL="a@b.org", NAME="A Name", ORG="An Org"),
         "user-resync": dict(ENV="staging", EMAIL="a@b.org"),
         "user-reissue": dict(ENV="staging", EMAIL="a@b.org"),
+        "user-reset-app": dict(ENV="staging", EMAIL="a@b.org"),
         "user-de-enrol": dict(ENV="staging", SUB="sub-1234"),
+        "user-deactivate": dict(ENV="staging", EMAIL="a@b.org"),
+        "user-reactivate": dict(ENV="prod", SUB="sub-1234"),
         "rows-assign": dict(
             ENV="staging", TASK="1cf9db6a-1111-4222-8333-444455556666", ORG="An Org"
         ),
         "admin-grant": dict(ENV="staging", EMAIL="a@b.org"),
         "admin-revoke": dict(ENV="prod", SUB="sub-1234"),
+        "ops-grant": dict(ENV="staging", EMAIL="a@b.org"),
+        "ops-revoke": dict(ENV="prod", SUB="sub-1234"),
     }
     for target, variables in cases.items():
         argv = _dry_run(target, **variables)
         args = parser.parse_args(argv)  # SystemExit here == wrapper↔CLI drift
         assert args.env == variables["ENV"]
+
+
+def test_the_subject_wrappers_reach_their_own_command_by_email_or_sub() -> None:
+    parser = build_parser()
+    pairs = [("admin", "grant"), ("admin", "revoke"), ("ops", "grant"), ("ops", "revoke")]
+    pairs += [("user", "deactivate"), ("user", "reactivate"), ("user", "reset-app")]
+    for group, command in pairs:
+        for subject in (dict(EMAIL="a@b.org"), dict(SUB="sub-1234")):
+            args = parser.parse_args(_dry_run(f"{group}-{command}", ENV="staging", **subject))
+            assert (args.group, args.command) == (group, command)
+            assert (args.email, args.sub) == (subject.get("EMAIL"), subject.get("SUB"))
 
 
 def test_the_wrapper_argv_passes_through_the_parsers_own_normalisation() -> None:
@@ -143,7 +161,7 @@ def test_no_wrapper_carries_a_credential_shaped_variable() -> None:
     wrapper_block = makefile[makefile.index("ops-require =") :]
     wrapper_block = wrapper_block[: wrapper_block.index("\ndev:")]
     recipe_lines = [line for line in wrapper_block.splitlines() if line.startswith("\t")]
-    assert len(recipe_lines) == 9  # one forwarding line per wrapper, nothing else
+    assert len(recipe_lines) == 16  # one forwarding line per wrapper, nothing else
     for line in recipe_lines:
         for word in ("PASSWORD", "SECRET", "TOKEN", "DATABASE_URL", "database-url"):
             assert word not in line

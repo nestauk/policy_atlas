@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check deploy.sh's migration waiter (task 057, G10) against a stubbed `aws`.
+# Check deploy.sh's migration waiter against a stubbed `aws`.
 #
 # deploy.sh polls the migration task with `aws ecs describe-tasks` every 15 s until
 # ECS reports it STOPPED, up to MIGRATION_WAIT_MAX_S seconds, then fails unless the
@@ -100,7 +100,7 @@ run_case bad_limit "STOPPED" 0 "" "ninety"
 check "a limit that is not a number is refused" \
     '[[ $case_status -ne 0 && "$case_err" == *"MIGRATION_WAIT_MAX_S must be a whole number"* ]]'
 
-# The ops login check (task 065): the same task definition, its command
+# The ops login check: the same task definition, its command
 # swapped for `db_role check`, waited on by the same waiter.
 run_login_case() {
     export STUB_LOG="$work_dir/$1.log"

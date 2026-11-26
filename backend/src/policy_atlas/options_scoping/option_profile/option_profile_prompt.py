@@ -35,9 +35,9 @@ from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_
 
 OPTION_PROFILE_PROMPT_VERSION = "option_profile_v5"
 
-OPTION_PROFILE_MAX_OUTPUT_TOKENS = 16_384
+OPTION_PROFILE_MAX_OUTPUT_TOKENS = 18_432
 
-#: The ceiling on one Potential impact sentence (task 055, contract item 6).
+#: The ceiling on one Potential impact sentence.
 #: Checked in code after the call, not on the wire: a ``max_length`` on the
 #: wire makes the constrained decoder stop mid-word at the limit (seen on the
 #: stored tasks in the build) instead of failing the attempt. The model is
@@ -52,7 +52,7 @@ OPTION_PROFILE_MAX_OUTPUT_TOKENS = 16_384
 POTENTIAL_IMPACT_MAX_CHARS = 400
 POTENTIAL_IMPACT_HARD_MAX_CHARS = 600
 
-#: The baseline text the Potential impact call reads, at most (plan PG2).
+#: The baseline text the Potential impact call reads, at most.
 POTENTIAL_IMPACT_BASELINE_MAX_CHARS = 12_000
 
 #: The question each line answers, keyed by line key.
@@ -146,7 +146,7 @@ LINE_MARK_MEANING: dict[str, str] = {
         "'less' = one instance of delivery is simpler than most; 'more' = it "
         "needs more judgement and tailoring."
     ),
-    # Task 055 review (owner, 2026-10-27): a lower/middle/higher mark on the
+    # A lower/middle/higher mark on the
     # Potential impact line, shown as the grid's last column.
     "potential_impact": (
         "'less' = a smaller difference to the plan's outcomes than most, if it "
@@ -574,7 +574,7 @@ id.
 )
 
 #: The data block the ``who_decides`` line receives when the plan holds a
-#: constraint on who can act (task 046, amendment 4, R89; S35): the user's
+#: constraint on who can act: the user's
 #: own words for the body whose power is in question, so that the line names
 #: that body by the user's name for it when it is the body that decides.
 WHO_DECIDES_CONSIDERATIONS_BLOCK = """\
@@ -633,7 +633,7 @@ LINE_NAMES: dict[str, str] = {
     "potential_impact": "Potential impact",
 }
 
-#: The line whose call has its own prompt and payload (task 055, item 6):
+#: The line whose call has its own prompt and payload (item 6):
 #: :func:`build_potential_impact_messages`, never :func:`build_line_messages`.
 POTENTIAL_IMPACT_LINE = "potential_impact"
 

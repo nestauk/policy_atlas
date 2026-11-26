@@ -1,8 +1,8 @@
-"""The ingest queue: messages, the queue-client seam, and the in-process client (task 057).
+"""The ingest queue: messages, the queue-client seam, and the in-process client.
 
 The full-text stage sends one message per document to a queue client (plan P9).
 A message names the link row (``task_source_snapshot`` row) and the run, nothing
-else: no URL and no user id ever enters the queue (owner item 2, contract N1).
+else: no URL and no user id ever enters the queue.
 
 Two clients implement :class:`QueueClient`:
 
@@ -54,7 +54,7 @@ log = structlog.get_logger()
 #: The message layout's version. Version 1 carries two ids and nothing else, ever.
 MESSAGE_SCHEMA = 1
 
-#: How long the stage waits for queued documents, from the first send (D4).
+#: How long the stage waits for queued documents, from the first send.
 #: A document still being read then is marked ``not_ready`` and tried again on
 #: the next run.
 QUEUED_STAGE_DEADLINE_S = 600.0
@@ -146,7 +146,7 @@ def make_ingest_handler(
         thin_min: Thin-text guard threshold in characters.
 
     Returns:
-        The handler. In process there is no deadline (D4).
+        The handler. In process there is no deadline.
     """
 
     def handle(connect: ConnectFactory, message: IngestMessage) -> DocumentOutcome:
@@ -166,8 +166,8 @@ def make_ingest_handler(
     return handle
 
 
-#: Threads for the in-process client (owner ruling 2026-11-04, task 057 review):
-#: 10, as the fetch pool had before task 057, not the parse worker count (4 on
+#: Threads for the in-process client:
+#: 10, not the parse worker count (4 on
 #: the 2-vCPU production task). Each thread fetches, parses and writes one
 #: document; the parse step is still bounded by ``INGEST_SLOTS`` (the parse
 #: worker count), so only fetching and writing run wider than the cores.
@@ -179,7 +179,7 @@ class LocalQueueClient:
 
     With ``workers > 0`` the documents run on a pool of that many threads; each
     thread opens its own connections through ``connect`` (a SQLAlchemy connection
-    is not thread-safe, finding 17) and commits per document, so both ingest modes
+    is not thread-safe) and commits per document, so both ingest modes
     have the same commit behaviour. ``send`` returns when every document is done;
     if any handler raised, the first error is raised after the rest have finished.
 
@@ -228,7 +228,7 @@ class LocalQueueClient:
             with ThreadPoolExecutor(
                 max_workers=self._workers, thread_name_prefix="policy-atlas-ingest"
             ) as pool:
-                # task 057 review (code-review 3): each document runs in a fresh
+                # Each document runs in a fresh
                 # copy of the caller's contextvars (structlog run binding, Langfuse).
                 futures: list[Future[DocumentOutcome]] = [
                     pool.submit(
@@ -260,7 +260,7 @@ class SqsClient(Protocol):
         ...
 
 
-@functools.cache  # task 057 review (code-review 6): one client per process (thread-safe)
+@functools.cache  # One client per process (thread-safe)
 def sqs_client() -> SqsClient:
     """Build the SQS client once with :data:`SQS_CLIENT_CONFIG` (region from ``AWS_REGION``).
 
@@ -340,7 +340,7 @@ class SqsQueueClient:
                 failed.update(dict.fromkeys(by_entry.values(), reason))
                 continue
             except BotoCoreError as exc:
-                # task 057 review (Codex 2): no answer (e.g. a read timeout after
+                # No answer (e.g. a read timeout after
                 # SQS accepted the batch); closing the rows now would lose the
                 # document when its accepted message later no-ops.
                 unknown += len(group)

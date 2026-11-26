@@ -1,4 +1,4 @@
-"""The trigger floor (task 024, contract decision 8).
+"""The trigger floor.
 
 Pure read functions over persisted state only — SELECTs on result tables and
 ``event_log`` payloads. No LLM, no recomputation of anything a component
@@ -16,8 +16,7 @@ boundary to the trigger classes decision 8 declares applicable there, and
 always adds the universal downstream-capability-reduced check.
 
 Thresholds below are module-level internal constants — dev-side telemetry
-never plan content (017 standing owner rule, reaffirmed by the cost
-adjudication folded into decision 3).
+never plan content.
 """
 
 from __future__ import annotations
@@ -68,7 +67,7 @@ __all__ = [
 
 # --- Class 1: S0 select signals -------------------------------------------
 #
-# Already built (task 017/study S0): `steering.steer_point_triggers` reads
+# `steering.steer_point_triggers` reads
 # `selection_result.flags` and maps them to the deepening-selection triggers.
 # Re-exported here, never duplicated — the deepening-selection pause keeps
 # its own existing call site; this alias is for callers that want the whole
@@ -78,7 +77,7 @@ s0_select_triggers = steer_point_triggers
 # --- Module constants (thresholds; never plan content) --------------------
 
 #: Class 2 (P1 coverage, after acquire): the two `search_coverage_record`
-#: stop conditions that fire the floor unconditionally (contract decision 8).
+#: stop conditions that fire the floor unconditionally.
 P1_STOP_CONDITIONS: tuple[str, ...] = ("re_searched_still_thin", "error")
 
 #: Class 3 (P2 pre-select): screened-relevant count floor.
@@ -129,7 +128,7 @@ def p1_coverage_triggers(
 
     Reads the persisted `adequacy_verdict` and `stop_condition` columns —
     never recomputed. Fires on `adequacy_verdict == 'inadequate'` and/or
-    `stop_condition` in `P1_STOP_CONDITIONS` (contract decision 8); both can
+    `stop_condition` in `P1_STOP_CONDITIONS`; both can
     fire together off the same row.
 
     Args:
@@ -176,8 +175,8 @@ def screened_relevant_floor_trigger(
 ) -> list[dict[str, Any]]:
     """Fire when the scope's effective screened-relevant count is below the floor.
 
-    Reads `screen.effective_screen_rows()` (the generation/stage read rule,
-    task 024 decision 7b) and counts `status == 'relevant'` rows for the
+    Reads `screen.effective_screen_rows()` (the generation/stage read rule)
+    and counts `status == 'relevant'` rows for the
     scope — the scope-wide effective count, never a single run's slice.
 
     Args:
@@ -214,7 +213,7 @@ def classification_collapse_trigger(
 ) -> list[dict[str, Any]]:
     """Fire on document-type-mix collapse or an Unknown-share breach.
 
-    One reader, two call sites (contract decision 8 / steerability-refinement
+    One reader, two call sites (steerability-refinement
     "New floor triggers"): the pre-select boundary (P2, class 3's type/quality
     picture) and the after-classify boundary (class 6) share this exact
     query and these exact constants. Reads `source_classification_result`
@@ -284,7 +283,7 @@ def appraisal_collapse_trigger(
     One reader, two call sites, shared with the pre-select picture (class 3)
     and the after-appraise boundary (class 7). Reads `source_appraisal_result`
     grouped by `quality_score` for the scope — never recomputed. Unrated rows
-    (no score, task 056 D7) are left out of both the weak count and the total,
+    (no score) are left out of both the weak count and the total,
     so the trigger reads exactly as it did before they had rows.
 
     Args:
@@ -530,7 +529,7 @@ def downstream_capability_reduced_triggers(
     the run structurally poorer (e.g. group failed -> ungrouped synthesis).
     Reads `event_log` for the given run ids — never recomputed; the caller
     supplies the walk's attempted run ids (steering event-log attachment
-    convention, contract decision 1: skip/failure events attach to the
+    convention: skip/failure events attach to the
     most-recent attempted run).
 
     Args:
@@ -574,7 +573,7 @@ FloorBoundary = Literal[
 ]
 
 #: The non-lattice after_component boundaries that carry their own floor trigger
-#: classes (FIX 1 / contract decision 8). Maps a composed-step component to the
+#: classes (FIX 1). Maps a composed-step component to the
 #: :data:`FloorBoundary` whose classes fire at its after_component boundary, so
 #: the runner can read the floor at boundaries the lattice does not cover.
 #: ``acquire`` is excluded (P1's lattice read covers it);
@@ -608,7 +607,7 @@ def floor_triggers(
     S0 (class 1) is deliberately not a `boundary_component` option here — the
     deepening-selection pause keeps its own existing call site
     (`steering.steer_point_triggers`, re-exported as `s0_select_triggers`);
-    this aggregator covers the new floor triggers this task adds.
+    this aggregator covers the other floor triggers.
 
     Args:
         conn: Open read connection.

@@ -7,7 +7,7 @@ import { READY_WORDS, taskStatusWord, type WalkKind } from "../../ui/brand/taskS
 export type RowState = "done" | "progress" | "upcoming" | "failed" | "skipped";
 
 /**
- * One row of the run trace's step list (task 058, D5): one plan step, or
+ * One row of the run trace's step list: one plan step, or
  * several stages the server says share a row ("Searching and screening" is
  * search plus screen; "Classifying" is classify plus appraise).
  */
@@ -36,7 +36,7 @@ const LONGLIST_STAGES = new Set([
 ]);
 
 /** A theory of change's walk kinds as the run read names them
- *  (`RunOut.toc_walk`, task 054, S3). */
+ *  (`RunOut.toc_walk`, S3). */
 const TOC_WALK_KINDS: Record<string, WalkKind> = {
   draft: "toc_draft",
   read: "toc_read",
@@ -50,9 +50,9 @@ export function isTocWalk(kind: WalkKind): boolean {
 }
 
 /** Decide the walk kind from the task's capability and the run's own
- *  purpose (task 045, A7/A8); the stages decide only when the purpose is not
- *  known yet. A theory of change's walk follows the run read's `toc_walk`
- *  (task 054, S3); before the read has it, its first step says: an upload's
+ *  purpose; the stages decide only when the purpose is not
+ *  known yet. A theory of change's walk follows the run read's `toc_walk`;
+ *  before the read has it, its first step says: an upload's
  *  read reports `toc_read`, a draft `toc_draft`, and anything else is a
  *  check. */
 export function walkKind(
@@ -86,14 +86,14 @@ export function resultHref(taskId: string, kind: WalkKind): string {
 }
 
 /** Whether a run has finished with something to read (`degraded` opens the
- *  report like `succeeded`; task 058, N14). */
+ *  report like `succeeded`). */
 export function isFinished(status: RunStatus | undefined): boolean {
   return status === "succeeded" || status === "degraded";
 }
 
 /**
  * A duration in the trace's words: `45 s`, `6 min 12 s`, `1 h 4 min`. Elapsed
- * time only, never a countdown (annex § Voice rules).
+ * time only, never a countdown.
  *
  * Args:
  *   seconds: The duration.
@@ -138,7 +138,7 @@ export function elapsedSeconds(
 
 /**
  * The trace's rows: the plan's steps grouped by the server's `row` key, with
- * the stage frames laid over them (task 058, D5, N17). Labels are the
+ * the stage frames laid over them. Labels are the
  * server's. Upcoming rows come from the plan only, so a walk with no plan
  * steps on the stream (the scoping walks) builds its rows from the frames as
  * they arrive and shows none still to come. A stage the plan does not name
@@ -202,7 +202,7 @@ function rowState(
 }
 
 /**
- * A thread run's steps (`RunOut.stages`, owner round 11: what
+ * A thread run's steps (`RunOut.stages`: what
  * `stage.started` and `stage.completed` carried, read back from the event
  * log) as the trace's stage entries, for `cardRows`, so an earlier walk's
  * card folds its steps as the ended card does. Empty when the read carries
@@ -243,7 +243,7 @@ export function currentRow(rows: CardRow[]): CardRow | null {
 export function rowCounts(row: CardRow): string[] {
   return row.stages.flatMap((stage) => {
     const latest = [...row.entries].reverse().find((entry) => entry.stage === stage);
-    // The server names the counts and their nouns on the frame (task 058, N17).
+    // The server names the counts and their nouns on the frame.
     return (latest?.counts ?? []).map(({ value, noun }) => `${formatCount(value)} ${noun}`);
   });
 }
@@ -290,22 +290,21 @@ export function rowLiveness(
 }
 
 /** The longlist walk's steps whose done rows point at the longlist they
- *  made (owner, round 12). */
+ *  made. */
 const LONGLIST_MADE = new Set(["suggest", "longlist", "option_profile", "constrain", "theme"]);
 
 /**
- * Where a row points (annex § The running card, kept by the trace).
+ * Where a row points.
  *
  * A done row: the Sources table after searching or screening, the themes
- * after mapping, the landscape after classifying (at once: lead, round 8,
- * superseding round 4's "after Mapping"), the findings once there are any,
+ * after mapping, the landscape after classifying (at once), the findings once there are any,
  * the report after writing. Shortlisting and reading have nowhere to point.
  *
- * The step in progress points where its output is landing (owner, round 8):
+ * The step in progress points where its output is landing:
  * Searching and Screening to Sources, Classifying to the landscape, Mapping
  * to the themes, Writing to the report.
  *
- * A scoping walk links too (round 10, lead ruling D4; owner, round 11).
+ * A scoping walk links too.
  * The baseline walk maps as an Evidence search does, its Writing row
  * pointing at the baseline ("Baseline →"). A longlist walk searches,
  * screens and classifies as an Evidence search does, so those rows take the
@@ -315,16 +314,15 @@ const LONGLIST_MADE = new Set(["suggest", "longlist", "option_profile", "constra
  * the Result tab's default view). Done, the steps that make the longlist
  * (Suggesting options, Clustering, Estimating, Applying your constraints,
  * Grouping into themes) point at it too, and Shortlisting at the shortlist
- * page ("Shortlist →"; owner, round 12, replacing round 11's done rows that
- * pointed nowhere). Done, Searching for each option and Reading the
+ * page ("Shortlist →"). Done, Searching for each option and Reading the
  * abstracts point at the Sources table, where the option searches' results
- * are (lead, round 12). Reading the linked search links nothing. The shortlist
+ * are. Reading the linked search links nothing. The shortlist
  * walk's done Shortlisting row points at the shortlist page as well; an
  * added option's search links nothing.
  */
 export function rowLink(
   row: CardRow,
-  // The other rows: no link waits on another step since round 8; kept so
+  // The other rows: no link waits on another step; kept so
   // callers need not change.
   _rows: CardRow[],
   taskId: string,
@@ -344,7 +342,7 @@ export function rowLink(
     if (searched) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
     if (classified) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
     if (row.state === "done") {
-      // The option searches' results are in the Sources table (lead, round 12).
+      // The option searches' results are in the Sources table.
       if (has("option_searches") || has("extract_interventions")) {
         return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
       }
@@ -367,7 +365,7 @@ export function rowLink(
   }
   if (row.state !== "done") return null;
   if (searched) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
-  // Mapping's output is the themes (the Sources tab's first view; owner, polish round 2).
+  // Mapping's output is the themes (the Sources tab's first view).
   if (has("characterise")) return { href: `/tasks/${taskId}/sources`, label: "Themes" };
   if (classified) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
   if (has("extract") && hasFindings) return { href: `/tasks/${taskId}/sources/findings`, label: "Findings" };
@@ -376,8 +374,7 @@ export function rowLink(
 }
 
 /** A theory of change's steps whose rows point at the theory on the Result
- *  tab, and those that point at the Sources table (task 054, § 8: the
- *  links of the mock brief's table). Merging, the figures and the titles
+ *  tab, and those that point at the Sources table. Merging, the figures and the titles
  *  point nowhere. */
 const TOC_THEORY_STAGES = new Set(["toc_draft", "toc_read", "toc_discover", "toc_judge", "toc_search_again", "toc_retry_searches", "toc_choose"]);
 const TOC_SOURCES_STAGES = new Set(["toc_item_searches", "toc_select", "toc_search_new", "toc_new_link_searches", "classify", "appraise"]);
@@ -404,11 +401,10 @@ export function rowDetail(tick: StageLiveness | undefined): string | null {
   return activity === "" ? null : activity;
 }
 
-/** The words a step in progress reads after two minutes of silence (N5). */
+/** The words a step in progress reads after two minutes of silence. */
 export const STALLED_LINE = "Still working on this step";
 
-/** The trace's header words while the run is live or paused (annex § The run
- *  trace): the current row's label and what it is doing now; paused, the
+/** The trace's header words while the run is live or paused: the current row's label and what it is doing now; paused, the
  *  task's status words, naming who the run waits on (`taskStatusWord`).
  *  Every label is the server's; the client adds only the separators.
  *
@@ -432,7 +428,7 @@ export function traceWords(
   if (state === "paused") return taskStatusWord("paused", { isOwner, ownerName });
   const doing = state === "stalled" ? STALLED_LINE : detail;
   // A step verb that repeats the row's label ("Classifying · Classifying")
-  // says nothing twice (owner round 11, via the mock's scoping walk).
+  // says nothing twice (via the mock's scoping walk).
   const detailWords = doing !== null && doing.trim().toLowerCase() === (row?.label ?? "").trim().toLowerCase() ? null : doing;
   return [row?.label, detailWords].filter((part): part is string => Boolean(part)).join(" · ");
 }
@@ -446,11 +442,11 @@ export function stepCount(count: number): string {
 }
 
 /**
- * How a run that has ended reads, folded to one line (annex § The run trace):
+ * How a run that has ended reads, folded to one line:
  * the finish words per walk kind with the Result tab as its one link, or
  * the status word ("Stopped", "Failed") with no link. A degraded shortlist walk ended with
- * no shortlist, so it says so in the existing sentence (lead ruling,
- * 2026-11-05). Null while the run has not ended.
+ * no shortlist, so it says so in the existing sentence.
+ * Null while the run has not ended.
  */
 export function endedLine(
   status: RunStatus | undefined,

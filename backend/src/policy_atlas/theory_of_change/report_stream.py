@@ -1,4 +1,4 @@
-"""The theory-of-change report as it is written (task 054's 058 alignment, S4 to S7b).
+"""The theory-of-change report as it is written.
 
 In plain terms: the report is still one model call with the same prompt
 (``toc_report_v7``), model and answer format. What changes is that the answer
@@ -102,7 +102,7 @@ class _Field:
 
 
 #: The answer's fields in the order the model writes them (``ReportResponse``'s
-#: order, task 054 S6), each with its page part. ``question`` shows in the header
+#: order), each with its page part. ``question`` shows in the header
 #: and again in the Summary's first paragraph: it streams into the header, and
 #: joins the Summary whole when it closes (see :meth:`ReportFrames._close_field`).
 FIELDS: tuple[_Field, ...] = (

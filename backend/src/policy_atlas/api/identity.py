@@ -15,7 +15,7 @@ exactly two rungs, and the second one is derived from the token subject:
    row appears only when ``GET /api/v1/me`` first runs.
 
 There is no third rung. A row whose ``owner_user_id`` is ``NULL`` (the
-``runtime/agent.py`` CLI rows, which an admin can see per contract § 11)
+``runtime/agent.py`` CLI rows, which an admin can see)
 has no person to name at all, and :func:`owner_display_for` returns ``None`` —
 the API says "no owner" rather than inventing a placeholder. Choosing the
 placeholder glyph is a rendering decision and belongs to the frontend.
@@ -49,7 +49,7 @@ def sub_display(user_id: str) -> str:
 
     Returns:
         A short human-readable rendering of the subject. Never an email —
-        the subject is a generated UUID, not the address (contract § 3b: the
+        the subject is a generated UUID, not the address (the
         pool is ``UsernameAttributes: ["email"]``, so ``cognito:username`` is
         a UUID and the address never reaches the API).
     """

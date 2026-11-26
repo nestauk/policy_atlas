@@ -1,6 +1,6 @@
 """The Task Agent turn taken while a scoping walk is paused on its gate.
 
-The chat stays open at the baseline gate (task 044, deliverable 8, D9). A turn
+The chat stays open at the baseline gate. A turn
 arriving while an options-scoping walk is **paused** is admitted, reserved as an
 ordinary transcript row, and then *sorted* by the lead-authored gate sort into
 one of three shapes:
@@ -10,7 +10,7 @@ one of three shapes:
   applied;
 - **decision** — committed through the existing check-in response transaction,
   so a decision taken in words and a decision taken on the card land in exactly
-  one place, bound to the run, the check-in and the plan version (A13, C5);
+  one place, bound to the run, the check-in and the plan version;
 - **unsure** — asked back, in the product's own words, with the two options
   offered as quick replies.
 
@@ -45,7 +45,7 @@ CHANGE_PLAN = "change_plan"
 #: decision must read the same however it was taken, so it is never a model's
 #: sentence.
 CONFIRM_REPLY = "Plan confirmed. Building the longlist now."
-#: The confirm reply when the longlist walk could not be opened (F12): the
+#: The confirm reply when the longlist walk could not be opened: the
 #: decision stands, and the plan's Build longlist starts the walk later.
 CONFIRM_NOT_STARTED_REPLY = (
     "Plan confirmed, but the longlist did not start: use Build longlist on the plan to start it."
@@ -57,7 +57,7 @@ CHANGE_REPLY = "The run has stopped so you can change the plan."
 ALREADY_ANSWERED_REPLY = "This check-in was already answered."
 
 #: What the product says when the sort cannot tell. It names what is available
-#: rather than guessing, and it is honest about what is not (D10).
+#: rather than guessing, and it is honest about what is not.
 ASK_BACK_REPLY = (
     "I could not tell whether that is a question about the baseline or a "
     "decision. You can ask about the baseline, confirm the plan and build the "
@@ -181,7 +181,7 @@ def sort_turn(
     A backend error, an unknown kind, a decision naming an option the card did
     not offer, and a decision naming no option at all all resolve the same way:
     the product asks back. Guessing here would end a run in a state the user
-    did not choose — the one failure this gate must not have (A4, C1).
+    did not choose — the one failure this gate must not have.
 
     Args:
         agent: The agent backend seam.
@@ -243,7 +243,7 @@ def answer_at_gate(
         The prose (with the offer sentence) and its citation payload, or
         ``None`` when the walk this question was admitted at no longer offers
         a scope to answer over — the card resumed it while the sort was
-        running (C7). That is a race the user lost, not a server fault: the
+        running. That is a race the user lost, not a server fault: the
         caller completes the turn saying the check-in was already answered.
     """
     scope = resolve_run_components(engine, task_id, capability_run_id=gate.capability_run_id)
@@ -287,8 +287,8 @@ class DecisionOutcome:
             carried, when it had one — the second half of the same turn.
         continue_walk: The walk to resume, when the decision asked for one; the
             caller dispatches it after its own turn row is durable.
-        follow_on: The walk the caller opens after the commit, or ``None``
-            (task 045): ``"longlist"`` for "Confirm plan and build longlist".
+        follow_on: The walk the caller opens after the commit, or ``None``:
+            ``"longlist"`` for "Confirm plan and build longlist".
     """
 
     recorded: bool
@@ -314,7 +314,7 @@ def said_verbatim(quote: str, utterance: str) -> bool:
 def verbatim_carried_text(
     carried_text: str | None, *, utterance: str, check_in_id: uuid.UUID
 ) -> str | None:
-    """Keep the sort's carried instruction only when the user actually said it (S2).
+    """Keep the sort's carried instruction only when the user actually said it.
 
     ``carried_text`` becomes the **planner's message** on a "change the plan"
     turn, so it is the one piece of the sort's output that is treated as the

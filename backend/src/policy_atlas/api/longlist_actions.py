@@ -1,12 +1,12 @@
-"""The user's direct actions on the longlist (task 045, S11, S12; D13; task 055, P9).
+"""The user's direct actions on the longlist.
 
 *Add an option*, *exclude* and *include again* are one set of apply
 functions with two callers: the buttons (``api/routers/longlist.py``) and the
-Task Agent's longlist verbs (Phase 7), which confirm a verb in the thread and
-then call the same function. Task 055 adds the two shortlist buttons, *add
-to shortlist* and *remove from shortlist*, on the same pattern. Each writes
-the option's state **and one History event as the user's turn** (contract
-deliverable 9, ruling 1): an ``event_log`` row with ``run_id = None`` and
+Task Agent's longlist verbs, which confirm a verb in the thread and
+then call the same function. The two shortlist buttons, *add
+to shortlist* and *remove from shortlist*, follow the same pattern. Each writes
+the option's state **and one History event as the user's turn**:
+an ``event_log`` row with ``run_id = None`` and
 the actor in the payload, which ``GET /decisions`` renders with
 ``decided_by = "user"`` beside the lifecycle events (the precedent is the
 rename and share audit events).
@@ -185,12 +185,12 @@ def exclude_option(
     decision", reason, by: "user"}`` — reversible by :func:`include_option`,
     and never overridden by a rebuild's ``constrain``. An excluded option holds
     no shortlist place, so a place (``proposed`` or ``added_by_you``) is
-    cleared too (task 055, PR10); including it again does not restore the
+    cleared too; including it again does not restore the
     place. A set-aside stays set aside, so including the option again never
-    makes it a candidate again (S9).
+    makes it a candidate again.
 
-    Excluding again, when the option stands excluded by this same user (task
-    058, round 13): with a reason, the stored reason is filled in and one
+    Excluding again, when the option stands excluded by this same user:
+    with a reason, the stored reason is filled in and one
     ``option.exclusion_reason_added`` event is written instead of a second
     exclusion; with none, nothing changes.
 
@@ -207,16 +207,16 @@ def exclude_option(
     """
     admit_longlist_action(conn, task_id=task_id)
     row = _locked_option(conn, task_id=task_id, option_id=option_id)
-    # A reason is optional on the button and the verb alike (owner, 2026-09-24):
+    # A reason is optional on the button and the verb alike:
     # a blank one is recorded empty, never invented.
     text = clean_text(reason)
     already_mine = _excluded_by(conn, task_id=task_id, row=row) == actor
     if already_mine and not text:
-        # Excluding again with no reason changes nothing (round 13): the
+        # Excluding again with no reason changes nothing: the
         # standing exclusion and its reason are kept, and History stays as it is.
         return
     if already_mine:
-        # Round 13 (lead): a reason after the user's own exclusion fills the
+        # A reason after the user's own exclusion fills the
         # reason in; the exclusion stands, and History says so once.
         conn.execute(
             option.update()
@@ -375,7 +375,7 @@ def unshortlist_option(
 
     A Policy Atlas pick becomes ``set_aside`` (so Suggest more does not offer
     it again); the user's own place clears to no state. Nothing refills the
-    place and no walk opens (S7). An option with no place, or one already set
+    place and no walk opens. An option with no place, or one already set
     aside, is left as it is with no event.
 
     Args:
@@ -437,7 +437,7 @@ def current_plan_row(conn: Connection, *, task_id: uuid.UUID) -> dict[str, Any]:
 def propose_design(
     agent: AgentBackend, *, plan_payload: Any, words: str, session_id: uuid.UUID
 ) -> OptionDesign:
-    """Propose a specified design back from the user's words (``option_design_v1``, A14).
+    """Propose a specified design back from the user's words (``option_design_v1``).
 
     One judgment-model call, outside any transaction. The verb *add* proposes
     in its sorting turn and applies on the confirming one; the button proposes
@@ -476,7 +476,7 @@ class OptionAdded:
         capability_run_id: Its option search: a child walk with no parent.
         run_open: Whether the search's walk row existed when the call
             returned; ``False`` while the search is still queued on the
-            option-search pool (A4).
+            option-search pool.
     """
 
     option_id: uuid.UUID
@@ -491,7 +491,7 @@ def _release_search_reservation(task_id: uuid.UUID) -> None:
 
 
 def _release_when_search_settles(task_id: uuid.UUID, child_id: uuid.UUID) -> None:
-    """Hold an *add*'s reservation until its queued search has run (A4).
+    """Hold an *add*'s reservation until its queued search has run.
 
     The search's walk row is written only when the option-search pool starts
     it; until then the reservation is the task's fence. It is given back when
@@ -532,7 +532,7 @@ def add_option(
     Once the option has committed, the call does not fail for a slow pool: if
     the walk's row has not appeared within the wait, it returns the option
     with ``run_open = False`` and keeps the reservation until the search
-    settles (A4).
+    settles.
 
     Args:
         engine: Database engine.
@@ -544,7 +544,7 @@ def add_option(
             trace attribution.
         in_commit: Called with the transaction and the new option's id just
             before the option commits — the chat verb consumes its pending
-            action there, so a retried turn cannot mint a second option (A4).
+            action there, so a retried turn cannot mint a second option.
 
     Returns:
         The option and its option search.

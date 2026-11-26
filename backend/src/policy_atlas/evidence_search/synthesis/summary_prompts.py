@@ -141,7 +141,7 @@ Rules:
 """
 
 #: What the writer is told when a summary fails a format check rather than the judge:
-#: sent as ``previous_attempt.judge_reason`` on the retry (task 056, X2), so it is
+#: sent as ``previous_attempt.judge_reason`` on the retry, so it is
 #: model-facing text and lives here under the hash guard.
 SUMMARY_FORMAT_RETRY_REASON = {
     "over_length": "The summary was over the length limit; write one shorter sentence.",

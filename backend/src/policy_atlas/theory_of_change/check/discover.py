@@ -1,4 +1,4 @@
-"""The ``toc_discover`` step: routes the evidence suggests (task 054, C6).
+"""The ``toc_discover`` step: routes the evidence suggests.
 
 Batches of screened-in documents propose routes the theory lacks; a proposal
 whose route breaks a structure rule or whose passages are not in the documents
@@ -290,7 +290,7 @@ def toc_discover_scope(
     documents = screened_documents(conn, task_id=task_id, scope_id=context.scope_id)
     short, back = _short_keys(graph)
     theory = _theory_for_discover(graph, short)
-    # An uploaded diagram kept as drawn: found routes wait as one suggestion (owner, 2026-11-04).
+    # An uploaded diagram kept as drawn: found routes wait as one suggestion.
     suggest_only = as_drawn(plan)
     code_of = {short[key]: graph_rows.boxes[key].code or short[key] for key in graph.boxes}
     suggested: list[Any] = []
@@ -326,7 +326,7 @@ def toc_discover_scope(
     changes: list[store.Change] = []
     accepted = rejected = failed_batches = 0
     # Every batch's checked proposals, held back: one consolidate call joins
-    # the repeats and reuses boxes before anything is written (owner, 2026-10-27).
+    # the repeats and reuses boxes before anything is written.
     candidates: list[dict[str, object]] = []
     for batch, outcome in zip(batches, outcomes, strict=True):
         response = _outcome_value(outcome, usage)
@@ -405,7 +405,7 @@ def toc_discover_scope(
                     code_of,
                     {pair: graph_rows.links[key].code or key for pair, key in link_of_pair.items()},
                     proposed={op.key for op in suggested if op.key},
-                    # Each found route is offered on its own (owner, 2026-11-04).
+                    # Each found route is offered on its own.
                     group=f"r{sum(1 for op in suggested if op.op == 'add_pathway') + 1}",
                     evidence=list(
                         {

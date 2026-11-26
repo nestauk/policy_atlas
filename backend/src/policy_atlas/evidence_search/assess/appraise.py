@@ -26,7 +26,7 @@ from policy_atlas.core.schema import (
 from policy_atlas.evidence_search.assess.classify import SKIP_TSS_KEY, parse_skip_ids
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
-# v1 -> v2 (task 056, D7): the two unscored types now get an Unrated row instead of
+# v1 -> v2: the two unscored types now get an Unrated row instead of
 # no row. The scores themselves did not change; the bump records that the rubric's
 # reach did. v1 scores stay valid (labels.py COMPATIBLE_RUBRIC_VERSIONS), so nothing
 # is re-appraised.
@@ -35,7 +35,7 @@ DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v2"
 # The v3.0 default rubric: primary_evidence_type → quality_score (5 = strongest),
 # v2's expert-calibrated five-point evidence-hierarchy rating carried forward.
 # Types absent from it (Other/Non-evidence, Unknown) are never scored: since task
-# 056 (D7) they are appraised as Unrated — a row with no score and
+# 056 they are appraised as Unrated — a row with no score and
 # ``unrated = true`` — so they are citable and shown as "Unrated". Keys come from
 # EVIDENCE_TYPES (schema.py); a test enforces the domain is exactly EVIDENCE_TYPES
 # minus the two Unrated types.
@@ -60,9 +60,9 @@ SCORE_LABELS: dict[int, str] = {
     1: "Weak",
 }
 
-# The reader-facing label of an Unrated appraisal (task 056, D7). Kept apart from
+# The reader-facing label of an Unrated appraisal. Kept apart from
 # SCORE_LABELS because an Unrated row has no score, and a dict keyed by score cannot
-# hold a "no score" key (wording deviation from the contract, owner 2026-11-01).
+# hold a "no score" key (wording deviation from the contract).
 UNRATED_LABEL = "Unrated"
 
 _NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
@@ -128,7 +128,7 @@ def _parse_appraisal_directive(raw: Any) -> dict[str, int]:
       1..5 — anything else (including bool, float, out-of-range) rejects.
     - An empty ``rubric`` map rejects: a directive with no scoring effect
       is meaningless and must not silently no-op.
-    - ``skip_task_source_snapshot_ids`` (task 045), when present, must be a
+    - ``skip_task_source_snapshot_ids``, when present, must be a
       list of id strings; it is validated here and read by
       :func:`_parse_appraisal_skip`. It never changes the rubric.
 
@@ -177,7 +177,7 @@ def _parse_appraisal_directive(raw: Any) -> dict[str, int]:
 
 
 def _parse_appraisal_skip(raw: Any) -> frozenset[uuid.UUID]:
-    """Return the documents the appraisal directive says to leave alone (task 045).
+    """Return the documents the appraisal directive says to leave alone.
 
     Called after :func:`_parse_appraisal_directive` has validated ``raw``.
 
@@ -242,10 +242,10 @@ class AppraiseResult:
         quality_score: 1..5, 5 = strongest (v2 evidence-hierarchy rating);
             ``None`` for an Unrated document.
         rubric_version: Rubric that produced the score; ``DEFAULT_RUBRIC_VERSION``
-            unless a scope-context ``appraisal.rubric`` override is in effect (D1),
+            unless a scope-context ``appraisal.rubric`` override is in effect,
             in which case it is the derived ``f"{base}+{hash8}"`` version.
         unrated: ``True`` for a document typed Unknown or Other (Non-evidence):
-            it has no score and reads as "Unrated" (task 056, D7).
+            it has no score and reads as "Unrated".
     """
 
     quality_score: int | None
@@ -266,11 +266,11 @@ def appraise_sources(
     primary_evidence_type is in the effective rubric's domain, inserts one
     source_appraisal_result row and emits a source.appraised event. The two
     Unrated types (``UNRATED_TYPES``) that the effective rubric does not score
-    get a row too, with no score and ``unrated = true`` (task 056, D7), so
+    get a row too, with no score and ``unrated = true``, so
     they are citable and read as "Unrated". Already-appraised rows are
     skipped (idempotent).
 
-    D1 steering: ``context.context["appraisal"]`` may carry
+    Steering: ``context.context["appraisal"]`` may carry
     ``{"rubric": {evidence_type: tier}}``, a partial override parsed
     fail-closed by ``_parse_appraisal_directive``. The effective rubric is
     DEFAULT_RUBRIC overlaid with the override (the override's types and
@@ -301,14 +301,14 @@ def appraise_sources(
         ``skipped_demoted`` (scored- or Unrated-domain classifications whose
         doc is no longer effective-relevant, e.g. stage-2 demoted — never
         appraised), and ``already_appraised`` (pre-existing appraisal rows for
-        the scope). Since task 056 the two skipped counts read 0 under the
+        the scope). The two skipped counts read 0 under the
         default rubric, because those types are appraised as Unrated; the keys
         are kept so the summary keeps its shape and a type outside both
         domains would still be counted, never lost.
         Invariant: appraised + appraised_unrated + already_appraised +
         skipped_non_evidence + skipped_unknown + skipped_demoted =
         classification rows for the scope (+ ``resolved_elsewhere``, present
-        only under a task 045 skip directive: documents whose tier a linked
+        only under an ``appraisal`` skip directive: documents whose tier a linked
         task already answers).
     """
     rubric_override = _parse_appraisal_directive(context.context.get("appraisal"))
@@ -371,8 +371,8 @@ def appraise_sources(
     ).scalar_one()
 
     # The write path is effective-grained too: a doc classified before a
-    # stage-2 demotion must not gain an appraisal on a rerun (014 review
-    # finding). The exclusion is counted below (skipped_demoted), never silent.
+    # stage-2 demotion must not gain an appraisal on a rerun.
+    # The exclusion is counted below (skipped_demoted), never silent.
     appraisable_rows = conn.execute(
         select(
             task_source_snapshot.c.task_source_snapshot_id,
@@ -406,7 +406,7 @@ def appraise_sources(
             )
         )
     ).fetchall()
-    # Task 045: documents whose tier the label resolver already answers from a
+    # Documents whose tier the label resolver already answers from a
     # linked task are left alone and counted (``resolved_elsewhere``).
     resolved_elsewhere = sum(1 for row in appraisable_rows if row[0] in skip)
     if skip:

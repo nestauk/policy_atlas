@@ -4,7 +4,7 @@ import { useCreateProject, useUpdateTask } from "../api/mutations";
 type Settled<T> = { onSuccess?: (value: T) => void; onError?: () => void };
 
 /**
- * Make a project from a name (round 13; defined once): the one way the app
+ * Make a project from a name (defined once): the one way the app
  * creates a project, from the New page's picker, the task menu's step, the
  * Share page and the Projects page's form alike (`useCreateProject`).
  *
@@ -31,7 +31,7 @@ export function useMakeProject(): {
 }
 
 /**
- * Add a task to a project (round 13; defined once): the task menu's "Add to
+ * Add a task to a project (defined once): the task menu's "Add to
  * project" (rows and header) and the Share page's add run this. The task's
  * `project_ids` with the chosen one added, through `useUpdateTask`.
  *

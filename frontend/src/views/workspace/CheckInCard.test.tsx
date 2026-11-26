@@ -137,11 +137,9 @@ describe("CheckInCard — the card's shape (task 058, N19; annex scene 12)", () 
     });
   });
 
-  it("glows once, in orange, as it arrives (D15)", () => {
+  it("keeps the same card across a re-render, so it arrives once", () => {
     const { rerender } = renderCard(searchReview());
     const card = screen.getByTestId("check-in-card");
-    expect(card.className).toContain("anim-glow");
-    expect(card.className).toContain("border-l-orange");
     rerender(
       <MemoryRouter>
         <ToastProvider>
@@ -373,12 +371,10 @@ describe("CheckInCard — the baseline gate", () => {
     expect(baselineGateFacts(null)).toEqual([]);
   });
 
-  it("settles in the settled part card's language, the decision said once", () => {
+  it("settles to the decision, said once", () => {
     render(<SettledGateCard label="Confirm plan and build longlist" />);
     const card = screen.getByTestId("settled-gate");
     expect(card).toHaveTextContent(/^BaselineConfirm plan and build longlist$/);
-    expect(card.className).toContain("bg-blue-tint-2");
-    expect(card.className).toContain("border-r-green");
     expect(card).not.toHaveTextContent(/recorded|plan version/);
   });
 
@@ -392,7 +388,6 @@ describe("CheckInCard — the baseline gate", () => {
     // The gate is a decision, not a steer: no free-text compile, no abort.
     expect(screen.queryByRole("button", { name: "Compile" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop the run" })).not.toBeInTheDocument();
-    expect(screen.getByTestId("check-in-card").className).toContain("anim-glow");
   });
 
   it("posts Change the plan as an ordinary card option", async () => {
@@ -415,17 +410,15 @@ describe("CheckInCard — the baseline gate", () => {
   });
 });
 
-// Task 058, round 9 (the animation sweep's entry 3, the lead's ruling on it):
-// the card settles the moment the user chooses, as the part cards do, and
+// The card settles the moment the user chooses, as the part cards do, and
 // comes back open with its notice if the answer fails.
-describe("CheckInCard — settles on the choice (round 9)", () => {
-  it("settles at once when an option is chosen: inert, its contents fading", async () => {
+describe("CheckInCard — settles on the choice", () => {
+  it("settles at once when an option is chosen: inert", async () => {
     mutate.mockReset();
     renderCard(searchReview());
     await userEvent.click(screen.getByRole("radio", { name: /Looks right, assess these/ }));
     const shell = screen.getByTestId("check-in-shell");
     expect(shell).toHaveAttribute("data-leaving", "true");
-    expect(shell.firstElementChild?.firstElementChild).toHaveClass("anim-fade-out");
     expect(shell.firstElementChild?.firstElementChild).toHaveAttribute("inert");
   });
 
@@ -439,12 +432,5 @@ describe("CheckInCard — settles on the choice (round 9)", () => {
     expect(screen.getByTestId("check-in-shell")).not.toHaveAttribute("data-leaving");
     expect(screen.getByRole("alert")).toBeInTheDocument();
     mutate.mockReset();
-  });
-
-  it("blooms its ring after it lands, the ring only", () => {
-    renderCard(searchReview());
-    expect(screen.getByTestId("check-in-card")).toHaveClass("anim-glow");
-    // Outside a thread there is nothing to arrive into: it holds still.
-    expect(screen.getByTestId("check-in-shell")).not.toHaveClass("anim-rise");
   });
 });

@@ -24,7 +24,7 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   const tabOptions = useTabOptions(taskId ?? "");
 
   if (task.isPending || task.data === undefined) return null;
-  // Public-leg access (task 037): a signed-in outsider reading a public Task
+  // Public-leg access: a signed-in outsider reading a public Task
   // gets Results and Sources only — every other tab's URL lands on Results,
   // mirroring the anonymous public view. The run-state locks below never
   // apply on this leg: they are an owner-side affordance, and the public
@@ -36,7 +36,7 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   // Same discipline as the task query above: while a scoping task's artefact
   // read is in flight the baseline's existence is unknown, and treating
   // unknown as "no baseline" would bounce every Result deep link to Plan.
-  // Task 045 (S15): the longlist's existence rides the task read model
+  // The longlist's existence rides the task read model
   // (`has_longlist`), so the task's own fence above already covers it; the
   // tab status is `latest_run`'s, never an option search's.
   if (tabOptions.baselineLoading) return null;

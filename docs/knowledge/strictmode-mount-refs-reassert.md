@@ -3,7 +3,9 @@ type: Frontend rule
 title: React StrictMode permanently poisons useRef(true) mount flags — re-assert in the effect
 description: StrictMode's dev mount rehearsal runs the cleanup once at startup and the ref's initial value never re-applies on remount, so any callback gated on a mounted ref silently no-ops for the app's whole life. Always set the ref true in the effect's mount side.
 tags: [react, strictmode, useref, hooks, frontend, silent-failure]
-timestamp: 2026-08-11
+generated:
+  by: process:okf-migrate
+  at: 2026-08-11
 ---
 
 # Rule

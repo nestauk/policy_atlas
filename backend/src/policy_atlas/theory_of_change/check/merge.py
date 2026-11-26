@@ -1,4 +1,4 @@
-"""The ``toc_merge`` step: join and set aside before judging (task 054, C6).
+"""The ``toc_merge`` step: join and set aside before judging.
 
 One call joins pathways that share a mechanism and sets aside those that miss
 the intended change. ``fold_box`` is the same move on one box, for a proposal.
@@ -46,13 +46,13 @@ def _keep_one_of_each(order: list[str], kinds: dict[str, str], kept: set[str]) -
 def fold_problem(
     rows: store.GraphRows, box: str, into: str, *, by_user: bool = False
 ) -> str | None:
-    """Why one box may not be folded into another, or ``None`` when it may (C29).
+    """Why one box may not be folded into another, or ``None`` when it may.
 
     Args:
         rows: The current graph rows.
         box: The box to fold away (row id as text).
         into: The box it would be folded into.
-        by_user: The user accepted this merge (C45): their own boxes may go.
+        by_user: The user accepted this merge: their own boxes may go.
 
     Returns:
         The reason, or ``None``.
@@ -69,7 +69,7 @@ def fold_problem(
 
 
 class _FoldSkipped(Exception):
-    """A row changed under the fold: the fold is rolled back (C10)."""
+    """A row changed under the fold: the fold is rolled back."""
 
 
 def fold_box(
@@ -81,7 +81,7 @@ def fold_box(
     into: str,
     by_user: bool = False,
 ) -> bool:
-    """Fold one box into another of the same layer (C29).
+    """Fold one box into another of the same layer.
 
     Every link from or to ``box`` is re-pointed at ``into``. A link that would
     then join a box to itself is dropped from its pathways and deleted. Two
@@ -170,7 +170,7 @@ def toc_merge_scope(
     context: ScopeContext,
     backend: TocBackend,
 ) -> dict[str, Any]:
-    """Fold repeated boxes, merge pathways that share a mechanism, set aside misses (C29).
+    """Fold repeated boxes, merge pathways that share a mechanism, set aside misses.
 
     The box folds the call names are applied first, each checked by
     :func:`fold_problem` and done by :func:`fold_box`; then the pathway
@@ -244,7 +244,7 @@ def toc_merge_scope(
         raise RuntimeError("toc_merge: the merge call failed")
     log_ = store.ChangeLog()
     changes: list[store.Change] = []
-    # Box folds first (C29): the pathway decisions were made on the folded boxes.
+    # Box folds first: the pathway decisions were made on the folded boxes.
     folded: dict[str, str] = {}
     box_folds = refused = 0
     for wire in response.box_merges:

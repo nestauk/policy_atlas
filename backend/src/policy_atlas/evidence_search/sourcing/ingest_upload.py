@@ -92,7 +92,7 @@ def ingest_upload(
         conn,
         embedder=embedder,
         task_id=task_id,
-        # upload ingest runs outside any run; nil UUID marks that in embed logs (finding 3)
+        # upload ingest runs outside any run; nil UUID marks that in embed logs
         run_id=uuid.UUID(int=0),
     )
     log.info("ingest_upload.embed_counts", **counts)

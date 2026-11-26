@@ -24,20 +24,20 @@ type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 type TaskListRowProps = {
   to: string;
   name: string;
-  /** The row's `TaskOut.capability` (task 044). Left undefined only by a
+  /** The row's `TaskOut.capability`. Left undefined only by a
    *  caller with no task row to hand; `capabilityLabel` falls back. No depth
-   *  is shown beside it (owner ruling, C17). */
+   *  is shown beside it. */
   capabilityKey?: string | null;
   /** The projects the task belongs to, in order. The row shows the first
    *  and a count of the rest ("Child health +1"); the full list is the
-   *  prefix's hover text (lead ruling P2) and is in the accessible name. */
+   *  prefix's hover text and is in the accessible name. */
   projectNames?: readonly string[] | null;
   showProjectPrefix?: boolean;
   sourceCount?: number | null;
   updatedAt?: string | null;
   latestRun?: LatestRun;
   /** The walk running now (`TaskOut.active_run`): while it runs, the row
-   *  reads its stage and elapsed time (task 058, N15). */
+   *  reads its stage and elapsed time. */
   activeRun?: LatestRun;
   /** `TaskOut.is_owner`: whose task it is, for the paused word ("waiting on
    *  you" or on the owner) and the owner column's "You". A caller with no
@@ -45,7 +45,7 @@ type TaskListRowProps = {
   isOwner?: boolean;
   /** `TaskOut.owner_display`: the owner's name, or null for an ownerless row. */
   ownerName?: string | null;
-  /** Task 033 phase 10b: render the owner column (off on Mine, round 10). */
+  /** Render the owner column (off on Mine). */
   showOwner?: boolean;
   /** What the owner column shows for an ownerless row (`"—"`, or the
    *  admin-wide-list's "No organisation" — the caller decides). */
@@ -74,7 +74,7 @@ export function TaskListRow({
   archived = false,
 }: TaskListRowProps) {
   const safeOwner = ownerName != null ? scrub(ownerName) : null;
-  // The words come from the one status vocabulary (round 10: who a paused
+  // The words come from the one status vocabulary (who a paused
   // task waits on, one separator, "Archived").
   const statusWord = taskStatusWord(latestRun?.status, {
     isOwner,
@@ -85,7 +85,7 @@ export function TaskListRow({
   const statusTone = taskStatusTone(latestRun?.status, archived);
   const running = !archived && activeRun?.status === "running" && Boolean(activeRun.stage_label);
   const nowMs = useNow(running);
-  // A running row's step and its timer (round 14: a long step truncates,
+  // A running row's step and its timer (a long step truncates,
   // the timer always shows).
   const liveStep = running ? scrub(activeRun?.stage_label ?? "") : null;
   const liveTimer = running ? formatElapsed(elapsedSeconds(activeRun?.started_at, undefined, nowMs, (activeRun?.paused_seconds ?? 0) * 1000), { withSeconds: false }) : null;
@@ -99,10 +99,10 @@ export function TaskListRow({
   const ownerCell = isOwner ? "You" : (safeOwner ?? ownerlessLabel);
   const date = updatedAt != null ? formatDate(updatedAt, "short") : "";
 
-  // The accessible name is the row's content in order (lead ruling 1, round
-  // 10): the title, the status word with its live step, the project, the
+  // The accessible name is the row's content in order:
+  // the title, the status word with its live step, the project, the
   // owner where the column shows, the date. The capability and the source
-  // count are not in the ruling's name; the owner's bare dash says nothing.
+  // count are not in the accessible name; the owner's bare dash says nothing.
   const accessibleName = rowAccessibleName([
     safeName,
     statusLabel,
@@ -151,10 +151,10 @@ export function TaskListRow({
         {capabilityLabel(capabilityKey)}
       </span>
       {/* The status column is as wide as the widest word listed, at most
-          the old 11.5rem, and stands 24 px from the owner (round 12). */}
+          11.5rem, and stands 24 px from the owner. */}
       <span className={`flex min-w-0 items-center gap-1.5 text-meta leading-7 text-grey ${rowStatusCellClass}`}>
         {/* Every row's mark is the 6 px square, so a running row's is the
-            same size as a finished one's (owner, round 8): blue and
+            same size as a finished one's: blue and
             breathing while the run is live. */}
         {running || statusTone === "running" ? (
           <StatusMark tone="running" breathing />
@@ -165,7 +165,7 @@ export function TaskListRow({
             what gives way (the word never shrinks on a phone: a shrink
             weight, however small, cuts it by a subpixel into an ellipsis). */}
         {liveStep !== null ? (
-          // Round 14 (owner): the step gives way, the timer never does; the
+          // The step gives way, the timer never does; the
           // pair holds its place on a phone as the word does.
           <span className="flex min-w-0 items-baseline max-md:max-w-[calc(100%-12px)] max-md:shrink-0" title={statusLabel}>
             <span className="min-w-0 truncate">{liveStep}</span>
@@ -198,7 +198,7 @@ export function TaskListRow({
       <span className={`${rowFigureCellClass} max-md:hidden`}>
         {/* null and 0 differ: null means no run has asked yet. A failed
             run's count says nothing about the evidence, so it reads as the
-            dash (lead ruling, round 10), archived or not (round 11). */}
+            dash, archived or not. */}
         {latestRun?.status === "failed" ? (
           "—"
         ) : sourceCount != null ? (

@@ -20,7 +20,7 @@ from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.core.tags import has_control_character
 
 # Reason strings on both wire models (screen reps, classify) — the
-# select-rerank bound (contract decision 3, rev 1.2).
+# select-rerank bound.
 REASON_MAX = 240
 
 # Shared bound for Family B guidance channels (024 steering surface):

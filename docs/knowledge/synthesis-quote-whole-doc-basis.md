@@ -3,7 +3,9 @@ type: Invariant
 title: Chunk-claim quotes verify against the whole-document basis, one citation row per spanned chunk
 description: The cited chunk id must be tool-returned and appraised, but the quote presence-check runs over every chunk of that document; verified spans each write their own citation row, so a citation row's chunk_id can name a chunk the section loop never received.
 tags: [synthesise, citation, quote-verification, provenance, invariant]
-timestamp: 2026-07-08
+generated:
+  by: process:okf-migrate
+  at: 2026-07-08
 ---
 
 # Rule

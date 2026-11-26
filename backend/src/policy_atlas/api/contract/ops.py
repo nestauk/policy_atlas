@@ -74,7 +74,7 @@ class QuotaSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Required, nullable: a body that leaves one out must not clear it by
-    # accident (review stack, 2026-11-17).
+    # accident.
     task_quota_per_year: int | None = Field(ge=0)
     runs_per_user: int | None = Field(ge=0)
 
@@ -184,6 +184,7 @@ class PersonOut(BaseModel):
         invited_at: When Cognito last sent them an invitation through this
             service, or ``None``. The resend cooldown reads it.
         first_signed_in_at: When they first opened the app, or ``None``.
+        deactivated_at: When an operator deactivated them, or ``None`` (task 066).
         task_quota_per_year: Their own override, or ``None``.
         runs_per_user: Their own override, or ``None``.
         tasks_this_year: Tasks they created in the last 365 days.
@@ -201,6 +202,7 @@ class PersonOut(BaseModel):
     created_at: datetime
     invited_at: datetime | None = None
     first_signed_in_at: datetime | None = None
+    deactivated_at: datetime | None = None
     task_quota_per_year: int | None = None
     runs_per_user: int | None = None
     tasks_this_year: int
@@ -242,16 +244,19 @@ class PersonCreatedOut(BaseModel):
         person: The person as the list now shows them.
         invitation_sent: Whether Cognito sent an invitation on this call.
             ``False`` when the address already had an account.
+        reactivated: Whether the address belonged to a deactivated account
+            that this call turned back on.
     """
 
     person: PersonOut
     invitation_sent: bool
+    reactivated: bool = False
 
 
 #: How one subject of a bulk action ended. ``ok`` means the command ran and
 #: its audit row is written; ``failed`` means this subject's savepoint was
 #: rolled back and a ``failed`` audit row written; ``too_soon`` is the resend
-#: cooldown (contract B4).
+#: cooldown.
 ActionOutcome = Literal["ok", "failed", "too_soon"]
 
 
@@ -302,7 +307,7 @@ class BulkQuota(BulkSubjects, QuotaSet):
     """Body of ``POST /api/v1/ops/people/quota``: the same two fields for every subject."""
 
 
-#: A waitlist row's state on the Requests page (contract C5). ``waiting``: no
+#: A waitlist row's state on the Requests page. ``waiting``: no
 #: account yet and no listed domain, so an operator approves it; ``invited``:
 #: stamped by the sweep or an approval; ``check``: the address already belongs
 #: to another organisation, left for a person to decide.

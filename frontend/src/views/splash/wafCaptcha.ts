@@ -20,7 +20,7 @@ declare global {
 const LOAD_TIMEOUT_MS = 10_000;
 
 /**
- * The firewall's CAPTCHA puzzle for the waitlist form (contract 064b W6).
+ * The firewall's CAPTCHA puzzle for the waitlist form.
  *
  * Inert unless both `VITE_WAF_CAPTCHA_*` values are set. The script loads on `arm()`,
  * which the form calls on its first focus, never on mount: a visitor who never touches

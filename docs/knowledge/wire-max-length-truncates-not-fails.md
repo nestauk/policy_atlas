@@ -3,7 +3,9 @@ type: Convention
 title: A max_length on a structured-output wire field truncates the answer mid-word; a length ceiling belongs in the code check, with the target stated in the prompt
 description: In task 055 a `max_length=400` on the Potential impact wire field made the constrained decoder stop at the limit mid-word (sometimes a few characters short of it) instead of failing the attempt, so the plan's "a longer answer fails and is re-asked" never fired. The ceiling moved to the code check after the call, the prompt states a target (about 300, never more than 380), and on a spine step the code check is a hard bound above the target (600), not the target itself, because two over-target answers in a row would otherwise fail the whole walk.
 tags: [prompting, structured-output, pydantic, option-profile, spine, retry, task-055]
-timestamp: 2026-10-27
+generated:
+  by: process:okf-migrate
+  at: 2026-10-27
 ---
 
 # Rule

@@ -12,7 +12,7 @@ const LEAVE_MS = 150;
 const WORD_FADE_MS = 150;
 
 /**
- * A name that changes as a generation (owner, round 14): when `text`
+ * A name that changes as a generation: when `text`
  * changes while it is on screen (the backend names a task from its
  * confirmed question, or a chat from its first message), the old text fades
  * out over 150 ms, then the new one is revealed in place the way streamed

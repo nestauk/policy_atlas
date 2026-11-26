@@ -399,6 +399,7 @@ class _OneFallbackBackend(StubSynthesisBackend):
         transcript: list[Any],
         *,
         force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         if self.stream_fallbacks == 3:
             self.stream_fallbacks += 1

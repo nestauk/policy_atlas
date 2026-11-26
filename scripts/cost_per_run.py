@@ -25,7 +25,8 @@ Token buckets (Langfuse already nets them, so each token is in exactly one):
 - ``output_reasoning_tokens``: the model's hidden "thinking" tokens, charged
   at the output price.
 
-Runs recorded before task 056 have only input / cached / output / total.
+Runs recorded before the cache-write and reasoning counts were logged have
+only input / cached / output / total.
 
 Usage
 -----
@@ -43,7 +44,7 @@ shows it). Two totals are printed per session: the **session total** (every
 trace, including the Task Agent's planning turns and other helper traces) and
 the **run total** (only the ``run:*`` stage traces). The run total is the
 definition the 2026-10-30 cost baseline used, so it is the one to compare with
-the task 056 contract's § Goal table.
+that baseline.
 """
 
 from __future__ import annotations

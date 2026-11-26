@@ -3,7 +3,16 @@ type: Testing convention
 title: Tests run against a dedicated test database, each test in a rolled-back transaction
 description: Tests use a separate policy_atlas_test database on the same local container; the conn fixture also rolls back each test. conftest refuses to run against the dev DB.
 tags: [testing, database, pitfall]
-timestamp: 2026-09-17
+generated:
+  by: process:okf-migrate
+  at: 2026-09-17
+sources:
+  - resource: "../../tests/conftest.py"
+    title: "[tests/conftest.py](../../tests/conftest.py)"
+  - resource: "The repo `Makefile` \u2014 `setup` (creates the test DB) and `test` (`TEST_DATABASE_URL`) targets."
+    title: "The repo `Makefile` \u2014 `setup` (creates the test DB) and `test` (`TEST_DATABASE_URL`) targets."
+  - resource: "../agentic-ops/environment.md"
+    title: "[environment.md](../agentic-ops/environment.md)"
 ---
 
 # Rule
@@ -35,7 +44,8 @@ committed rows that break downgrades across *sessions* (conftest migrates but ne
 ad-hoc run that commits (e.g. the manual agent smoke) re-contaminates it. Symptoms:
 `CheckViolation` on downgrade in an apparently-clean session. Fix is `dropdb`+`createdb` (seconds);
 prevention is one-DB-user-at-a-time — a build lane's "fence" covers done-check resources, not just
-files. If parallel lanes become routine, see deferred.md's per-lane `DATABASE_URL` entry.
+files. Each pytest-xdist worker in one suite now gets its own database copy
+(`backend/tests/conftest.py`).
 Confirmed again at 033's build-open: a delegated agent ran pytest while the main suite was mid-run
 and the baseline showed 45 scattered failures. And again at 037's review phase: a background
 `make verify` raced a review lane's own pytest session — 72 failures, all
@@ -73,9 +83,3 @@ A pytest run outside `make test` (a single file, a delegated agent's check) must
 `postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test` — or
 conftest refuses to start; every delegated agent on 064a hit this once (AGENTS.md
 § Landmines carries the line).
-
-# Citations
-
-- [tests/conftest.py](../../tests/conftest.py)
-- The repo `Makefile` — `setup` (creates the test DB) and `test` (`TEST_DATABASE_URL`) targets.
-- [environment.md](../agentic-ops/environment.md)

@@ -1,4 +1,4 @@
-"""The lever-type taxonomy — one versioned list for every domain (task 045, D8).
+"""The lever-type taxonomy — one versioned list for every domain.
 
 A lever type names the instrument the state uses, never the subject, which
 is what makes one list serve every policy domain and what fixes the
@@ -11,7 +11,7 @@ typed under. The list is a Python constant, not prompt-internal text
 The ten entries are ruling 11's curated list as the 035 feasibility check
 ran it (check 3), with the definitions the typing prompt renders as data.
 
-v2 (task 046, item 7): "provide a service" is direct delivery by the state;
+v2: "provide a service" is direct delivery by the state;
 funding a provider is "subsidise"; buying from a provider is "procure or
 commission". The keys are unchanged.
 """

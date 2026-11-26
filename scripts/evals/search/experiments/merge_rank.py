@@ -1,4 +1,4 @@
-"""Merged ranking of OpenAlex and Overton candidates (R&D, task 049).
+"""Merged ranking of OpenAlex and Overton candidates (R&D).
 
 Offline experiment. Per review it takes two candidate lists already on disk:
 

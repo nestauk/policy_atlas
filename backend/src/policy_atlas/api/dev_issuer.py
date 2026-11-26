@@ -140,7 +140,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.dir,
         kid=args.kid,
     )
-    print(token)
+    print(token)  # noqa: T201 - command-line output
     return 0
 
 

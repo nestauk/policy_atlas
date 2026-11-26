@@ -3,7 +3,16 @@ type: Convention
 title: A mutation that commits and then waits for async work never errors after the commit — it returns what it made
 description: The verb add committed the option, then waited 10 s for its option search's walk row and raised on timeout — a 500 for a mutation that had happened, and the chat's pending action stayed pending, so confirming again minted a second option and search. As built, add answers with the option and run_open false, and the pending action is consumed inside the option's own transaction.
 tags: [api, idempotency, two-phase, longlist, chat, task-045, convention]
-timestamp: 2026-09-24
+generated:
+  by: process:okf-migrate
+  at: 2026-09-24
+sources:
+  - resource: "backend/src/policy_atlas/api/longlist_actions.py"
+    title: "`backend/src/policy_atlas/api/longlist_actions.py` (`add_option`, the `_await_new_run` branch)"
+  - resource: "backend/src/policy_atlas/api/longlist_turns.py"
+    title: "`backend/src/policy_atlas/api/longlist_turns.py` (`complete_in_commit`)"
+  - resource: "../tasks/045-scoping-longlist/verification.md"
+    title: "[045 verification.md](../tasks/045-scoping-longlist/verification.md) \u00a7 Review findings (A4, deviation 48)"
 ---
 
 # Rule
@@ -31,11 +40,4 @@ reads "still pending" makes the duplicate certain.
 - "Queued" still fences: the task's search reservation is held until the queued search settles,
   so a second add during the wait 409s (`test_longlist_routes.py`, the A4 test stubs
   `_await_new_run` to raise and asserts 201, `opened_run: null`, then 409, then release).
-- Same family: [two-phase-retry-terminal-status](two-phase-retry-terminal-status.md),
-  [db-row-is-the-single-flight-authority](db-row-is-the-single-flight-authority.md).
-
-# Citations
-
-- `backend/src/policy_atlas/api/longlist_actions.py` (`add_option`, the `_await_new_run` branch)
-- `backend/src/policy_atlas/api/longlist_turns.py` (`complete_in_commit`)
-- [045 verification.md](../tasks/045-scoping-longlist/verification.md) § Review findings (A4, deviation 48)
+- Same family: [db-row-is-the-single-flight-authority](db-row-is-the-single-flight-authority.md).

@@ -24,7 +24,7 @@ export function NavBar({ className, children, ...props }: HTMLAttributes<HTMLEle
 /**
  * Wordmark: fold-mark diamond + "Policy" navy + "Atlas" electric blue. The
  * mark stays still during a run: the run's own live mark is the one turning
- * logo on the screen (task 058, owner 2026-11-05).
+ * logo on the screen.
  */
 export function NavLogo() {
   return (
@@ -59,8 +59,7 @@ export function NavHomeLink() {
 }
 
 /**
- * The growing underline (task 058; owner round 9, reshaped in the
- * consistency pass): one 3 px Electric Blue rule under the item, anchored at
+ * The growing underline: one 3 px Electric Blue rule under the item, anchored at
  * its left edge. On hover (fine pointers, Tailwind's `hover:`) and keyboard
  * focus it grows from the left edge to the item's centre (half width, 200 ms,
  * the strong ease-out) and shrinks back on leave. The active item's rule is

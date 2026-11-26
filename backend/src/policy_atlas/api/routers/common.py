@@ -211,9 +211,8 @@ def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> L
         default = LimitSource("default")
         return _limits((settings.task_quota_per_year, default), (settings.runs_per_user, default))
     if row["is_admin"]:
-        # Administrators are exempt from both limits (owner rulings
-        # 2026-11-16: the task quota in 064a Q8, the run cap in 064a's
-        # review); an override on their row does not pull them back under.
+        # Administrators are exempt from both limits; an override on their row
+        # does not pull them back under.
         admin = LimitSource("administrator")
         return _limits((0, admin), (0, admin))
 
@@ -700,11 +699,11 @@ def task_out(
     latest = _latest_run_row(conn, row)
     latest_out = None
     source_count = None
-    # What exists and what is active (task 045, S15; owner: "scoping readers
-    # see what exists and what is active"): one ``SELECT … LIMIT 1`` for any
+    # What exists and what is active (scoping readers see what exists and
+    # what is active): one ``SELECT … LIMIT 1`` for any
     # running or paused walk, children included, and one ``EXISTS`` for the
     # longlist — a fixed two statements per task, whatever it has run. An
-    # active walk adds one more for its stage (task 058, N15) and one for the
+    # active walk adds one more for its stage and one for the
     # time it has paused, which its timer leaves out.
     active = conn.execute(
         select(capability_run)
@@ -730,7 +729,7 @@ def task_out(
     # is why ``links_for_tasks`` takes the subject. The public leg still omits
     # them entirely: the redacted shape carries nothing relational.
     if access == "public":
-        # Redacted shape (D5): no owner display, no project membership —
+        # Redacted shape: no owner display, no project membership —
         # skip the membership lookup entirely rather than compute and discard.
         project_ids = []
         display = None

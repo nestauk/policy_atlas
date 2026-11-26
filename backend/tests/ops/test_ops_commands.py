@@ -13,7 +13,7 @@ and seed through ``org_support.seeded``.
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -32,7 +32,13 @@ from policy_atlas.core.schema import (
     task,
 )
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import EnrolledElsewhere, OpsError, ResendTooSoon
+from policy_atlas.ops.errors import (
+    Deactivated,
+    EnrolledElsewhere,
+    NotFound,
+    OpsError,
+    ResendTooSoon,
+)
 from tests.api.org_support import (
     make_org,
     make_project,
@@ -47,6 +53,7 @@ from tests.ops.support import (
     cognito,
     expect_create,
     expect_create_manual,
+    expect_enabled,
     expect_lookup,
     expect_reissue,
     expect_resend,
@@ -79,7 +86,8 @@ def _project_row(conn: Connection, project_id: uuid.UUID) -> Any:
 def _user_row(conn: Connection, sub: str) -> Any:
     return conn.execute(
         select(
-            app_user.c.org_id, app_user.c.email, app_user.c.is_admin, app_user.c.display_name
+            app_user.c.org_id, app_user.c.email, app_user.c.is_admin, app_user.c.display_name,
+            app_user.c.deactivated_at,
         ).where(app_user.c.user_id == sub)
     ).one_or_none()
 
@@ -142,6 +150,14 @@ def test_user_create_sends_the_email_delivery_medium_explicitly(conn: Connection
     row = _user_row(conn, sub)
     assert row is not None
     assert (row.org_id, row.email, row.display_name) == (org.org_id, email, "New Person")
+
+
+def test_a_minted_password_holds_only_symbols_that_survive_a_copy() -> None:
+    """No character that a shell or a chat app rewrites (``#``, ``*``, ``_``, ``!``, ``^``)."""
+    for _ in range(200):
+        minted = commands._mint_temporary_password()
+        assert all(c.isalnum() or c in "@%+=-" for c in minted)
+        assert any(c in "@%+=-" for c in minted)
 
 
 def test_user_create_manual_invite_mints_and_prints_a_single_use_password(
@@ -651,14 +667,20 @@ def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_p
 # --- user reissue ------------------------------------------------------------
 
 
-def test_user_reissue_mints_a_non_permanent_password_for_a_never_signed_in_account() -> None:
+@pytest.mark.parametrize("status", ["FORCE_CHANGE_PASSWORD", "CONFIRMED"])
+def test_user_reissue_mints_a_non_permanent_password_whether_or_not_they_signed_in(
+    conn: Connection, status: str
+) -> None:
     email = unique_email("reissue")
     sub = fresh_sub()
     with cognito() as (client, stubber):
-        expect_status_lookup(stubber, email=email, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        expect_status_lookup(stubber, email=email, sub=sub, status=status)
+        expect_enabled(stubber, sub=sub)
         expect_reissue(stubber, sub=sub)
         with capture_logs() as logged:
-            reissue = commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            reissue = commands.reissue_temporary_password(
+                conn, client, pool_id=POOL_ID, email=email
+            )
         stubber.assert_no_pending_responses()
 
     minted = reissue.temporary_password
@@ -669,40 +691,67 @@ def test_user_reissue_mints_a_non_permanent_password_for_a_never_signed_in_accou
     assert not any(minted in str(event) for event in logged)
 
 
-@pytest.mark.parametrize("status", ["CONFIRMED", "RESET_REQUIRED", "UNCONFIRMED"])
-def test_user_reissue_refuses_an_account_not_awaiting_first_sign_in(status: str) -> None:
-    """A person who set their own password recovers it themselves.
-
-    No ``AdminSetUserPassword`` is queued, so the Stubber fails the test if the
-    refusal comes after the password was already replaced.
-    """
-    email = unique_email("confirmed")
+@pytest.mark.parametrize("status", ["RESET_REQUIRED", "UNCONFIRMED"])
+def test_user_reissue_refuses_an_account_in_any_other_status(
+    conn: Connection, status: str
+) -> None:
+    """No ``AdminSetUserPassword`` is queued, so the Stubber fails the test if
+    the refusal comes after the password was already replaced."""
+    email = unique_email("other-status")
     with cognito() as (client, stubber):
         expect_status_lookup(stubber, email=email, sub=fresh_sub(), status=status)
         with pytest.raises(OpsError, match="Nothing was changed"):
-            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
 
-def test_user_reissue_refuses_an_unknown_address() -> None:
+def test_user_reissue_refuses_an_account_disabled_in_cognito(conn: Connection) -> None:
+    """A locked-out person who signed in before is still ``CONFIRMED`` in Cognito."""
+    email = unique_email("disabled")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_status_lookup(stubber, email=email, sub=sub, status="CONFIRMED")
+        expect_enabled(stubber, sub=sub, enabled=False)
+        with pytest.raises(OpsError, match="deactivated.*Nothing was changed"):
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+
+def test_user_reissue_refuses_a_person_marked_deactivated_whom_cognito_still_enables(
+    conn: Connection,
+) -> None:
+    """The state a half-finished ``user reactivate`` leaves behind."""
+    email = unique_email("marked")
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=_org(conn).org_id, email=email)
+    _set_flags(conn, sub, deactivated_at=now())
+    with cognito() as (client, stubber):
+        expect_status_lookup(stubber, email=email, sub=sub, status="CONFIRMED")
+        with pytest.raises(OpsError, match="deactivated.*Nothing was changed"):
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+
+def test_user_reissue_refuses_an_unknown_address(conn: Connection) -> None:
     email = unique_email("nobody")
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=None)
         with pytest.raises(OpsError, match="no account in the pool"):
-            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
 
-def test_user_reissue_turns_a_cognito_refusal_into_an_ops_error() -> None:
+def test_user_reissue_turns_a_cognito_refusal_into_an_ops_error(conn: Connection) -> None:
     email = unique_email("refused")
     sub = fresh_sub()
     with cognito() as (client, stubber):
         expect_status_lookup(stubber, email=email, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        expect_enabled(stubber, sub=sub)
         stubber.add_client_error(
             "admin_set_user_password", service_error_code="InvalidPasswordException"
         )
         with pytest.raises(OpsError, match="InvalidPasswordException"):
-            commands.reissue_temporary_password(client, pool_id=POOL_ID, email=email)
+            commands.reissue_temporary_password(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
 
@@ -1089,7 +1138,7 @@ def test_admin_grant_takes_a_real_row_lock_by_address_and_by_sub(engine: Engine)
         held.rollback()
 
 
-# --- user offboard -------------------------------------------------------------
+# --- user deactivate / reactivate -------------------------------------------------------------
 #
 # The Stubber answers calls strictly in the order they were queued, and fails the
 # call on any other operation or parameter. So queuing `admin_disable_user` before
@@ -1128,12 +1177,12 @@ def _is_public(conn: Connection, task_id: uuid.UUID) -> bool:
     )
 
 
-def test_offboard_disables_then_signs_out_then_de_enrols_and_privatises_links(
+def test_deactivate_disables_then_signs_out_then_marks_and_privatises_links(
     conn: Connection,
 ) -> None:
     org = _org(conn)
     sub = fresh_sub()
-    email = unique_email("offboard")
+    email = unique_email("deactivate")
     ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
     public = _public_task(conn, owner=sub, org_id=org.org_id)
     private = make_task(conn, owner_user_id=sub, org_id=org.org_id)
@@ -1142,19 +1191,20 @@ def test_offboard_disables_then_signs_out_then_de_enrols_and_privatises_links(
     with cognito() as (client, stubber):
         _expect_lookup_by_sub(stubber, sub=sub)
         _expect_lock_out(stubber, sub=sub)
-        result = commands.offboard_user(conn, client, pool_id=POOL_ID, email=email)
+        result = commands.deactivate_user(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
-    assert result.de_enrolment is not None
     assert result.links_made_private == 1
     assert (_is_public(conn, public), _is_public(conn, private)) == (False, False)
     assert _is_public(conn, someone_elses) is True
-    assert _user_row(conn, sub).org_id is None
+    row = _user_row(conn, sub)
+    assert row.org_id == org.org_id  # owner ruling B: they keep their organisation
+    assert row.deactivated_at is not None
     assert result.admin_changes() == ()  # not an administrator: nothing to trace
     assert "disabled the Cognito account" in result.summary()
 
 
-def test_offboard_of_an_already_de_enrolled_person_skips_de_enrol(conn: Connection) -> None:
+def test_deactivate_of_a_person_in_no_organisation(conn: Connection) -> None:
     """M-02's main case: removed from the organisation earlier, login still working."""
     sub = fresh_sub()
     email = unique_email("gone")
@@ -1164,30 +1214,29 @@ def test_offboard_of_an_already_de_enrolled_person_skips_de_enrol(conn: Connecti
     with cognito() as (client, stubber):
         _expect_lookup_by_sub(stubber, sub=sub)
         _expect_lock_out(stubber, sub=sub)
-        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+        result = commands.deactivate_user(conn, client, pool_id=POOL_ID, sub=sub)
         stubber.assert_no_pending_responses()
 
-    assert result.de_enrolment is None
-    assert "de-enrol skipped: not enrolled" in result.steps
+    assert "marked deactivated" in result.steps
     assert result.links_made_private == 1
     assert _is_public(conn, public) is False
 
 
-def test_offboard_of_an_account_with_no_app_user_row_is_cognito_only(conn: Connection) -> None:
+def test_deactivate_of_an_account_with_no_app_user_row_is_cognito_only(conn: Connection) -> None:
     sub = fresh_sub()
     email = unique_email("never-arrived")
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
         _expect_lock_out(stubber, sub=sub)
-        result = commands.offboard_user(conn, client, pool_id=POOL_ID, email=email)
+        result = commands.deactivate_user(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
-    assert (result.user_id, result.de_enrolment, result.links_made_private) == (sub, None, 0)
+    assert (result.user_id, result.already, result.links_made_private) == (sub, False, 0)
     assert any("Cognito only" in step for step in result.steps)
     assert _user_row(conn, sub) is None
 
 
-def test_offboard_of_a_row_whose_cognito_account_is_gone_still_cleans_the_database(
+def test_deactivate_of_a_row_whose_cognito_account_is_gone_still_cleans_the_database(
     conn: Connection,
 ) -> None:
     """The account was deleted from the pool by hand; the row and the links remain."""
@@ -1202,17 +1251,16 @@ def test_offboard_of_a_row_whose_cognito_account_is_gone_still_cleans_the_databa
             {"Users": []},
             {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
         )
-        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+        result = commands.deactivate_user(conn, client, pool_id=POOL_ID, sub=sub)
         stubber.assert_no_pending_responses()  # no disable, no sign-out
 
     assert result.steps[0].startswith("no Cognito account in the pool")
-    assert result.de_enrolment is not None
     assert result.links_made_private == 1
     assert _is_public(conn, public) is False
-    assert _user_row(conn, sub).org_id is None
+    assert _user_row(conn, sub).deactivated_at is not None
 
 
-def test_offboard_refuses_when_neither_the_pool_nor_the_database_knows_them(
+def test_deactivate_refuses_when_neither_the_pool_nor_the_database_knows_them(
     conn: Connection,
 ) -> None:
     sub = fresh_sub()
@@ -1223,11 +1271,11 @@ def test_offboard_refuses_when_neither_the_pool_nor_the_database_knows_them(
             {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
         )
         with pytest.raises(OpsError, match="Nothing was changed"):
-            commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+            commands.deactivate_user(conn, client, pool_id=POOL_ID, sub=sub)
 
 
 @pytest.mark.parametrize("failing", ["admin_disable_user", "admin_user_global_sign_out"])
-def test_offboard_leaves_the_database_untouched_when_cognito_fails(
+def test_deactivate_leaves_the_database_untouched_when_cognito_fails(
     conn: Connection, failing: str
 ) -> None:
     org = _org(conn)
@@ -1240,30 +1288,30 @@ def test_offboard_leaves_the_database_untouched_when_cognito_fails(
         _expect_lookup_by_sub(stubber, sub=sub)
         _expect_lock_out(stubber, sub=sub, fail=failing)
         with pytest.raises(OpsError, match="InternalErrorException"):
-            commands.offboard_user(conn, client, pool_id=POOL_ID, email=email)
+            commands.deactivate_user(conn, client, pool_id=POOL_ID, email=email)
         stubber.assert_no_pending_responses()
 
     row = _user_row(conn, sub)
-    assert (row.org_id, row.is_admin) == (org.org_id, True)
+    assert (row.org_id, row.is_admin, row.deactivated_at) == (org.org_id, True, None)
     assert _is_public(conn, public) is True
 
 
-def test_offboarding_an_administrator_carries_the_admin_revoke_trace(conn: Connection) -> None:
+def test_deactivating_an_administrator_carries_the_admin_revoke_trace(conn: Connection) -> None:
     org = _org(conn)
     sub = fresh_sub()
     ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("admin-out"), is_admin=True)
     with cognito() as (client, stubber):
         _expect_lookup_by_sub(stubber, sub=sub)
         _expect_lock_out(stubber, sub=sub)
-        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+        result = commands.deactivate_user(conn, client, pool_id=POOL_ID, sub=sub)
     assert [(c.subject, c.direction) for c in result.admin_changes()] == [(sub, "revoke")]
     assert _user_row(conn, sub).is_admin is False
 
 
-def test_cli_user_offboard_reaches_the_command_and_traces_the_revoke(
+def test_cli_user_deactivate_reaches_the_command_and_traces_the_revoke(
     engine: Engine, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``user offboard --email`` through the real entrypoint, environment check and all.
+    """``user deactivate --email`` through the real entrypoint, environment check and all.
 
     The trace is the same ``ops.admin_change`` line ``admin revoke`` writes
     (``cli._trace``), read off stdout as ``test_ops_cli`` does.
@@ -1275,7 +1323,7 @@ def test_cli_user_offboard_reaches_the_command_and_traces_the_revoke(
 
     monkeypatch.setenv("LOG_FORMAT", "json")
     sub = fresh_sub("cognito")
-    email = unique_email("cli-offboard")
+    email = unique_email("cli-deactivate")
     with seeded(engine) as setup:
         ops_enrol(setup, user_id=sub, org_id=make_org(setup), email=email, is_admin=True)
         public = _public_task(setup, owner=sub, org_id=None)
@@ -1294,7 +1342,7 @@ def test_cli_user_offboard_reaches_the_command_and_traces_the_revoke(
                 "--user-pool-id",
                 POOL_ID,
                 "user",
-                "offboard",
+                "deactivate",
                 "--email",
                 email,
             ],
@@ -1306,7 +1354,7 @@ def test_cli_user_offboard_reaches_the_command_and_traces_the_revoke(
         stubber.assert_no_pending_responses()
 
     assert status == 0
-    assert any("offboarded" in line for line in lines)
+    assert any("deactivated" in line for line in lines)
     traced = [
         entry
         for entry in (
@@ -1319,7 +1367,7 @@ def test_cli_user_offboard_reaches_the_command_and_traces_the_revoke(
     assert [(entry["subject"], entry["direction"]) for entry in traced] == [(sub, "revoke")]
     with seeded(engine) as check:
         assert _is_public(check, public) is False
-        assert _user_row(check, sub).org_id is None
+        assert _user_row(check, sub).deactivated_at is not None
 
 
 # --- task 065: the ensure-account command (B4, B9, § Terms) --------------------
@@ -1375,6 +1423,7 @@ def test_ensure_account_enrols_an_existing_unenrolled_account_without_a_send(
     task_id = make_task(conn, owner_user_id=sub, visibility="org")
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
+        expect_enabled(stubber, sub=sub)
         enrolment = commands.ensure_account_enrolled(
             conn, client, pool_id=POOL_ID, email=email, display_name="Ensured", org=org
         )
@@ -1403,6 +1452,7 @@ def test_ensure_account_is_a_no_op_for_a_person_already_in_the_organisation(
     shared = make_task(conn, owner_user_id=sub, org_id=org.org_id, visibility="org")
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
+        expect_enabled(stubber, sub=sub)
         enrolment = commands.ensure_account_enrolled(
             conn, client, pool_id=POOL_ID, email=email, display_name="Other Name", org=org
         )
@@ -1430,6 +1480,7 @@ def test_ensure_account_refuses_a_person_enrolled_elsewhere_and_names_the_organi
     ops_enrol(conn, user_id=sub, org_id=first.org_id, email=email)
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
+        expect_enabled(stubber, sub=sub)
         with pytest.raises(EnrolledElsewhere) as refusal:
             commands.ensure_account_enrolled(
                 conn, client, pool_id=POOL_ID, email=email, display_name="X", org=second
@@ -1477,6 +1528,7 @@ def test_ensure_account_retry_after_a_database_failure_enrols_without_a_second_s
         assert _row(conn, sub) is None
 
         expect_lookup(stubber, email=email, sub=sub)
+        expect_enabled(stubber, sub=sub)
         retried = commands.ensure_account_enrolled(
             conn, client, pool_id=POOL_ID, email=email, display_name="R", org=org
         )
@@ -1658,19 +1710,18 @@ def test_de_enrol_clears_the_ops_role_and_traces_it_with_the_flag(conn: Connecti
         commands.de_enrol_user(conn, sub=ops_only)
 
 
-def test_offboard_de_enrols_a_person_who_only_holds_the_ops_role(conn: Connection) -> None:
-    """``offboard`` used to skip de-enrol for a row with no organisation; the ops role counts."""
+def test_deactivate_clears_the_ops_role_of_a_person_in_no_organisation(conn: Connection) -> None:
+    """The ops role is cleared and traced, even with no organisation."""
     sub = fresh_sub()
     ops_enrol(conn, user_id=sub, org_id=None, email=unique_email("ops-out"))
     _set_flags(conn, sub, is_ops=True)
     with cognito() as (client, stubber):
         _expect_lookup_by_sub(stubber, sub=sub)
         _expect_lock_out(stubber, sub=sub)
-        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+        result = commands.deactivate_user(conn, client, pool_id=POOL_ID, sub=sub)
         stubber.assert_no_pending_responses()
-    assert result.de_enrolment is not None
-    assert result.de_enrolment.ops_revoked is True
-    assert "ops role revoked" in result.summary()
+    assert result.ops_revoked is True
+    assert "cleared the admin and ops roles" in result.summary()
     assert [(c.subject, c.direction, c.flag) for c in result.admin_changes()] == [
         (sub, "revoke", "is_ops")
     ]
@@ -1816,3 +1867,128 @@ def test_record_action_inserts_one_row_and_returns_its_id(conn: Connection) -> N
         ).scalar_one()
         is None
     )
+
+
+# --- task 066: reactivate, re-add, grants, organisation delete ---------------
+
+
+def _deactivated(conn: Connection, sub: str) -> None:
+    _set_flags(conn, sub, deactivated_at=datetime(2026, 11, 19, 12, 0, tzinfo=UTC))
+
+
+def _expect_enable(stubber: Any, *, sub: str) -> None:
+    stubber.add_response("admin_enable_user", {}, {"UserPoolId": POOL_ID, "Username": sub})
+
+
+def test_reactivate_enables_and_clears_the_mark_but_gives_no_role_back(conn: Connection) -> None:
+    org = _org(conn)
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("back"))
+    _deactivated(conn, sub)
+    with cognito() as (client, stubber):
+        _expect_lookup_by_sub(stubber, sub=sub)
+        expect_enabled(stubber, sub=sub, enabled=False)
+        _expect_enable(stubber, sub=sub)
+        result = commands.reactivate_user(conn, client, pool_id=POOL_ID, sub=sub)
+        stubber.assert_no_pending_responses()
+    assert result.changed is True
+    row = _user_row(conn, sub)
+    assert (row.deactivated_at, row.is_admin, row.org_id) == (None, False, org.org_id)
+
+
+def test_reactivate_of_an_active_person_changes_nothing(conn: Connection) -> None:
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=None, email=unique_email("active"))
+    with cognito() as (client, stubber):
+        _expect_lookup_by_sub(stubber, sub=sub)
+        expect_enabled(stubber, sub=sub)
+        result = commands.reactivate_user(conn, client, pool_id=POOL_ID, sub=sub)
+        stubber.assert_no_pending_responses()  # no AdminEnableUser
+    assert result.changed is False
+
+
+def test_re_adding_a_disabled_account_reactivates_it_in_the_same_organisation(
+    conn: Connection,
+) -> None:
+    """An account offboarded before task 066: disabled in Cognito, no mark."""
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("legacy")
+    ops_enrol(conn, user_id=sub, org_id=None, email=email)
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        expect_enabled(stubber, sub=sub, enabled=False)
+        _expect_lookup_by_sub(stubber, sub=sub)
+        expect_enabled(stubber, sub=sub, enabled=False)
+        _expect_enable(stubber, sub=sub)
+        result = commands.ensure_account_enrolled(
+            conn, client, pool_id=POOL_ID, email=email, display_name="L", org=org,
+            reactivate=True,
+        )
+        stubber.assert_no_pending_responses()
+    assert result.reactivated is True
+    assert _user_row(conn, sub).org_id == org.org_id
+
+
+def test_re_adding_a_deactivated_person_from_another_organisation_turns_nothing_on(
+    conn: Connection,
+) -> None:
+    """Contract review finding 1: the refusal comes before any AdminEnableUser."""
+    home, other = _org(conn, "Home"), _org(conn, "Other")
+    sub = fresh_sub()
+    email = unique_email("elsewhere-off")
+    ops_enrol(conn, user_id=sub, org_id=home.org_id, email=email)
+    _deactivated(conn, sub)
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        with pytest.raises(EnrolledElsewhere):
+            commands.ensure_account_enrolled(
+                conn, client, pool_id=POOL_ID, email=email, display_name="E", org=other,
+                reactivate=True,
+            )
+        stubber.assert_no_pending_responses()
+    assert _user_row(conn, sub).deactivated_at is not None
+
+
+def test_approval_refuses_a_deactivated_account(conn: Connection) -> None:
+    """Only an operator's add or Reactivate turns a login back on (B5)."""
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("no-way-back")
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
+    _deactivated(conn, sub)
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        with pytest.raises(Deactivated):
+            commands.ensure_account_enrolled(
+                conn, client, pool_id=POOL_ID, email=email, display_name="N", org=org
+            )
+
+
+@pytest.mark.parametrize("setter", [commands.set_admin, commands.set_ops])
+def test_no_role_can_be_granted_while_deactivated(conn: Connection, setter: Any) -> None:
+    org = _org(conn)
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("no-role"))
+    _deactivated(conn, sub)
+    with pytest.raises(OpsError, match="deactivated"):
+        setter(conn, grant=True, sub=sub)
+
+
+def test_delete_organisation_refuses_while_anything_points_at_it(conn: Connection) -> None:
+    org = _org(conn)
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("member"))
+    make_task(conn, owner_user_id=sub, org_id=org.org_id)
+    with pytest.raises(OpsError, match="still has 1 people, 1 tasks"):
+        commands.delete_organisation(conn, org_id=org.org_id)
+
+
+def test_delete_organisation_deletes_an_empty_one(conn: Connection) -> None:
+    org = _org(conn)
+    assert commands.delete_organisation(conn, org_id=org.org_id).name == org.name
+    assert conn.execute(
+        select(organisation.c.org_id).where(organisation.c.org_id == org.org_id)
+    ).one_or_none() is None
+    with pytest.raises(NotFound):
+        commands.delete_organisation(conn, org_id=org.org_id)

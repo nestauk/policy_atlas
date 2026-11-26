@@ -1,4 +1,4 @@
-"""Seminal works: the studies the check's documents cite most (task 054, ruling 2026-11-04).
+"""Seminal works: the studies the check's documents cite most.
 
 The item searches find recent documents by meaning, so an older, much-cited
 study that shaped a field can be missed. After every item search has

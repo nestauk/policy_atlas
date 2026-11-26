@@ -1370,6 +1370,7 @@ class _BoundarySpanBackend(ScriptedSynthesisBackend):
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         del force_emit
         # The code-injected conclusions section (ADR 0015 §8) is not part of
@@ -1605,6 +1606,7 @@ class _GapCorpusAbsenceBackend(ScriptedSynthesisBackend):
         transcript: list[ToolExchange],
         *,
         force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         del seed, transcript, force_emit
         return {
@@ -2092,7 +2094,12 @@ class _SpanBindBackend(ScriptedSynthesisBackend):
         self._repair_text = repair_text
 
     def section_turn(
-        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         del transcript, force_emit
         # The code-injected conclusions section (ADR 0015 §8) is outside this
@@ -2423,7 +2430,12 @@ class _UncitedKeyFindingsBackend(ScriptedSynthesisBackend):
         self.section0_chunk_id: str | None = None
 
     def section_turn(
-        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         del force_emit
         if seed.get("section_index", 0) != 0:
@@ -3113,7 +3125,12 @@ class _FindingClaimBackend(ScriptedSynthesisBackend):
         self._finding_id = finding_id
 
     def section_turn(
-        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         del force_emit
         if seed.get("section_index", 0) != 0 or transcript:
@@ -3232,7 +3249,12 @@ class _SeedCapturingBackend:
         )
 
     def section_turn(
-        self, seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        force_emit: bool,
+        carried: Any = None,
     ) -> UsageResult[SectionTurn]:
         section_index = seed.get("section_index", 0)
         self.seeds_by_section.setdefault(

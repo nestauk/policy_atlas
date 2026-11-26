@@ -1,11 +1,15 @@
 """Shared test helpers — not fixtures, plain functions."""
 
+import json
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+from openai._models import construct_type
+from openai.types.responses import Response, ResponseStreamEvent
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import Connection
 
@@ -20,6 +24,8 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
 )
 
 if TYPE_CHECKING:
+    import pytest
+
     from policy_atlas.evidence_search.extract.icf_records import ICFRecordWire
 
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
@@ -33,90 +39,267 @@ def now() -> datetime:
     return datetime.now(UTC)
 
 
-# --- Fake OpenAI ``chat.completions.parse`` client double (task 023 WP8) ---
+# --- Fake OpenAI client for the Responses endpoint ---
 #
-# Every ``OpenAI*Backend.<verb>`` seam that calls ``self._client.chat.completions.parse(...)``
-# and reads ``response.choices[0].message.parsed`` shares this shape. Backends whose live path
-# calls ``.completions.create`` with tool-call messages (e.g. ``OpenAISynthesisBackend``'s
-# section-turn loop) are a genuinely different shape — those stay local to their test module.
+# ``core.openai_client`` sends every model request through ``client.responses.create``.
+# ``FakeResponsesClient`` stands in for that client: it records each request and hands
+# back canned answers built with the builders below. ``spy_calls`` records the
+# chat-style request a call site hands to ``send_turn`` / ``stream_turn`` /
+# ``parse_structured`` (what the site built, before the module translates it).
 
 
-@dataclass
-class FakeParsedMessage:
-    parsed: Any
-
-
-@dataclass
-class FakeChoice:
-    message: FakeParsedMessage
-
-
-@dataclass
-class FakeParseResponse:
-    choices: list[FakeChoice]
-    usage: Any = None
-
-
-class FakeParseCompletions:
-    """Test double for ``client.chat.completions``, recording every ``parse()`` call's kwargs."""
-
-    def __init__(self, response: FakeParseResponse) -> None:
-        self._response = response
-        self.calls: list[dict[str, Any]] = []
-
-    def parse(self, **kwargs: Any) -> FakeParseResponse:
-        self.calls.append(kwargs)
-        return self._response
-
-
-class FakeParseChat:
-    def __init__(self, response: FakeParseResponse) -> None:
-        self.completions = FakeParseCompletions(response)
-
-
-class FakeOpenAIParseClient:
-    """Test double for an OpenAI client exposing only ``chat.completions.parse``.
-
-    Build via ``fake_parse_client``, not directly.
-    """
-
-    def __init__(self, response: FakeParseResponse) -> None:
-        self.chat = FakeParseChat(response)
-
-
-def fake_parse_client(
-    *,
-    parsed: Any = _UNSET,
-    usage: Any = None,
-    choices: list[FakeChoice] | None = None,
-) -> FakeOpenAIParseClient:
-    """Build a fake OpenAI client double for a ``chat.completions.parse`` backend seam.
-
-    The common case passes ``parsed``: it becomes the sole choice's
-    ``message.parsed`` (identity-preserved — ``result is parsed`` holds for
-    backends that return the parsed object verbatim). Pass ``choices``
-    directly instead — even ``[]`` — to control the choices list exactly,
-    e.g. to exercise a backend's no-choices error path. Exactly one of
-    ``parsed``/``choices`` should be given.
-
-    Every ``parse()`` call's kwargs are recorded on
-    ``client.chat.completions.calls``, in order, for assertions like
-    ``kwargs["model"] == ...``.
+class FakeStream:
+    """A streamed answer for :class:`FakeResponsesClient`: its events, in order.
 
     Args:
-        parsed: The parsed payload for the sole response choice.
-        usage: The fake response's ``usage`` attribute; most backends under
-            test don't read it, so it defaults to ``None``.
-        choices: An explicit choices list, bypassing ``parsed``.
+        events: The stream events (see :func:`text_stream_events`).
+        fail_after: When set, raise ``error`` instead of handing out the event
+            at this index (a connection dropped midway).
+        error: The error raised at ``fail_after`` (``ConnectionError`` by default).
+    """
+
+    def __init__(
+        self,
+        events: Sequence[Any],
+        *,
+        fail_after: int | None = None,
+        error: BaseException | None = None,
+    ) -> None:
+        self._events = events
+        self._fail_after = fail_after
+        self._error = error
+        self.closed = False
+
+    def __iter__(self) -> Iterator[Any]:
+        for index, event in enumerate(self._events):
+            if index == self._fail_after:
+                raise self._error or ConnectionError("stream dropped")
+            yield event
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeResponsesClient:
+    """Test double for an OpenAI client exposing only ``responses.create``.
+
+    Each request's keyword arguments are recorded on :attr:`calls`, in order. The
+    answers are handed out in order and the last one repeats. An answer may be a
+    response object, a :class:`FakeStream` (or a plain list of stream events), an
+    exception to raise, or a function of the request returning one of those.
+
+    Args:
+        *answers: The canned answers.
+    """
+
+    def __init__(self, *answers: Any) -> None:
+        if not answers:
+            raise ValueError("FakeResponsesClient needs at least one answer")
+        self._answers = answers
+        self.calls: list[dict[str, Any]] = []
+        self.responses = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        answer = self._answers[min(len(self.calls), len(self._answers)) - 1]
+        if callable(answer):
+            answer = answer(kwargs)
+        if isinstance(answer, BaseException):
+            raise answer
+        if isinstance(answer, list):
+            return FakeStream(answer)
+        return answer
+
+
+def spy_calls(monkeypatch: "pytest.MonkeyPatch", module: Any, name: str) -> list[dict[str, Any]]:
+    """Record the keyword arguments of every call to ``module.name``, then call through.
+
+    Patch the name where the call site imports it (for example the site's
+    ``send_turn``), so the recorded request is the chat-style one the site built.
 
     Returns:
-        A fake client to assign onto a backend's ``_client`` attribute.
+        The recorded keyword arguments, one dict per call, in order.
     """
-    if choices is None:
-        if parsed is _UNSET:
-            raise ValueError("fake_parse_client requires parsed= or choices=")
-        choices = [FakeChoice(message=FakeParsedMessage(parsed))]
-    return FakeOpenAIParseClient(FakeParseResponse(choices=choices, usage=usage))
+    real = getattr(module, name)
+    calls: list[dict[str, Any]] = []
+
+    def _spy(*args: Any, **kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(module, name, _spy)
+    return calls
+
+
+# --- Responses-endpoint answer builders ---
+#
+# Small builders for the answer shape ``client.responses.create`` returns, as real SDK
+# objects (built without validation, as the SDK builds them). Fakes return them from
+# ``responses.create``; tests that fake the network send ``.to_dict()`` instead.
+
+
+def response_usage(
+    *,
+    input_tokens: int = 10,
+    output_tokens: int = 5,
+    cached: int = 0,
+    cache_write: int | None = None,
+    reasoning: int = 0,
+) -> dict[str, Any]:
+    """A Responses usage block; ``cache_write`` is sent only when given."""
+    input_details: dict[str, int] = {"cached_tokens": cached}
+    if cache_write is not None:
+        input_details["cache_write_tokens"] = cache_write
+    return {
+        "input_tokens": input_tokens,
+        "input_tokens_details": input_details,
+        "output_tokens": output_tokens,
+        "output_tokens_details": {"reasoning_tokens": reasoning},
+        "total_tokens": input_tokens + output_tokens,
+    }
+
+
+def _response(
+    output: list[dict[str, Any]],
+    usage: dict[str, Any] | None,
+    status: str = "completed",
+    **extra: Any,
+) -> Response:
+    return Response.construct(
+        id="resp_test",
+        object="response",
+        created_at=0,
+        model="gpt-test",
+        status=status,
+        output=output,
+        usage=usage,
+        parallel_tool_calls=True,
+        tool_choice="auto",
+        tools=[],
+        **extra,
+    )
+
+
+def _message(text: str) -> dict[str, Any]:
+    return {
+        "type": "message",
+        "id": "msg_test",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": text, "annotations": []}],
+    }
+
+
+def text_response(text: str, *, usage: dict[str, Any] | None = None) -> Response:
+    """A non-streamed answer holding one text message."""
+    return _response([_message(text)], usage if usage is not None else response_usage())
+
+
+def structured_response(value: Any, *, usage: dict[str, Any] | None = None) -> Response:
+    """A structured answer: ``value`` (a Pydantic model or plain data) as its JSON text."""
+    text = value.model_dump_json() if hasattr(value, "model_dump_json") else json.dumps(value)
+    return text_response(text, usage=usage)
+
+
+def cut_off_response(text: str, *, usage: dict[str, Any] | None = None) -> Response:
+    """A non-streamed answer stopped at the output-token limit, holding ``text`` so far."""
+    return _response(
+        [_message(text)],
+        usage if usage is not None else response_usage(),
+        "incomplete",
+        incomplete_details={"reason": "max_output_tokens"},
+    )
+
+
+def _refusal_message(refusal: str) -> dict[str, Any]:
+    return {
+        "type": "message",
+        "id": "msg_test",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "refusal", "refusal": refusal}],
+    }
+
+
+def refusal_response(refusal: str = "I can't help with that.") -> Response:
+    """A non-streamed answer in which the model refuses."""
+    return _response([_refusal_message(refusal)], response_usage())
+
+
+def refusal_stream_events(refusal: str = "I can't help with that.") -> list[ResponseStreamEvent]:
+    """The events of a streamed answer in which the model refuses (no text pieces)."""
+    events: list[dict[str, Any]] = [
+        {"type": "response.created", "response": _response([], None, "in_progress").to_dict()},
+        {"type": "response.refusal.delta", "item_id": "msg_test", "output_index": 0,
+         "content_index": 0, "delta": refusal},
+        {"type": "response.refusal.done", "item_id": "msg_test", "output_index": 0,
+         "content_index": 0, "refusal": refusal},
+        {"type": "response.completed",
+         "response": _response([_refusal_message(refusal)], response_usage()).to_dict()},
+    ]
+    return [
+        cast(ResponseStreamEvent, construct_type(
+            type_=ResponseStreamEvent, value={**event, "sequence_number": number}
+        ))
+        for number, event in enumerate(events)
+    ]
+
+
+def tool_call_response(
+    *calls: tuple[str, Any], text: str = "", usage: dict[str, Any] | None = None
+) -> Response:
+    """An answer calling each ``(name, arguments)`` in order; ids are ``call_0``, ``call_1``..."""
+    output = [_message(text)] if text else []
+    output += [
+        {
+            "type": "function_call",
+            "id": f"fc_{index}",
+            "call_id": f"call_{index}",
+            "name": name,
+            "arguments": arguments if isinstance(arguments, str) else json.dumps(arguments),
+            "status": "completed",
+        }
+        for index, (name, arguments) in enumerate(calls)
+    ]
+    return _response(output, usage if usage is not None else response_usage())
+
+
+def text_stream_events(
+    pieces: Sequence[str],
+    *,
+    ending: Literal["completed", "incomplete", "failed"] = "completed",
+    usage: dict[str, Any] | None = None,
+) -> list[ResponseStreamEvent]:
+    """The events of a streamed text answer: one delta per piece, then ``ending``'s event."""
+    usage = usage if usage is not None else response_usage()
+    text = "".join(pieces)
+    final = {
+        "completed": _response([_message(text)], usage),
+        "incomplete": _response(
+            [_message(text)],
+            usage,
+            "incomplete",
+            incomplete_details={"reason": "max_output_tokens"},
+        ),
+        "failed": _response(
+            [], usage, "failed", error={"code": "server_error", "message": "The model failed."}
+        ),
+    }[ending]
+    events: list[dict[str, Any]] = [
+        {"type": "response.created", "response": _response([], None, "in_progress").to_dict()}
+    ]
+    events += [
+        {"type": "response.output_text.delta", "item_id": "msg_test", "output_index": 0,
+         "content_index": 0, "delta": piece, "logprobs": []}
+        for piece in pieces
+    ]
+    events.append({"type": f"response.{ending}", "response": final.to_dict()})
+    return [
+        cast(ResponseStreamEvent, construct_type(
+            type_=ResponseStreamEvent, value={**event, "sequence_number": number}
+        ))
+        for number, event in enumerate(events)
+    ]
 
 
 def executed_calls_for(

@@ -124,6 +124,13 @@ export function useDeleteCohort() {
   );
 }
 
+/** Delete an organisation nothing points at; the server says what is still in one that is used. */
+export function useDeleteOrganisation() {
+  return useOpsAction((client, orgId: string) =>
+    unwrapEmpty(client.DELETE("/api/v1/ops/organisations/{org_id}", { params: { path: { org_id: orgId } } })),
+  );
+}
+
 /** Add the people to a cohort, or take them out of it. */
 export function useCohortMembers(path: "/api/v1/ops/people/cohort-add" | "/api/v1/ops/people/cohort-remove") {
   return useOpsAction((client, body: { user_ids: string[]; cohort_id: string }) => unwrap(client.POST(path, { body })));
@@ -155,7 +162,8 @@ export function useOpsAction<V, R>(run: (client: OpsClient, variables: V) => Pro
 /** The bulk routes that take only the subjects. */
 export type BulkPath =
   | "/api/v1/ops/people/de-enrol"
-  | "/api/v1/ops/people/offboard"
+  | "/api/v1/ops/people/deactivate"
+  | "/api/v1/ops/people/reactivate"
   | "/api/v1/ops/people/resend";
 
 export function useBulk(path: BulkPath) {

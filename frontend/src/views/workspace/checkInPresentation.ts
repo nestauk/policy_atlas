@@ -14,7 +14,7 @@ const BACKEND_LABELS: Record<string, string> = {
  *  omits). Case-insensitive: the coverage read model serves public names
  *  ("OpenAlex"), the stream serves durable keys ("openalex") — the label-map
  *  mismatch left a completed task's "Where I looked" card nearly empty
- *  (owner finding, 2026-08-05) and, separately, left the P1 search-review
+ * and, separately, left the P1 search-review
  *  card rendering raw keys outright. */
 export function backendLabel(backend: string): string | null {
   return BACKEND_LABELS[backend.toLowerCase()] ?? null;
@@ -74,8 +74,8 @@ export function presentCheckInRender(
   stage: string | null,
   stages: StageEntry[],
 ): PresentedCheckInRender | null {
-  // The render's first line is the question the check-in asks (task 058,
-  // N19) and its machine line follows; a render without a question is the
+  // The render's first line is the question the check-in asks
+  // and its machine line follows; a render without a question is the
   // machine line alone.
   const lines = render.split("\n").map((line) => line.trim()).filter((line) => line !== "");
   const machine = lines.find((line) => /\|\s*wall_clock=/.test(line)) ?? render;
@@ -85,7 +85,7 @@ export function presentCheckInRender(
   const question = lines[0] !== undefined && lines[0] !== machine ? lines[0] : null;
   if (rawStatus.trim() !== "succeeded") return null;
   const stageKey = stage ?? component.trim();
-  // The stage frame carries the server's label (task 058, N17); without one
+  // The stage frame carries the server's label; without one
   // the render stays prose rather than guessing a name.
   const stageLabel = [...stages].reverse().find((entry) => entry.stage === stageKey)?.label;
   if (stageLabel === undefined) return null;
@@ -133,7 +133,7 @@ export function decisionProse(decision: ResolvedDecision): string | null {
   return typeof text === "string" && text.trim() !== "" ? text : null;
 }
 
-/** The options-scoping baseline gate's check-in kind (task 044, D12). The one
+/** The options-scoping baseline gate's check-in kind. The one
  *  steer point on the scoping lattice; every other check-in kind keeps the
  *  Evidence search's card. */
 export const BASELINE_GATE_KIND = "baseline_confirm";
@@ -156,7 +156,7 @@ const BASELINE_SETTING_LABELS: Array<[string, string]> = [
   ["where", "Where"],
   ["outcomes", "Outcomes"],
   ["depth", "Depth"],
-  // The server sends the label the user sees (`RISK_APPETITE_LABELS`, N19).
+  // The server sends the label the user sees (`RISK_APPETITE_LABELS`).
   ["risk_appetite", "Risk appetite"],
 ];
 
@@ -196,8 +196,7 @@ export function baselineGateCard(bundle: Record<string, unknown> | null): Baseli
   };
 }
 
-/** The check-in's question and its one line of facts (task 058, N19; annex
- *  scene 12). */
+/** The check-in's question and its one line of facts.*/
 export interface CheckInHeadline {
   /** The question, shown as the card's title. */
   title: string;
@@ -244,7 +243,7 @@ export const STOP_THE_RUN = "Stop the run";
 
 /**
  * The answered check-in's one line, "You chose: <label> · <when>", built from
- * the durable `checkin.resolved` frame (task 058, N19): the chosen option's
+ * the durable `checkin.resolved` frame: the chosen option's
  * label off the check-in's own options, never a session-local echo.
  *
  * Args:

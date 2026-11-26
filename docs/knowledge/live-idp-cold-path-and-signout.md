@@ -3,7 +3,9 @@ type: Live behaviour
 title: Provider-level auth gating must cover the cold path, and the exit needs a UI consumer
 description: Every pre-live harness (mock, dev-token, CI smoke) starts authenticated, so only a real cold visit against the real IdP exercises first-entry 401 handling — and an auth API without a sign-out control passes every test while stranding real sessions.
 tags: [auth, frontend, oidc, cognito, live-check]
-timestamp: 2026-07-28
+generated:
+  by: process:okf-migrate
+  at: 2026-07-28
 ---
 
 # Rule
