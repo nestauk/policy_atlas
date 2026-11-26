@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 
 import { useAuth } from "../../auth";
@@ -12,11 +12,12 @@ import { PageBackLink } from "../../ui/brand/PageHeader";
 import { useAnnouncement, usePeople, useRetryAnnouncement, type AnnouncementDetail } from "../api";
 import { facts } from "../format";
 import { Dialog, EmptyRows, FailedLine, FormHeader, Loading, TABLE_CLASS, TABLE_WRAP_CLASS, TD_CLASS, TH_CLASS } from "../ui";
-import { EmailPreview, KIND_WORDS, Marked, resultRank, resultWords } from "./announcementParts";
-import { LIVE_MS } from "./AnnouncementsView";
+import { EmailPreview, KIND_WORDS, LIVE_MS, Marked, resultRank, resultWords } from "./announcementParts";
 
 /** How often the page reads again while rows wait. */
 const REFRESH_MS = 3000;
+
+const byName = new Intl.Collator().compare;
 
 type Filter = "all" | "sent" | "failed" | "left_out";
 const FILTERS: ReadonlyArray<{ key: Filter; label: string }> = [
@@ -43,6 +44,15 @@ export function AnnouncementView() {
       ? REFRESH_MS
       : false,
   );
+  const recipients = detail.data?.recipients;
+  const isLive = detail.data !== undefined && live(detail.data);
+  const rows = useMemo(
+    () =>
+      (recipients ?? [])
+        .filter((row) => filter === "all" || row.status === filter)
+        .sort((a, b) => resultRank(a, isLive) - resultRank(b, isLive) || byName(a.name, b.name)),
+    [recipients, filter, isLive],
+  );
 
   if (detail.isPending) return <Loading />;
   const back = <PageBackLink to="/announcements">Announcements</PageBackLink>;
@@ -56,7 +66,6 @@ export function AnnouncementView() {
   }
 
   const data = detail.data;
-  const isLive = live(data);
   const { counts } = data;
   const waiting = counts.pending + (isLive ? counts.sending : 0);
   const notConfirmed = isLive ? 0 : counts.sending;
@@ -71,9 +80,6 @@ export function AnnouncementView() {
     left_out: counts.left_out,
   };
   const filters = FILTERS.map(({ key, label }) => ({ key, label: `${label} ${filterCounts[key]}` }));
-  const rows = data.recipients
-    .filter((row) => filter === "all" || row.status === filter)
-    .sort((a, b) => resultRank(a, isLive) - resultRank(b, isLive) || a.name.localeCompare(b.name));
 
   return (
     <>

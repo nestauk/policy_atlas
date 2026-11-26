@@ -9,10 +9,7 @@ import { PageHeader, PagePrimary } from "../../ui/brand/PageHeader";
 import { useAnnouncements, usePeople, type AnnouncementSummary } from "../api";
 import { facts } from "../format";
 import { EmptyRows, FailedLine, Loading, TABLE_CLASS, TABLE_WRAP_CLASS, TD_CLASS, TH_CLASS } from "../ui";
-import { KIND_WORDS, Marked } from "./announcementParts";
-
-/** How long a `sending` row may still finish before it reads as left in the middle. */
-export const LIVE_MS = 2 * 60 * 1000;
+import { KIND_WORDS, LIVE_MS, Marked } from "./announcementParts";
 
 /** The list's Result cell: "N sent", "N sent · M failed", or "Sending: N of M" while rows wait. */
 function result({ counts, created_at }: AnnouncementSummary) {

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type InputHTMLAttributes } from "react";
 import { useNavigate } from "react-router";
 
 import { formatDate } from "../../lib/dates";
@@ -9,8 +9,8 @@ import { FilterChip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 import { PANE_LABEL_CLASS } from "../../ui/brand/label";
+import { ChoiceRow } from "../../ui/brand/ChoiceRow";
 import { PageBackLink } from "../../ui/brand/PageHeader";
-import { ChoiceRow } from "../../views/workspace/PartCard";
 import {
   OpsApiError,
   useCohorts,
@@ -103,6 +103,47 @@ type FieldName = (typeof FIELDS)[number] | "form";
 function fieldOf(details: unknown): FieldName {
   const field = (details as { field?: unknown } | null)?.field;
   return FIELDS.find((name) => name === field) ?? "form";
+}
+
+/** The server's own sentence for an answer with one of `statuses`, or null for any other failure. */
+function serverSentence(error: unknown, statuses: number[]): string | null {
+  return error instanceof OpsApiError && statuses.includes(error.status) && error.message !== "" ? sentence(error.message) : null;
+}
+
+/** A one-line text field bound to one draft field, with its error line. */
+function DraftInput({
+  field,
+  draft,
+  update,
+  id,
+  label,
+  help,
+  error,
+  ...attributes
+}: {
+  field: "subject" | "image_alt" | "button_label" | "button_url";
+  draft: Draft;
+  update: (change: Partial<Draft>) => void;
+  id: string;
+  label: string;
+  help?: string;
+  error: string | null;
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "id" | "value" | "onChange">) {
+  return (
+    <Field id={id} label={label} help={help} error={error}>
+      {(describedBy) => (
+        <input
+          id={id}
+          {...attributes}
+          value={draft[field]}
+          aria-invalid={error !== null}
+          aria-describedby={describedBy}
+          onChange={(event) => update({ [field]: event.target.value })}
+          className={INPUT_CLASS}
+        />
+      )}
+    </Field>
+  );
 }
 
 /** The picture at most 1200 pixels wide, PNG kept as PNG and JPEG as JPEG. */
@@ -218,13 +259,9 @@ export function ComposeAnnouncementView() {
       {
         onSuccess: () => setTested({ key, at: new Date() }),
         onError: (error) => {
-          if (error instanceof OpsApiError && error.status === 422 && error.message !== "") {
-            setFieldError({ field: fieldOf(error.details), text: sentence(error.message) });
-          } else if (error instanceof OpsApiError && error.status === 409 && error.message !== "") {
-            setTestFailed(sentence(error.message));
-          } else {
-            setTestFailed("The test email was not sent.");
-          }
+          const fieldText = serverSentence(error, [422]);
+          if (fieldText !== null) setFieldError({ field: fieldOf((error as OpsApiError).details), text: fieldText });
+          else setTestFailed(serverSentence(error, [409]) ?? "The test email was not sent.");
         },
       },
     );
@@ -249,11 +286,7 @@ export function ComposeAnnouncementView() {
       setPictureSrc(URL.createObjectURL(blob));
       update({ image_url: url });
     } catch (error) {
-      setPictureError(
-        error instanceof OpsApiError && error.status === 422 && error.message !== ""
-          ? sentence(error.message)
-          : "Could not add the picture. Try again.",
-      );
+      setPictureError(serverSentence(error, [422]) ?? "Could not add the picture. Try again.");
     }
   };
   const removePicture = () => {
@@ -265,22 +298,37 @@ export function ComposeAnnouncementView() {
   const [listOpen, setListOpen] = useState(false);
 
   // The audience search over the lists the ops pages already read.
-  const names = new Map<string, string>([
-    ...(cohorts.data ?? []).map((cohort) => [`cohort:${cohort.cohort_id}`, `Cohort: ${cohort.name}`] as const),
-    ...(organisations.data ?? []).map((org) => [`org:${org.org_id}`, `Organisation: ${org.name}`] as const),
-    ...(people.data ?? []).map((person) => [`user:${person.user_id}`, `Person: ${person.display_name}`] as const),
-  ]);
-  const searchable = (people.data ?? []).reduce(
-    (labels, person) => labels.set(`user:${person.user_id}`, `Person: ${person.display_name}${person.email ? `, ${person.email}` : ""}`),
-    new Map(names),
+  // A chosen item shows its name; the search also matches a person's email.
+  const { names, searchable } = useMemo(() => {
+    const groups = [
+      ...(cohorts.data ?? []).map((cohort) => [`cohort:${cohort.cohort_id}`, `Cohort: ${cohort.name}`] as const),
+      ...(organisations.data ?? []).map((org) => [`org:${org.org_id}`, `Organisation: ${org.name}`] as const),
+    ];
+    const persons = people.data ?? [];
+    return {
+      names: new Map<string, string>([
+        ...groups,
+        ...persons.map((person) => [`user:${person.user_id}`, `Person: ${person.display_name}`] as const),
+      ]),
+      searchable: new Map<string, string>([
+        ...groups,
+        ...persons.map(
+          (person) => [`user:${person.user_id}`, `Person: ${person.display_name}${person.email ? `, ${person.email}` : ""}`] as const,
+        ),
+      ]),
+    };
+  }, [cohorts.data, organisations.data, people.data]);
+  const options = useMemo(() => {
+    const chosen = new Set(draft.chosen);
+    return [...searchable].filter(([key]) => !chosen.has(key)).map(([value, label]) => ({ value, label }));
+  }, [searchable, draft.chosen]);
+  const chosenWords = useMemo(
+    () => draft.chosen.map((key) => (names.get(key) ?? "").replace(/^[^:]+: /, "")),
+    [names, draft.chosen],
   );
-  const options = [...searchable]
-    .filter(([key]) => !draft.chosen.includes(key))
-    .map(([value, label]) => ({ value, label }));
-  const chosenWords = draft.chosen.map((key) => (names.get(key) ?? "").replace(/^[^:]+: /, ""));
 
-  const blockedByTest = !testedNow;
-  const canSend = testedNow && fresh && answer.will_get > 0 && !noAudience;
+  // An answer exists only for a chosen audience, so `fresh` already means there is one.
+  const canSend = testedNow && fresh && answer.will_get > 0;
 
   return (
     <>
@@ -298,7 +346,6 @@ export function ComposeAnnouncementView() {
                   label={choice.label}
                   sentences={[choice.sentence]}
                   selected={draft.kind === choice.kind}
-                  disabled={false}
                   onChoose={() => update({ kind: choice.kind })}
                 />
               ))}
@@ -314,14 +361,12 @@ export function ComposeAnnouncementView() {
                 label="Everyone with an account"
                 sentences={[]}
                 selected={draft.everyone}
-                disabled={false}
                 onChoose={() => update({ everyone: true })}
               />
               <ChoiceRow
                 label="Chosen cohorts, organisations and people"
                 sentences={[]}
                 selected={!draft.everyone}
-                disabled={false}
                 onChoose={() => update({ everyone: false })}
               />
             </div>
@@ -381,20 +426,16 @@ export function ComposeAnnouncementView() {
             <h2 id="ann-message" className={PANE_LABEL_CLASS}>
               3 · Message
             </h2>
-            <Field id="ann-subject" label="Subject" error={errorFor("subject")}>
-              {(describedBy) => (
-                <input
-                  id="ann-subject"
-                  maxLength={150}
-                  autoComplete="off"
-                  value={draft.subject}
-                  aria-invalid={errorFor("subject") !== null}
-                  aria-describedby={describedBy}
-                  onChange={(event) => update({ subject: event.target.value })}
-                  className={INPUT_CLASS}
-                />
-              )}
-            </Field>
+            <DraftInput
+              field="subject"
+              draft={draft}
+              update={update}
+              id="ann-subject"
+              label="Subject"
+              error={errorFor("subject")}
+              maxLength={150}
+              autoComplete="off"
+            />
             <Field
               id="ann-body"
               label="Message"
@@ -442,26 +483,18 @@ export function ComposeAnnouncementView() {
                     <img src={pictureSrc} alt="" className="h-20 w-32 shrink-0 border border-line-2 object-cover" />
                   )}
                   <div className="min-w-0 flex-[1_1_16rem]">
-                    <Field
+                    <DraftInput
+                      field="image_alt"
+                      draft={draft}
+                      update={update}
                       id="ann-picture-alt"
                       label="Describe the picture"
                       help="People see these words when their mail program hides pictures."
                       error={altError}
-                    >
-                      {(describedBy) => (
-                        <input
-                          id="ann-picture-alt"
-                          required
-                          maxLength={200}
-                          autoComplete="off"
-                          value={draft.image_alt}
-                          aria-invalid={altError !== null}
-                          aria-describedby={describedBy}
-                          onChange={(event) => update({ image_alt: event.target.value })}
-                          className={INPUT_CLASS}
-                        />
-                      )}
-                    </Field>
+                      required
+                      maxLength={200}
+                      autoComplete="off"
+                    />
                     <button type="button" onClick={removePicture} className={cn(QUIET_CONTROL_CLASS, "mt-2 text-body")}>
                       Remove
                     </button>
@@ -477,35 +510,27 @@ export function ComposeAnnouncementView() {
               <p className="text-body text-yellow-deep">Anyone with the link can open this picture. Do not show private data.</p>
             </div>
             <div className="grid gap-5 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-              <Field id="ann-button-label" label="Button text (optional)" error={errorFor("button_label")}>
-                {(describedBy) => (
-                  <input
-                    id="ann-button-label"
-                    maxLength={40}
-                    autoComplete="off"
-                    value={draft.button_label}
-                    aria-invalid={errorFor("button_label") !== null}
-                    aria-describedby={describedBy}
-                    onChange={(event) => update({ button_label: event.target.value })}
-                    className={INPUT_CLASS}
-                  />
-                )}
-              </Field>
-              <Field id="ann-button-url" label="Button link" error={errorFor("button_url")}>
-                {(describedBy) => (
-                  <input
-                    id="ann-button-url"
-                    type="url"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={draft.button_url}
-                    aria-invalid={errorFor("button_url") !== null}
-                    aria-describedby={describedBy}
-                    onChange={(event) => update({ button_url: event.target.value })}
-                    className={INPUT_CLASS}
-                  />
-                )}
-              </Field>
+              <DraftInput
+                field="button_label"
+                draft={draft}
+                update={update}
+                id="ann-button-label"
+                label="Button text (optional)"
+                error={errorFor("button_label")}
+                maxLength={40}
+                autoComplete="off"
+              />
+              <DraftInput
+                field="button_url"
+                draft={draft}
+                update={update}
+                id="ann-button-url"
+                label="Button link"
+                error={errorFor("button_url")}
+                type="url"
+                autoComplete="off"
+                spellCheck={false}
+              />
             </div>
           </section>
         </div>
@@ -545,12 +570,12 @@ export function ComposeAnnouncementView() {
             <Button
               size="entry"
               disabled={!canSend}
-              aria-describedby={blockedByTest ? testHelpId : undefined}
+              aria-describedby={!testedNow ? testHelpId : undefined}
               onClick={() => setConfirming(true)}
             >
               Check and send
             </Button>
-            {blockedByTest && (
+            {!testedNow && (
               <p id={testHelpId} className="text-right text-body text-grey">
                 You must send yourself a test before you can send.
               </p>
@@ -662,12 +687,7 @@ function ConfirmDialog({
   const n = answer.will_get;
   const matches = typed.replace(/[\s,]/g, "") === String(n);
   const left = leftOutTotal(answer);
-  const failure =
-    error === null || changed
-      ? null
-      : error instanceof OpsApiError && (error.status === 422 || error.status === 409) && error.message !== ""
-        ? sentence(error.message)
-        : "The email was not sent. Try again.";
+  const failure = error === null || changed ? null : (serverSentence(error, [422, 409]) ?? "The email was not sent. Try again.");
 
   return (
     <Dialog

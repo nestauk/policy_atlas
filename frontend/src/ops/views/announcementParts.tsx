@@ -8,6 +8,9 @@ import type { AnnouncementKind, AnnouncementResult, RecipientPreview } from "../
 /* The announcement pages' shared words and the email preview (design annex
    § Compose, § Result page, § The email). */
 
+/** How long a `sending` row may still finish before it reads as left in the middle. */
+export const LIVE_MS = 2 * 60 * 1000;
+
 export const KIND_WORDS: Record<AnnouncementKind, string> = {
   product_update: "Product update",
   service_notice: "Service notice",

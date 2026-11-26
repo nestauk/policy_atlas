@@ -244,8 +244,9 @@ function sentAnnouncement(
     recipients: built.recipients
       .map((person) => {
         const code = failed[person.user_id];
-        if (person.status === "left_out") return { ...person, status: "left_out" as const, overlay: null };
-        return { ...person, status: code === undefined ? ("sent" as const) : ("failed" as const), reason: code ?? null, overlay: null };
+        return person.status === "left_out"
+          ? { ...person, overlay: null }
+          : { ...person, status: code === undefined ? ("sent" as const) : ("failed" as const), reason: code ?? null, overlay: null };
       })
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
@@ -253,11 +254,17 @@ function sentAnnouncement(
 
 const EXAMPLE_AUDIENCE: Audience = { everyone: false, cohort_ids: [SPRING], org_ids: [NESTA], user_ids: [TOMAS] };
 
+/** The two people whose email the mail service turns down on every send, with its code. */
+const FAILED_RECIPIENTS: Record<string, string> = { "sub-imogen": "MessageRejected", "sub-dev": "Throttling" };
+
+/** The signed-in ops person's display name, as the server stores it on a send. */
+const myName = () => opsMock.people.find((person) => person.user_id === OPS_ME)?.display_name ?? "";
+
 /** The list's three sent announcements (the annex's scene 1), newest first. */
 function announcementFixtures(): Stored[] {
   const day = 24 * 60 * 60 * 1000;
   const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
-  const me = opsMock.people.find((person) => person.user_id === OPS_ME)?.display_name ?? "";
+  const me = myName();
   const none = { button_label: null, button_url: null, image_url: null, image_alt: null };
   return [
     sentAnnouncement(
@@ -278,7 +285,7 @@ function announcementFixtures(): Stored[] {
       EXAMPLE_AUDIENCE,
       me,
       iso(2 * day),
-      { "sub-imogen": "MessageRejected", "sub-dev": "Throttling" },
+      FAILED_RECIPIENTS,
     ),
     sentAnnouncement(
       { subject: "Your pilot starts on Monday", kind: "service_notice", body: "Your pilot starts on Monday.", ...none },
@@ -341,9 +348,8 @@ function announcementRoute(method: string, path: string, body: Record<string, un
     }
     const now = preview(kind, audience);
     if (now.fingerprint !== body.fingerprint) {
-      return json({ error: { code: "recipients_changed", message: "the list of recipients changed", details: now } }, 409);
+      return apiError(409, "recipients_changed", "the list of recipients changed", now);
     }
-    const me = opsMock.people.find((person) => person.user_id === OPS_ME)?.display_name ?? "";
     const text = (key: string) => (typeof body[key] === "string" && body[key] !== "" ? (body[key] as string) : null);
     const stored = sentAnnouncement(
       {
@@ -356,9 +362,9 @@ function announcementRoute(method: string, path: string, body: Record<string, un
         image_alt: text("image_alt"),
       },
       audience,
-      me,
+      myName(),
       new Date().toISOString(),
-      { "sub-imogen": "MessageRejected", "sub-dev": "Throttling" },
+      FAILED_RECIPIENTS,
     );
     opsMock.announcements = [stored, ...opsMock.announcements];
     return json({ announcement_id: stored.announcement_id }, 201);
