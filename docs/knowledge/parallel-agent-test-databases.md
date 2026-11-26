@@ -34,3 +34,12 @@ one failure at the review was a 60 s token on a walk that took longer than that 
 average of 170.
 
 In a git worktree (065) there is no `backend/.env`, and `docker compose` cannot find the shared database by itself. Run make targets with `COMPOSE_PROJECT_NAME=policy_atlas`.
+
+Several worktree sessions that each run `make test` on the shared container exhaust its 100
+connections ("too many clients already"); the failures look real. A session that must run the
+full gate beside others starts a Postgres container of its own (`docker compose -p <name>`
+with another port and a higher `max_connections`) and passes `TEST_DATABASE_URL`. On a
+brand-new server, create the role `pa_ops` once by hand before the first parallel run: a role
+belongs to the whole server, two test workers that migrate at the same moment both run
+`CREATE ROLE`, and the loser gets `unique_violation`, which the migration's
+`EXCEPTION WHEN duplicate_object` does not catch (seen as 2,435 errors on a fresh container).

@@ -50,9 +50,11 @@ class BodyLimitMiddleware:
     """Reply 413 (payload too large) to a request whose body passes its limit.
 
     Two checks. A request that declares a ``Content-Length`` above the limit is
-    refused at once, and the app behind the limiter is never called. Every body is
-    also counted as it arrives, because a body can come in chunks with no
-    ``Content-Length`` at all (or with one that lies). When the count passes the
+    refused at once, and the app behind the limiter is never called. Every body the
+    app reads is also counted as it arrives, because a body can come in chunks with
+    no ``Content-Length`` at all (or with one that lies). A body that no code reads
+    is not counted: the server stops taking it from the network, so it costs no
+    memory. When the count passes the
     limit, the app is told the client has gone (an ``http.disconnect`` message), and
     anything it then tries to send is dropped. If no reply had started, the limiter
     sends the 413 itself. If one had, it sends nothing more and raises, so the server

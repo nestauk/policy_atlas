@@ -76,6 +76,7 @@ PAYWALL_MARKERS = (
 USER_AGENT = "policy-atlas/0.1 (+https://www.nesta.org.uk/project/policy-atlas/)"
 # The compression formats a host may answer with. The HTTP library would also offer
 # zstd, where a tiny answer can expand to gigabytes before the size cap sees it.
+# A host can ignore this header, so each answer is also checked (_encoding_refused).
 ACCEPT_ENCODING = "gzip, deflate"
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -624,6 +625,9 @@ class LiveDocumentFetcher:
         return FetchResult(status="ok", content_type=content_type, body=body)
 
     def _read_capped_body(self, response: httpx.Response) -> bytes | FetchResult:
+        if _encoding_refused(response):
+            log.warning("fetch_live.fetch_error", reason="content_encoding")
+            return FetchResult(status="error", error="fetch_error")
         content_length = response.headers.get("content-length")
         if content_length is not None:
             try:
@@ -935,7 +939,8 @@ def fetch_europe_pmc_xml(
     JATS is the XML format journals use to deposit articles; it keeps the
     section headings and tables that a PDF loses. The request goes to
     ``www.ebi.ac.uk`` only and carries nothing but the id in the address: no
-    query string, no cookies, no other headers than the product's user agent.
+    query string, no cookies, no headers beyond the product's user agent and the
+    formats it accepts.
     Redirects are not followed and the body is capped at ``EUROPE_PMC_MAX_BYTES``
     (lower than the PDF cap: JATS files are small).
 
@@ -971,6 +976,9 @@ def fetch_europe_pmc_xml(
             if response.status_code != 200:
                 log.info("europe_pmc.no_full_text", pmcid=pmcid, status_code=response.status_code)
                 return None
+            if _encoding_refused(response):
+                log.warning("europe_pmc.fetch_error", pmcid=pmcid, exc_type="content_encoding")
+                return None
             body = _read_capped(response)
     except Exception as exc:  # network failures are per-document outcomes, not crashes
         log.warning("europe_pmc.fetch_error", pmcid=pmcid, exc_type=type(exc).__name__)
@@ -982,6 +990,22 @@ def fetch_europe_pmc_xml(
         log.info("europe_pmc.not_xml", pmcid=pmcid)
         return None
     return body
+
+
+def _encoding_refused(response: httpx.Response) -> bool:
+    """True when the answer's compression is not one plain layer of gzip or deflate.
+
+    The HTTP library expands whatever ``Content-Encoding`` the answer names, also a
+    format the request did not offer, and it expands stacked layers (``gzip, gzip``)
+    one after another. Either can turn a few kilobytes into gigabytes before the
+    size cap sees a byte, so such an answer is refused before its body is read.
+    """
+    layers = [
+        layer
+        for part in response.headers.get("content-encoding", "").split(",")
+        if (layer := part.strip().lower()) not in ("", "identity")
+    ]
+    return len(layers) > 1 or any(layer not in ("gzip", "deflate") for layer in layers)
 
 
 def _read_capped(response: httpx.Response) -> bytes | None:

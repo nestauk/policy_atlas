@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import gzip
 import socket
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any
 
 import httpx
@@ -442,6 +443,52 @@ def test_both_clients_ask_for_gzip_or_deflate_only() -> None:
 
     assert document_requests[0].headers["accept-encoding"] == "gzip, deflate"
     assert pmc_requests[0].headers["accept-encoding"] == "gzip, deflate"
+
+
+class _RecordingStream(httpx.SyncByteStream):
+    """A reply body that notes whether anything read it."""
+
+    def __init__(self) -> None:
+        self.was_read = False
+
+    def __iter__(self) -> Iterator[bytes]:
+        self.was_read = True
+        yield b"<article/>"
+
+
+@pytest.mark.parametrize("encoding", ["gzip, gzip", "br", "zstd"])
+def test_an_answer_in_a_compression_format_we_did_not_offer_is_refused_unread(
+    encoding: str,
+) -> None:
+    streams: list[_RecordingStream] = []
+
+    def answer(_request: httpx.Request) -> httpx.Response:
+        streams.append(_RecordingStream())
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/xml", "content-encoding": encoding},
+            stream=streams[-1],
+        )
+
+    fetcher, _, _ = _fetcher(answer)
+    result = fetcher.fetch("https://example.com/doc")
+
+    assert (result.status, result.error) == ("error", "fetch_error")
+    assert fetcher._inflight_bytes == 0
+    assert fetch_europe_pmc_xml("PMC1", timeout=5.0, transport=httpx.MockTransport(answer)) is None
+    assert [stream.was_read for stream in streams] == [False, False]
+
+
+def test_a_gzip_answer_is_still_read() -> None:
+    body = gzip.compress(b"plain text body")
+    fetcher, _, _ = _fetcher(
+        lambda _request: _ok_response(body, headers={"content-encoding": "gzip"})
+    )
+
+    result = fetcher.fetch("https://example.com/doc")
+
+    assert result.body == b"plain text body"
+    fetcher.release_body(len(result.body or b""))
 
 
 def test_redact_url_and_logs_drop_query_strings() -> None:

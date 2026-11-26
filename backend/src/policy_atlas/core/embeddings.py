@@ -865,7 +865,8 @@ def _embed_units_with_isolation(
 
     When the failure is an outage (see :func:`_is_outage`), each half is tried
     once. If both halves fail with an outage too, the split stops and every unit
-    fails with its half's error, so a provider outage costs 3 calls per batch.
+    fails with its half's error, so a provider outage costs 3 backend calls per
+    batch (the OpenAI backend retries up to 4 times inside each call).
     Otherwise a half that worked keeps its vectors and a half that failed is
     split further. A half that already failed is not sent again as a whole.
 

@@ -17,7 +17,14 @@ import httpx
 import openai
 import pytest
 import sqlalchemy as sa
-from botocore.exceptions import ClientError, NoCredentialsError, ReadTimeoutError
+from botocore.exceptions import (
+    ClientError,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    ReadTimeoutError,
+)
 from botocore.response import StreamingBody
 from botocore.stub import ANY, Stubber
 from sqlalchemy import select
@@ -386,6 +393,7 @@ def _units(count: int) -> list[Any]:
 
 
 _OPENAI_REQUEST = httpx.Request("POST", "https://api.openai.com/v1/embeddings")
+_BEDROCK_URL = "https://bedrock-runtime.eu-west-2.amazonaws.com"
 
 
 def _bedrock_error(code: str, status: int) -> ClientError:
@@ -401,9 +409,14 @@ def _bedrock_error(code: str, status: int) -> ClientError:
         openai.APIStatusError(
             "unavailable", response=httpx.Response(503, request=_OPENAI_REQUEST), body=None
         ),
-        ReadTimeoutError(endpoint_url="https://bedrock-runtime.eu-west-2.amazonaws.com"),
+        ReadTimeoutError(endpoint_url=_BEDROCK_URL),
+        ConnectTimeoutError(endpoint_url=_BEDROCK_URL),
+        EndpointConnectionError(endpoint_url=_BEDROCK_URL),
+        ConnectionClosedError(endpoint_url=_BEDROCK_URL),
         _bedrock_error("ServiceUnavailableException", 503),
         _bedrock_error("ModelTimeoutException", 408),
+        _bedrock_error("InternalServerException", 400),
+        _bedrock_error("ModelNotReadyException", 429),
         _bedrock_error("UnknownError", 500),
         ProviderProtocolError("Cohere embeddings response body was invalid."),
     ],
@@ -412,8 +425,13 @@ def _bedrock_error(code: str, status: int) -> ClientError:
         "openai-connection",
         "openai-server-error",
         "bedrock-read-timeout",
+        "bedrock-connect-timeout",
+        "bedrock-endpoint-connection",
+        "bedrock-connection-closed",
         "bedrock-service-unavailable",
         "bedrock-model-timeout",
+        "bedrock-internal-server",
+        "bedrock-model-not-ready",
         "bedrock-server-error",
         "malformed-reply",
     ],

@@ -9,12 +9,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 from starlette.types import Message, Receive, Scope, Send
 
 from policy_atlas.api.app import create_app
-from policy_atlas.api.body_limit import DEFAULT_LIMIT, BodyLimitMiddleware
+from policy_atlas.api.body_limit import DEFAULT_LIMIT, BodyLimitMiddleware, _BodyTooLarge
 from policy_atlas.api.dev_issuer import init
 from policy_atlas.api.settings import Settings
 from tests.api.resource_support import api_client
@@ -154,3 +155,25 @@ def test_a_body_that_arrives_in_several_messages_is_counted_as_one() -> None:
 
     assert body_seen == 2 * len(chunk)
     assert [message["status"] for message in sent if "status" in message] == [413]
+
+
+def test_a_reply_that_had_started_is_cut_off_with_an_error_not_ended_as_complete() -> None:
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        while (await receive())["type"] == "http.request":
+            pass
+        await send({"type": "http.response.body", "body": b"the rest"})
+
+    async def receive() -> Message:
+        return {"type": "http.request", "body": TOO_BIG, "more_body": True}
+
+    sent: list[Message] = []
+
+    async def send(message: Message) -> None:
+        sent.append(message)
+
+    scope: Scope = {"type": "http", "method": "POST", "path": "/api/v1/waitlist", "headers": []}
+    with pytest.raises(_BodyTooLarge):
+        asyncio.run(BodyLimitMiddleware(app)(scope, receive, send))
+
+    assert [message["type"] for message in sent] == ["http.response.start"]
