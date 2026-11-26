@@ -26,16 +26,15 @@ import time
 import uuid
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import UTC, datetime
 from typing import Literal
 
 import structlog
-from botocore.exceptions import ClientError
 from sqlalchemy import Column, insert, or_, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
-from policy_atlas.api.titles import in_background
+from policy_atlas.core.background import in_background
 from policy_atlas.core.schema import (
     announcement,
     announcement_recipient,
@@ -52,6 +51,7 @@ from policy_atlas.ops.mail import (
     MailSettings,
     Message,
     Suppressed,
+    failure_code,
     render_announcement,
 )
 
@@ -112,6 +112,8 @@ class RecipientList:
         will_get: How many of them get the email.
         left_out: How many are left out, by reason.
         fingerprint: SHA-256 hex over every person's id, address, status and reason.
+        summary: The audience in words: "Everyone", or the cohort and
+            organisation names and how many people were chosen one by one.
     """
 
     recipients: tuple[Recipient, ...]
@@ -119,6 +121,37 @@ class RecipientList:
     will_get: int
     left_out: dict[str, int]
     fingerprint: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class Created:
+    """What :func:`create_announcement` recorded.
+
+    Attributes:
+        announcement_id: The new announcement's id.
+        action_id: The id of its audit row.
+        chosen: How many people the audience gave.
+        will_get: How many of them get the email.
+    """
+
+    announcement_id: uuid.UUID
+    action_id: uuid.UUID
+    chosen: int
+    will_get: int
+
+
+@dataclass(frozen=True)
+class Retried:
+    """What :func:`retry_failed` did.
+
+    Attributes:
+        moved: How many rows went back to ``pending``.
+        action_id: The id of its audit row.
+    """
+
+    moved: int
+    action_id: uuid.UUID
 
 
 class RecipientsChanged(OpsError):
@@ -150,12 +183,73 @@ def build_recipients(
         suppressed: The suppression list, keyed by lower-cased address.
 
     Returns:
-        The list, its counts and its fingerprint.
+        The list, its counts, its fingerprint and the audience in words.
 
     Raises:
         NotFound: A cohort, organisation or person in the audience does not exist.
     """
-    return _build(conn, kind=kind, audience=audience, suppressed=suppressed)[0]
+    query = select(
+        app_user.c.user_id,
+        app_user.c.display_name,
+        app_user.c.email,
+        app_user.c.deactivated_at,
+        app_user.c.first_signed_in_at,
+        app_user.c.updates_unsubscribed_at,
+        organisation.c.name.label("org_name"),
+    ).select_from(app_user.outerjoin(organisation, app_user.c.org_id == organisation.c.org_id))
+    people: list[str] = []
+    if audience.everyone:
+        summary = "Everyone"
+    else:
+        cohort_names = _names(
+            conn, cohort.c.cohort_id, cohort.c.name, audience.cohort_ids, "cohort"
+        )
+        org_names = _names(
+            conn, organisation.c.org_id, organisation.c.name, audience.org_ids, "organisation"
+        )
+        people = sorted(set(audience.user_ids))
+        parts = cohort_names + org_names
+        if people:
+            parts.append(f"{len(people)} {'person' if len(people) == 1 else 'people'}")
+        summary = ", ".join(parts)
+        query = query.where(
+            or_(
+                app_user.c.user_id.in_(
+                    select(cohort_member.c.user_id).where(
+                        cohort_member.c.cohort_id.in_(audience.cohort_ids)
+                    )
+                ),
+                app_user.c.org_id.in_(audience.org_ids),
+                app_user.c.user_id.in_(people),
+            )
+        )
+    rows = conn.execute(query).mappings().all()
+    found = {row["user_id"] for row in rows}
+    if missing := [user_id for user_id in people if user_id not in found]:
+        raise NotFound(f"no user {missing[0]}")
+    recipients = []
+    for row in rows:
+        reason = _left_out_reason(row, kind, suppressed)
+        recipients.append(
+            Recipient(
+                user_id=row["user_id"],
+                name=row["display_name"],
+                email=row["email"],
+                organisation=row["org_name"],
+                status="pending" if reason is None else "left_out",
+                reason=reason,
+            )
+        )
+    recipients.sort(key=lambda person: person.user_id)
+    left_out = Counter(person.reason for person in recipients if person.reason is not None)
+    return RecipientList(
+        recipients=tuple(recipients),
+        chosen=len(recipients),
+        will_get=len(recipients) - sum(left_out.values()),
+        left_out=dict(left_out),
+        fingerprint=_fingerprint(recipients),
+        summary=summary,
+    )
 
 
 def create_announcement(
@@ -168,7 +262,7 @@ def create_announcement(
     fingerprint: str,
     suppressed: Mapping[str, Suppressed],
     settings: MailSettings,
-) -> uuid.UUID:
+) -> Created:
     """Record an announcement, one row per person and one audit row.
 
     Everything runs on the caller's connection, in the caller's transaction;
@@ -185,7 +279,7 @@ def create_announcement(
         settings: Used to check the message the way the email will be built.
 
     Returns:
-        The new announcement's id.
+        The new announcement's id, its audit row's id and the list's counts.
 
     Raises:
         InvalidMessage: A field breaks a rule; nothing is written.
@@ -194,7 +288,7 @@ def create_announcement(
     """
     # A sample token: only the field rules matter here.
     render_announcement(message, kind=kind, unsubscribe_token=str(uuid.uuid4()), settings=settings)
-    recipients, summary = _build(conn, kind=kind, audience=audience, suppressed=suppressed)
+    recipients = build_recipients(conn, kind=kind, audience=audience, suppressed=suppressed)
     if recipients.fingerprint != fingerprint:
         raise RecipientsChanged(recipients)
 
@@ -204,19 +298,14 @@ def create_announcement(
         insert(announcement).values(
             announcement_id=announcement_id,
             kind=kind,
-            subject=message.subject,
-            body=message.body,
-            button_label=message.button_label,
-            button_url=message.button_url,
-            image_url=message.image_url,
-            image_alt=message.image_alt,
+            **asdict(message),
             audience={
                 "everyone": audience.everyone,
                 "cohort_ids": [str(i) for i in audience.cohort_ids],
                 "org_ids": [str(i) for i in audience.org_ids],
                 "user_ids": list(audience.user_ids),
             },
-            audience_summary=summary,
+            audience_summary=recipients.summary,
             sent_by=actor,
             created_at=now,
         )
@@ -236,10 +325,15 @@ def create_announcement(
                 for person in recipients.recipients
             ],
         )
-    commands.record_action(
+    action_id = commands.record_action(
         conn, actor=actor, action="announcement.send", target=str(announcement_id), outcome="ok"
     )
-    return announcement_id
+    return Created(
+        announcement_id=announcement_id,
+        action_id=action_id,
+        chosen=recipients.chosen,
+        will_get=recipients.will_get,
+    )
 
 
 def send_pending(
@@ -277,14 +371,7 @@ def send_pending(
     if row is None:
         raise NotFound(f"no announcement {announcement_id}")
     kind: Kind = row["kind"]
-    message = Message(
-        subject=row["subject"],
-        body=row["body"],
-        button_label=row["button_label"],
-        button_url=row["button_url"],
-        image_url=row["image_url"],
-        image_alt=row["image_alt"],
-    )
+    message = Message(**{f.name: row[f.name] for f in fields(Message)})
     counts: Counter[str] = Counter()
     # ponytail: one sender thread per announcement, a fixed pause for at most 5
     # emails a second; fine up to about 1,000 recipients. Beyond that, a queue
@@ -306,7 +393,7 @@ def send_pending(
                 headers=rendered.headers,
             )
         except Exception as error:
-            reason = _failure_code(error)
+            reason = failure_code(error)
             _finish(engine, announcement_id, user_id, "failed", reason)
             counts["failed"] += 1
             log.warning(
@@ -331,10 +418,11 @@ def start_sender(
     return in_background(
         lambda: send_pending(engine, mailer, settings, announcement_id),
         name=f"announcement-{announcement_id}",
+        event="announcement.sender_crashed",
     )
 
 
-def retry_failed(conn: Connection, *, actor: str, announcement_id: uuid.UUID) -> int:
+def retry_failed(conn: Connection, *, actor: str, announcement_id: uuid.UUID) -> Retried:
     """Put the ``failed`` rows of one announcement back to ``pending``.
 
     ``sending`` and ``sent`` rows are never touched. The caller commits and then
@@ -346,7 +434,7 @@ def retry_failed(conn: Connection, *, actor: str, announcement_id: uuid.UUID) ->
         announcement_id: The announcement.
 
     Returns:
-        How many rows went back to ``pending``.
+        How many rows went back to ``pending``, and the audit row's id.
 
     Raises:
         NotFound: No announcement has this id.
@@ -366,10 +454,10 @@ def retry_failed(conn: Connection, *, actor: str, announcement_id: uuid.UUID) ->
         )
         .values(status="pending", reason=None, updated_at=_now())
     ).rowcount
-    commands.record_action(
+    action_id = commands.record_action(
         conn, actor=actor, action="announcement.retry", target=str(announcement_id), outcome="ok"
     )
-    return moved
+    return Retried(moved=moved, action_id=action_id)
 
 
 def resume_all(engine: Engine, mailer: Mailer, settings: MailSettings) -> list[threading.Thread]:
@@ -392,74 +480,6 @@ def resume_all(engine: Engine, mailer: Mailer, settings: MailSettings) -> list[t
 
 
 # --- helpers ------------------------------------------------------------------------------------
-
-
-def _build(
-    conn: Connection, *, kind: Kind, audience: Audience, suppressed: Mapping[str, Suppressed]
-) -> tuple[RecipientList, str]:
-    """Build the list and the audience summary in words ("Everyone", or the names)."""
-    query = select(
-        app_user.c.user_id,
-        app_user.c.display_name,
-        app_user.c.email,
-        app_user.c.deactivated_at,
-        app_user.c.first_signed_in_at,
-        app_user.c.updates_unsubscribed_at,
-        organisation.c.name.label("org_name"),
-    ).select_from(app_user.outerjoin(organisation, app_user.c.org_id == organisation.c.org_id))
-    if audience.everyone:
-        summary = "Everyone"
-    else:
-        cohort_names = _names(
-            conn, cohort.c.cohort_id, cohort.c.name, audience.cohort_ids, "cohort"
-        )
-        org_names = _names(
-            conn, organisation.c.org_id, organisation.c.name, audience.org_ids, "organisation"
-        )
-        people = sorted(set(audience.user_ids))
-        found = set(
-            conn.execute(select(app_user.c.user_id).where(app_user.c.user_id.in_(people))).scalars()
-        )
-        if missing := [user_id for user_id in people if user_id not in found]:
-            raise NotFound(f"no user {missing[0]}")
-        parts = cohort_names + org_names
-        if people:
-            parts.append(f"{len(people)} {'person' if len(people) == 1 else 'people'}")
-        summary = ", ".join(parts)
-        query = query.where(
-            or_(
-                app_user.c.user_id.in_(
-                    select(cohort_member.c.user_id).where(
-                        cohort_member.c.cohort_id.in_(audience.cohort_ids)
-                    )
-                ),
-                app_user.c.org_id.in_(audience.org_ids),
-                app_user.c.user_id.in_(people),
-            )
-        )
-    recipients = []
-    for row in conn.execute(query).mappings():
-        reason = _left_out_reason(row, kind, suppressed)
-        recipients.append(
-            Recipient(
-                user_id=row["user_id"],
-                name=row["display_name"],
-                email=row["email"],
-                organisation=row["org_name"],
-                status="pending" if reason is None else "left_out",
-                reason=reason,
-            )
-        )
-    recipients.sort(key=lambda person: person.user_id)
-    left_out = Counter(person.reason for person in recipients if person.reason is not None)
-    built = RecipientList(
-        recipients=tuple(recipients),
-        chosen=len(recipients),
-        will_get=len(recipients) - sum(left_out.values()),
-        left_out=dict(left_out),
-        fingerprint=_fingerprint(recipients),
-    )
-    return built, summary
 
 
 def _names(
@@ -573,18 +593,6 @@ def _finish(
             )
             .values(status=status, reason=reason, updated_at=_now())
         )
-
-
-def _failure_code(error: Exception) -> str:
-    """A short code for a failed send: the SES error code, or the error's class name.
-
-    Never the error's message, which can hold the address.
-    """
-    if isinstance(error, ClientError):
-        code = error.response.get("Error", {}).get("Code")
-        if code:
-            return str(code)
-    return type(error).__name__
 
 
 def _now() -> datetime:

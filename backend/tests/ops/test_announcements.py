@@ -89,7 +89,7 @@ def _announce(
         return create_announcement(
             conn, actor=actor, message=MESSAGE, kind=kind, audience=audience,
             fingerprint=listed.fingerprint, suppressed={}, settings=SETTINGS,
-        )
+        ).announcement_id
 
 
 def _rows(db: Engine, announcement_id: uuid.UUID) -> dict[str, tuple[str, str | None]]:
@@ -232,7 +232,7 @@ def test_create_records_the_announcement_every_person_and_one_audit_row(
     announcement_id = create_announcement(
         conn, actor=actor, message=MESSAGE, kind="product_update", audience=example.audience,
         fingerprint=listed.fingerprint, suppressed={}, settings=SETTINGS,
-    )
+    ).announcement_id
 
     stored = conn.execute(
         select(announcement).where(announcement.c.announcement_id == announcement_id)
@@ -438,7 +438,7 @@ def test_a_stop_after_the_mailer_accepted_leaves_sending_and_nothing_sends_again
     assert _rows(engine, announcement_id)[person] == ("sending", None)
 
     with pa_ops.begin() as conn:
-        assert retry_failed(conn, actor="ops-actor", announcement_id=announcement_id) == 0
+        assert retry_failed(conn, actor="ops-actor", announcement_id=announcement_id).moved == 0
     send_pending(pa_ops, mailer, SETTINGS, announcement_id, pause=0)
     for thread in resume_all(pa_ops, mailer, SETTINGS):
         thread.join(WAIT)
@@ -467,7 +467,7 @@ def test_retry_sends_the_failed_rows_and_leaves_sent_and_sending_alone(
     actor = fresh_sub("operator")
 
     with pa_ops.begin() as conn:
-        moved = retry_failed(conn, actor=actor, announcement_id=announcement_id)
+        moved = retry_failed(conn, actor=actor, announcement_id=announcement_id).moved
 
     assert moved == 2
     assert _rows(engine, announcement_id) == {

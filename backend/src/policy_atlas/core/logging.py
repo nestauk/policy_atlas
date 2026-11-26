@@ -9,9 +9,19 @@ import os
 
 import structlog
 
+UNSUBSCRIBE_PATH = "/api/v1/unsubscribe"
+RESUBSCRIBE_PATH = "/api/v1/resubscribe"
+_TOKEN_PATHS = frozenset({UNSUBSCRIBE_PATH, RESUBSCRIBE_PATH})
+
 
 def configure_logging() -> None:
-    """JSON in deployed environments (LOG_FORMAT=json); console-pretty locally."""
+    """JSON in deployed environments (LOG_FORMAT=json); console-pretty locally.
+
+    Also adds :func:`drop_token_from_access_log` to uvicorn's access log, on
+    both hosts: the ops host answers 404 to the unsubscribe paths but would
+    still log the line.
+    """
+    install_access_log_filter()
     processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
@@ -51,3 +61,38 @@ def configure_logging() -> None:
         # for every test that runs after anything calls create_app.
         cache_logger_on_first_use=False,
     )
+
+
+def drop_token_from_access_log(record: logging.LogRecord) -> bool:
+    """Remove the query string from uvicorn's access line for the two routes.
+
+    The unsubscribe token rides in the query string of the unsubscribe and
+    resubscribe addresses, and it is a secret. uvicorn logs each request as
+    ``'%s - "%s %s HTTP/%s" %d'`` with ``record.args`` = (client address,
+    method, path with query, HTTP version, status code). For the two paths this
+    replaces the query part of the third argument before the line is
+    formatted; every other line is left exactly as it is. A trailing slash
+    still matches, because the framework answers it with a redirect that
+    repeats the query.
+
+    Args:
+        record: One ``uvicorn.access`` log record.
+
+    Returns:
+        Always ``True``: the line is kept, only its token is removed.
+    """
+    args = record.args
+    if isinstance(args, tuple) and len(args) == 5 and isinstance(args[2], str):
+        path, sep, _query = args[2].partition("?")
+        if sep and path.rstrip("/") in _TOKEN_PATHS:
+            record.args = (*args[:2], f"{path}?token=[removed]", *args[3:])
+    return True
+
+
+def install_access_log_filter() -> None:
+    """Add :func:`drop_token_from_access_log` to the ``uvicorn.access`` logger.
+
+    ``Logger.addFilter`` skips a filter that is already there, so building
+    the app twice still leaves one.
+    """
+    logging.getLogger("uvicorn.access").addFilter(drop_token_from_access_log)

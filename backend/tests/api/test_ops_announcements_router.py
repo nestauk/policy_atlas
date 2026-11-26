@@ -218,7 +218,7 @@ def _recorded(engine: Engine, people: list[str]) -> uuid.UUID:
             conn, actor="recorder", message=Message(subject=SUBJECT, body=BODY),
             kind="service_notice", audience=audience, fingerprint=built.fingerprint,
             suppressed={}, settings=MAIL,
-        )
+        ).announcement_id
 
 
 def _set_status(engine: Engine, announcement_id: uuid.UUID, user_id: str, status: str) -> None:

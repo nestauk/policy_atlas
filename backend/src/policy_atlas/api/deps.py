@@ -6,7 +6,6 @@ import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, cast
 
 import structlog
@@ -23,13 +22,7 @@ from policy_atlas.core.embeddings import (
     live_embedding_backend,
 )
 from policy_atlas.core.model_routes import live_api_key, route
-from policy_atlas.core.uploads import (
-    DIR_ENV,
-    LocalUploadStore,
-    S3UploadStore,
-    UploadStore,
-    store_from_env,
-)
+from policy_atlas.core.uploads import UploadStore, store_from_env
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     OpenAIGroundingJudgeBackend,
@@ -133,6 +126,18 @@ def get_identity(request: Request) -> Identity:
     return cast(Identity, request.app.state.identity)
 
 
+def get_optional_mailer(request: Request) -> Mailer | None:
+    """Return the mailer the operations lifespan built, or ``None``.
+
+    Args:
+        request: Incoming request whose application may own a mailer.
+
+    Returns:
+        The mailer, or ``None`` when the sender settings are absent.
+    """
+    return cast("Mailer | None", getattr(request.app.state, "mailer", None))
+
+
 def get_mailer(request: Request) -> Mailer:
     """Return the mailer the operations lifespan built.
 
@@ -145,10 +150,10 @@ def get_mailer(request: Request) -> Mailer:
     Raises:
         HTTPException: 503 when the sender settings are absent, so no mailer exists.
     """
-    mailer = getattr(request.app.state, "mailer", None)
+    mailer = get_optional_mailer(request)
     if mailer is None:
         raise HTTPException(503, "email sending is not configured")
-    return cast(Mailer, mailer)
+    return mailer
 
 
 def get_mail_settings(request: Request) -> MailSettings:
@@ -170,14 +175,12 @@ def get_mail_settings(request: Request) -> MailSettings:
 
 
 def get_announcement_image_store(request: Request) -> UploadStore:
-    """Where announcement pictures go.
+    """Where announcement pictures go: the store the operations lifespan built.
 
-    The picture bucket when ``announcement_image_bucket`` is set; a local folder
-    (``POLICY_ATLAS_UPLOAD_DIR``, default ``.uploads``) in local development,
-    which is when the identity seam has no Cognito client. Tests override this.
+    Tests override this.
 
     Args:
-        request: Incoming request whose application owns the settings and identity.
+        request: Incoming request whose application may own the store.
 
     Returns:
         The store.
@@ -185,13 +188,10 @@ def get_announcement_image_store(request: Request) -> UploadStore:
     Raises:
         HTTPException: 503 when neither a bucket nor local development applies.
     """
-    settings = cast(Settings, request.app.state.settings)
-    if settings.announcement_image_bucket:
-        return S3UploadStore(settings.announcement_image_bucket)
-    identity = getattr(request.app.state, "identity", None)
-    if identity is not None and identity.cognito is None:
-        return LocalUploadStore(Path(os.environ.get(DIR_ENV, ".uploads")))
-    raise HTTPException(503, "picture storage is not configured")
+    store = getattr(request.app.state, "announcement_image_store", None)
+    if store is None:
+        raise HTTPException(503, "picture storage is not configured")
+    return cast(UploadStore, store)
 
 
 def get_engine(request: Request) -> Engine:

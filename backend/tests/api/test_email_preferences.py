@@ -16,8 +16,8 @@ from uvicorn.logging import AccessFormatter
 
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init
-from policy_atlas.api.routers.email_preferences import drop_token_from_access_log
 from policy_atlas.api.settings import Settings
+from policy_atlas.core.logging import drop_token_from_access_log
 from policy_atlas.core.schema import app_user
 from tests.api.org_support import make_user, seeded
 from tests.api.resource_support import api_client

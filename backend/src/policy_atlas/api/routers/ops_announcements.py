@@ -16,6 +16,7 @@ import binascii
 import uuid
 from collections import Counter
 from collections.abc import Mapping
+from dataclasses import fields
 from typing import Annotated, Any, Literal
 
 import structlog
@@ -47,24 +48,29 @@ from policy_atlas.api.deps import (
     get_engine,
     get_mail_settings,
     get_mailer,
+    get_optional_mailer,
     get_settings,
 )
-from policy_atlas.api.routers.ops import _queue_log as queue_log
-from policy_atlas.api.routers.ops import after_commit, require_ops
+from policy_atlas.api.routers.ops import after_commit, audit, queue_log, require_ops
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import uploads
 from policy_atlas.core.schema import (
     announcement,
     announcement_recipient,
     app_user,
-    ops_action,
     organisation,
 )
 from policy_atlas.core.uploads import UploadStore
-from policy_atlas.ops import announcements, commands
-from policy_atlas.ops.announcements import _failure_code as failure_code
+from policy_atlas.ops import announcements
 from policy_atlas.ops.errors import InvalidMessage, NotFound, OpsError
-from policy_atlas.ops.mail import Mailer, MailSettings, Message, Suppressed, render_announcement
+from policy_atlas.ops.mail import (
+    Mailer,
+    MailSettings,
+    Message,
+    Suppressed,
+    failure_code,
+    render_announcement,
+)
 
 log = structlog.get_logger()
 
@@ -97,14 +103,7 @@ def _audience(body: AudienceIn) -> announcements.Audience:
 
 
 def _message(body: AnnouncementMessageIn) -> Message:
-    return Message(
-        subject=body.subject,
-        body=body.body,
-        button_label=body.button_label,
-        button_url=body.button_url,
-        image_url=body.image_url,
-        image_alt=body.image_alt,
-    )
+    return Message(**body.model_dump(include={f.name for f in fields(Message)}))
 
 
 def _suppressed(mailer: Mailer) -> dict[str, Suppressed]:
@@ -126,17 +125,6 @@ def _recipients_out(built: announcements.RecipientList) -> AnnouncementRecipient
             "fingerprint": built.fingerprint,
         }
     )
-
-
-def _action_id(conn: Connection, action: str, target: str) -> uuid.UUID:
-    """The id of the audit row the announcement functions just wrote in this transaction."""
-    action_id: uuid.UUID = conn.execute(
-        select(ops_action.c.action_id)
-        .where(ops_action.c.action == action, ops_action.c.target == target)
-        .order_by(ops_action.c.at.desc())
-        .limit(1)
-    ).scalar_one()
-    return action_id
 
 
 def _counts(conn: Connection, ids: list[uuid.UUID]) -> dict[uuid.UUID, AnnouncementCounts]:
@@ -225,11 +213,7 @@ def send_test(
         code = failure_code(error)
         log.warning("announcement.test_failed", actor=actor.user_id, reason=code)
         raise HTTPException(502, f"the test email was not sent ({code})") from None
-    action_id = commands.record_action(
-        conn, actor=actor.user_id, action="announcement.test", target=actor.user_id, outcome="ok"
-    )
-    queue_log(request, actor=actor.user_id, action="announcement.test", target=actor.user_id,
-              outcome="ok", action_id=action_id)
+    audit(request, conn, actor=actor.user_id, action="announcement.test", target=actor.user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -257,11 +241,7 @@ def add_image(
         raise ApiUnprocessable(exc.code, str(exc)) from None
     name = f"{uuid.uuid4()}.{_IMAGE_SUFFIX[body.content_type]}"
     store.put(f"email-images/{name}", data, body.content_type, cache_control=_IMAGE_CACHE)
-    action_id = commands.record_action(
-        conn, actor=actor.user_id, action="announcement.image", target=name, outcome="ok"
-    )
-    queue_log(request, actor=actor.user_id, action="announcement.image", target=name,
-              outcome="ok", action_id=action_id)
+    audit(request, conn, actor=actor.user_id, action="announcement.image", target=name)
     return AnnouncementImageOut(url=f"{settings.public_site_url}/email-images/{name}")
 
 
@@ -277,7 +257,7 @@ def send_announcement(
 ) -> AnnouncementCreatedOut:
     """Record the announcement and its recipients; the sender starts after the commit."""
     try:
-        announcement_id = announcements.create_announcement(
+        created = announcements.create_announcement(
             conn, actor=actor.user_id, message=_message(body), kind=body.kind,
             audience=_audience(body.audience), fingerprint=body.fingerprint,
             suppressed=_suppressed(mailer), settings=mail_settings,
@@ -293,12 +273,10 @@ def send_announcement(
         ) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
-    target = str(announcement_id)
-    counts = _counts(conn, [announcement_id])[announcement_id]
-    chosen = sum(counts.model_dump().values())
-    queue_log(request, actor=actor.user_id, action="announcement.send", target=target,
-              outcome="ok", action_id=_action_id(conn, "announcement.send", target),
-              chosen=chosen, will_get=counts.pending)
+    announcement_id = created.announcement_id
+    queue_log(request, actor=actor.user_id, action="announcement.send",
+              target=str(announcement_id), outcome="ok", action_id=created.action_id,
+              chosen=created.chosen, will_get=created.will_get)
     _start_sender(request, engine, mailer, mail_settings, announcement_id)
     return AnnouncementCreatedOut(announcement_id=announcement_id)
 
@@ -313,7 +291,8 @@ def list_announcements(conn: Conn) -> AnnouncementsOut:
 
 @router.get("/announcements/{announcement_id}", response_model=AnnouncementDetailOut)
 def get_announcement(
-    announcement_id: uuid.UUID, request: Request, conn: Conn
+    announcement_id: uuid.UUID, conn: Conn,
+    mailer: Annotated[Mailer | None, Depends(get_optional_mailer)],
 ) -> AnnouncementDetailOut:
     """One announcement and each person's result.
 
@@ -326,10 +305,10 @@ def get_announcement(
     if not found:
         raise HTTPException(404, f"no announcement {announcement_id}")
     row = found[0]
-    mailer: Mailer | None = getattr(request.app.state, "mailer", None)
     suppressed: Mapping[str, Suppressed] = {}
     unreadable = mailer is None
-    if mailer is not None:
+    # Only a ``sent`` row can show an overlay, so read the list only then.
+    if mailer is not None and row["counts"].sent > 0:
         try:
             suppressed = mailer.suppressed(since=row["created_at"])
         except Exception as error:
@@ -374,13 +353,12 @@ def retry_announcement(
 ) -> Response:
     """Put the failed rows back to pending and start the sender after the commit."""
     try:
-        moved = announcements.retry_failed(conn, actor=actor.user_id,
-                                           announcement_id=announcement_id)
+        retried = announcements.retry_failed(conn, actor=actor.user_id,
+                                             announcement_id=announcement_id)
     except NotFound as exc:
         raise HTTPException(404, str(exc)) from None
-    target = str(announcement_id)
-    queue_log(request, actor=actor.user_id, action="announcement.retry", target=target,
-              outcome="ok", action_id=_action_id(conn, "announcement.retry", target),
-              moved=moved)
+    queue_log(request, actor=actor.user_id, action="announcement.retry",
+              target=str(announcement_id), outcome="ok", action_id=retried.action_id,
+              moved=retried.moved)
     _start_sender(request, engine, mailer, mail_settings, announcement_id)
     return Response(status_code=status.HTTP_202_ACCEPTED)

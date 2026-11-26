@@ -112,11 +112,21 @@ def _identity(identity: Identity) -> tuple[Any, str]:
     return identity.cognito, identity.pool_id
 
 
-def _queue_log(
+def queue_log(
     request: Request, *, actor: str, action: str, target: str, outcome: str, action_id: uuid.UUID,
     **counts: int,
 ) -> None:
-    """Queue an email-free trace for :func:`after_commit`; ``counts`` adds numbers only."""
+    """Queue an email-free trace for :func:`after_commit`; ``counts`` adds numbers only.
+
+    Args:
+        request: The request whose trace list the line joins.
+        actor: The operator's user id.
+        action: The action name, as in the audit row.
+        target: What the action touched (an id, never an address).
+        outcome: ``ok`` or ``failed``.
+        action_id: The audit row's id.
+        **counts: Extra numbers for the line.
+    """
     request.state.ops_log.append(
         {"actor": actor, "action": action, "target": target, "outcome": outcome,
          "action_id": str(action_id), **counts}
@@ -253,8 +263,8 @@ def create_organisation(
         raise ApiConflict("ops_refused", str(exc)) from None
     action_id = commands.record_action(conn, actor=actor.user_id, action="org.create",
                                        target=str(created.org_id), outcome="ok")
-    _queue_log(request, actor=actor.user_id, action="org.create", target=str(created.org_id),
-               outcome="ok", action_id=action_id)
+    queue_log(request, actor=actor.user_id, action="org.create", target=str(created.org_id),
+              outcome="ok", action_id=action_id)
     return _organisation_out(conn, created.org_id)
 
 
@@ -271,7 +281,7 @@ def delete_organisation(
         raise HTTPException(404, str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
-    _audit(request, conn, actor=actor.user_id, action="organisation.delete", target=str(org_id))
+    audit(request, conn, actor=actor.user_id, action="organisation.delete", target=str(org_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -288,16 +298,24 @@ def set_organisation_quota(
         raise HTTPException(404, str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
-    _audit(request, conn, actor=actor.user_id, action="org.quota", target=change.audit_target())
+    audit(request, conn, actor=actor.user_id, action="org.quota", target=change.audit_target())
     return _organisation_out(conn, org_id)
 
 
-def _audit(request: Request, conn: Connection, *, actor: str, action: str, target: str) -> None:
-    """Write one ok audit row and queue its trace."""
+def audit(request: Request, conn: Connection, *, actor: str, action: str, target: str) -> None:
+    """Write one ok audit row and queue its trace.
+
+    Args:
+        request: The request whose trace list the line joins.
+        conn: Open database connection, in the request's transaction.
+        actor: The operator's user id.
+        action: The action name.
+        target: What the action touched (an id, never an address).
+    """
     action_id = commands.record_action(conn, actor=actor, action=action, target=target,
                                        outcome="ok")
-    _queue_log(request, actor=actor, action=action, target=target, outcome="ok",
-               action_id=action_id)
+    queue_log(request, actor=actor, action=action, target=target, outcome="ok",
+              action_id=action_id)
 
 
 @router.get("/cohorts", response_model=list[CohortOut])
@@ -324,7 +342,7 @@ def create_cohort(
 ) -> CohortOut:
     """Create a cohort and its audit record."""
     saved = _save(conn, None, body)
-    _audit(request, conn, actor=actor.user_id, action="cohort.create", target=str(saved.cohort_id))
+    audit(request, conn, actor=actor.user_id, action="cohort.create", target=str(saved.cohort_id))
     return _cohort_rows(conn, saved.cohort_id)[0]
 
 
@@ -336,7 +354,7 @@ def update_cohort(
 ) -> CohortOut:
     """Replace a cohort's details; its members are untouched."""
     _save(conn, cohort_id, body)
-    _audit(request, conn, actor=actor.user_id, action="cohort.update", target=str(cohort_id))
+    audit(request, conn, actor=actor.user_id, action="cohort.update", target=str(cohort_id))
     return _cohort_rows(conn, cohort_id)[0]
 
 
@@ -351,8 +369,8 @@ def set_cohort_quota(
         change = commands.set_quota(conn, cohort_id=cohort_id, **body.model_dump())
     except NotFound as exc:
         raise HTTPException(404, str(exc)) from None
-    _audit(request, conn, actor=actor.user_id, action="cohort.quota",
-           target=change.audit_target())
+    audit(request, conn, actor=actor.user_id, action="cohort.quota",
+          target=change.audit_target())
     return _cohort_rows(conn, cohort_id)[0]
 
 
@@ -367,7 +385,7 @@ def delete_cohort(
         commands.delete_cohort(conn, cohort_id=cohort_id)
     except NotFound as exc:
         raise HTTPException(404, str(exc)) from None
-    _audit(request, conn, actor=actor.user_id, action="cohort.delete", target=str(cohort_id))
+    audit(request, conn, actor=actor.user_id, action="cohort.delete", target=str(cohort_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -442,8 +460,8 @@ def create_person(
         outcome = f"reactivated, {outcome}"
     action_id = commands.record_action(conn, actor=actor.user_id, action="person.create",
                                        target=enrolled.user_id, outcome=outcome)
-    _queue_log(request, actor=actor.user_id, action="person.create", target=enrolled.user_id,
-               outcome=outcome, action_id=action_id)
+    queue_log(request, actor=actor.user_id, action="person.create", target=enrolled.user_id,
+              outcome=outcome, action_id=action_id)
     row = conn.execute(
         select(app_user, organisation.c.org_id.label("organisation_id"),
                organisation.c.name.label("organisation_name"))
@@ -476,8 +494,8 @@ def _bulk(
                 action_id = commands.record_action(
                     conn, actor=actor, action=action, target=target, outcome="ok"
                 )
-            _queue_log(request, actor=actor, action=action, target=target, outcome="ok",
-                       action_id=action_id)
+            queue_log(request, actor=actor, action=action, target=target, outcome="ok",
+                      action_id=action_id)
             results.append(ActionResult(user_id=user_id, outcome="ok", message=message,
                                         action_id=action_id))
         except Exception as exc:
@@ -490,8 +508,8 @@ def _bulk(
             action_id = commands.record_action(
                 conn, actor=actor, action=action, target=target, outcome="failed"
             )
-            _queue_log(request, actor=actor, action=action, target=target, outcome="failed",
-                       action_id=action_id)
+            queue_log(request, actor=actor, action=action, target=target, outcome="failed",
+                      action_id=action_id)
             # A refusal is written for the operator; anything else (a database
             # or Cognito error) stays out of the browser.
             message = str(exc) if isinstance(exc, OpsError) else f"failed; see action {action_id}"
@@ -710,7 +728,7 @@ def reject_request(
         raise HTTPException(404, str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
-    _audit(request, conn, actor=actor.user_id, action="request.reject", target=str(entry_id))
+    audit(request, conn, actor=actor.user_id, action="request.reject", target=str(entry_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -727,7 +745,7 @@ def delete_request(
         raise HTTPException(404, str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
-    _audit(request, conn, actor=actor.user_id, action="request.delete", target=str(entry_id))
+    audit(request, conn, actor=actor.user_id, action="request.delete", target=str(entry_id))
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -757,8 +775,8 @@ def approve_request(
     action_id = commands.record_action(
         conn, actor=actor.user_id, action="request.approve", target=str(entry_id), outcome=outcome
     )
-    _queue_log(request, actor=actor.user_id, action="request.approve", target=str(entry_id),
-               outcome=outcome, action_id=action_id)
+    queue_log(request, actor=actor.user_id, action="request.approve", target=str(entry_id),
+              outcome=outcome, action_id=action_id)
     row = conn.execute(
         select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
     ).mappings().one()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable
@@ -31,6 +32,7 @@ from policy_atlas.api.deps import Identity
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.core.uploads import DIR_ENV, LocalUploadStore, S3UploadStore, UploadStore
 from policy_atlas.ops.mail import MailSettings
 from policy_atlas.theory_of_change.edits import EditRefused
 
@@ -199,12 +201,6 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     # runtime/agent.py's main() only covers the local CLI path. Must
     # run before anything below can log.
     configure_logging()
-    # uvicorn's access line prints the query string; the unsubscribe token
-    # rides in it. Installed on both hosts: the ops host 404s these paths but
-    # would still log the line.
-    from policy_atlas.api.routers.email_preferences import install_access_log_filter
-
-    install_access_log_filter()
     app_settings = settings if settings is not None else load_settings()
     lifespan = (
         _ops_lifespan(app_settings)
@@ -535,6 +531,14 @@ def _ops_lifespan(
         app.state.identity = identity
         app.state.mail_settings = mail_settings = mail_settings_from(settings)
         app.state.mailer = None
+        # Announcement pictures: the bucket when one is set, a local folder in
+        # local development (no Cognito client), else none (the route answers 503).
+        image_store: UploadStore | None = None
+        if settings.announcement_image_bucket:
+            image_store = S3UploadStore(settings.announcement_image_bucket)
+        elif identity.cognito is None:
+            image_store = LocalUploadStore(Path(os.environ.get(DIR_ENV, ".uploads")))
+        app.state.announcement_image_store = image_store
         if mail_settings is not None:
             import boto3
 

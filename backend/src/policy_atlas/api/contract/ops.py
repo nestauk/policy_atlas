@@ -22,7 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from policy_atlas.ops.mail import BODY_MAX, BUTTON_LABEL_MAX, IMAGE_ALT_MAX, SUBJECT_MAX
+from policy_atlas.ops.mail import BODY_MAX, BUTTON_LABEL_MAX, IMAGE_ALT_MAX, SUBJECT_MAX, Kind
 
 from .tenancy import OrganisationRef
 from .waitlist import WaitlistSignup
@@ -381,7 +381,7 @@ class ApproveRequest(BaseModel):
 
 #: ``product_update`` has an unsubscribe link and skips people who unsubscribed;
 #: ``service_notice`` has neither.
-AnnouncementKind = Literal["product_update", "service_notice"]
+AnnouncementKind = Kind
 #: Why a person on the preview does not get the email, in order of precedence.
 LeftOutReason = Literal[
     "deactivated", "no_email", "suppressed_bounce", "suppressed_complaint", "not_signed_in",

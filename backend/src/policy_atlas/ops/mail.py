@@ -28,6 +28,8 @@ from importlib.resources import files
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 from urllib.parse import quote
 
+from botocore.exceptions import ClientError
+
 from policy_atlas.ops.errors import InvalidMessage
 
 if TYPE_CHECKING:
@@ -261,6 +263,24 @@ class MemoryMailer:
         }
 
 
+def failure_code(error: Exception) -> str:
+    """A short code for a failed mailer call: the SES error code, or the error's class name.
+
+    Never the error's message, which can hold the address.
+
+    Args:
+        error: What the mailer raised.
+
+    Returns:
+        The code, safe to log.
+    """
+    if isinstance(error, ClientError):
+        code = error.response.get("Error", {}).get("Code")
+        if code:
+            return str(code)
+    return type(error).__name__
+
+
 @dataclass(frozen=True)
 class Message:
     """What the operator writes. The last four fields are optional.
@@ -315,13 +335,12 @@ def render_announcement(
     _check(message, settings)
     if kind not in ("product_update", "service_notice"):
         raise ValueError(f"unknown announcement kind {kind!r}")
-    esc = _escape
 
     blocks = _blocks(message.body)
     html_body = "\n".join(
-        _CELL.format(_LIST.format("".join(f"<li>{esc(item)}</li>" for item in lines)))
+        _CELL.format(_LIST.format("".join(f"<li>{html.escape(item)}</li>" for item in lines)))
         if is_list
-        else _CELL.format("<br>".join(esc(line) for line in lines))
+        else _CELL.format("<br>".join(html.escape(line) for line in lines))
         for is_list, lines in blocks
     )
     text_parts = [message.subject] + [
@@ -330,10 +349,10 @@ def render_announcement(
 
     image = button = ""
     if message.image_url and message.image_alt:
-        image = _IMAGE.format(esc(message.image_url), esc(message.image_alt))
+        image = _IMAGE.format(html.escape(message.image_url), html.escape(message.image_alt))
         text_parts.append(f"[{message.image_alt}]")
     if message.button_label and message.button_url:
-        button = _BUTTON.format(esc(message.button_url), esc(message.button_label))
+        button = _BUTTON.format(html.escape(message.button_url), html.escape(message.button_label))
         text_parts.append(f"{message.button_label}: {message.button_url}")
 
     headers: dict[str, str] = {}
@@ -343,7 +362,7 @@ def render_announcement(
         token = quote(unsubscribe_token, safe="")
         page = f"{settings.site_url}/unsubscribe?token={token}"
         footer = (
-            f'{_ACCOUNT_LINE} <a href="{esc(page)}" style="color:#5a5f6e;">'
+            f'{_ACCOUNT_LINE} <a href="{html.escape(page)}" style="color:#5a5f6e;">'
             f"{_UNSUBSCRIBE_WORDS}</a>. {_STILL_SERVICE}"
         )
         text_parts.append(f"{_ACCOUNT_LINE}\n{_UNSUBSCRIBE_WORDS}: {page}\n{_STILL_SERVICE}")
@@ -357,13 +376,13 @@ def render_announcement(
     text_parts.append(f"Questions? Reply to this email or write to {settings.reply_to}.")
 
     values = {
-        "SUBJECT": esc(message.subject),
-        "LOGO_URL": esc(f"{settings.site_url}/brand/email-logo.png"),
+        "SUBJECT": html.escape(message.subject),
+        "LOGO_URL": html.escape(f"{settings.site_url}/brand/email-logo.png"),
         "BODY": html_body,
         "IMAGE": image,
         "BUTTON": button,
         "FOOTER": footer,
-        "REPLY_TO": esc(settings.reply_to),
+        "REPLY_TO": html.escape(settings.reply_to),
     }
     # One pass: text the operator typed is never scanned for placeholders again.
     page_html = _PLACEHOLDER.sub(lambda match: values[match.group(1)], _LAYOUT)
@@ -371,10 +390,6 @@ def render_announcement(
         subject=message.subject, html=page_html, text="\n\n".join(text_parts) + "\n",
         headers=headers,
     )
-
-
-def _escape(value: str) -> str:
-    return html.escape(value, quote=True)
 
 
 def _blocks(body: str) -> list[tuple[bool, list[str]]]:
