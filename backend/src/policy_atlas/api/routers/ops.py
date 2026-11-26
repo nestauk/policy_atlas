@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import asdict
@@ -17,6 +19,8 @@ from sqlalchemy.engine import Connection, RowMapping
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser, get_current_user
 from policy_atlas.api.contract.ops import (
+    IMPORT_CHARACTERS_MAX,
+    IMPORT_PEOPLE_MAX,
     ActionResult,
     ApproveRequest,
     BulkCohort,
@@ -27,6 +31,10 @@ from policy_atlas.api.contract.ops import (
     CohortOut,
     CohortRef,
     CohortSave,
+    ImportCheck,
+    ImportCheckOut,
+    ImportProblem,
+    ImportRow,
     LimitSourceOut,
     LimitsOut,
     OrganisationCreate,
@@ -38,6 +46,7 @@ from policy_atlas.api.contract.ops import (
     RequestOut,
     RequestsOut,
     SelfSignupOut,
+    validate_person_fields,
 )
 from policy_atlas.api.contract.tenancy import OrganisationRef
 from policy_atlas.api.deps import Identity, get_conn, get_identity, get_settings
@@ -449,6 +458,85 @@ def create_person(
         invitation_sent=enrolled.invitation_sent,
         reactivated=enrolled.reactivated,
     )
+
+
+def _people_file_problem(values: list[str], header: list[str]) -> str | None:
+    """Name the first fault of one record of a people file, or ``None``."""
+    if len(values) != len(header):
+        return f"this line has {len(values)} values; it needs 2: email and name."
+    fields = dict(zip(header, values, strict=True))
+    for column, article in (("email", "an"), ("name", "a")):
+        if "\n" in fields[column] or "\r" in fields[column]:
+            return f"{article} {column} cannot hold a line break."
+    try:
+        validate_person_fields(fields["email"], fields["name"])
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
+def check_people_file(text: str) -> ImportCheckOut:
+    """Read a people file (CSV text) and answer its good lines and its faults.
+
+    Python's ``csv`` reader in strict mode does the reading. A line number is
+    the file line where the record starts, counting the header as line 1.
+
+    Args:
+        text: The file as the browser decoded it (UTF-8; a byte-order mark is allowed).
+
+    Returns:
+        The good lines with the address lower-cased, and every fault found.
+    """
+    def whole_file(message: str) -> ImportCheckOut:
+        return ImportCheckOut(rows=[], errors=[ImportProblem(message=message)])
+
+    if len(text) > IMPORT_CHARACTERS_MAX:
+        return whole_file(f"A file can hold at most {IMPORT_CHARACTERS_MAX:,} characters.")
+    if "�" in text:
+        return whole_file(
+            "This file is not saved as UTF-8. Save it as CSV UTF-8 and choose it again."
+        )
+    reader = csv.reader(io.StringIO(text.removeprefix("﻿"), newline=""), strict=True)
+    records: list[tuple[int, list[str]]] = []
+    start = 1
+    try:
+        for values in reader:
+            records.append((start, values))
+            start = reader.line_num + 1
+    except csv.Error:
+        return ImportCheckOut(rows=[], errors=[ImportProblem(
+            line=start, message="the quotes on this line do not follow the CSV rules.")])
+    header = [name.strip().lower() for name in records[0][1]] if records else []
+    if sorted(header) != ["email", "name"]:
+        if {"email", "name"} <= set(header):
+            return whole_file("The file can have only the columns email and name, each once.")
+        return whole_file("The file needs the columns email and name.")
+    people = [(line, values) for line, values in records[1:]
+              if any(value.strip() for value in values)]
+    if len(people) > IMPORT_PEOPLE_MAX:
+        return whole_file(f"A file can hold at most {IMPORT_PEOPLE_MAX} people.")
+    rows: list[ImportRow] = []
+    errors: list[ImportProblem] = []
+    first_line: dict[str, int] = {}
+    for line, values in people:
+        problem = _people_file_problem(values, header)
+        if problem is None:
+            fields = dict(zip(header, values, strict=True))
+            email, name = validate_person_fields(fields["email"], fields["name"])
+            if email in first_line:
+                problem = f"this email is already on line {first_line[email]}."
+            else:
+                first_line[email] = line
+                rows.append(ImportRow(line=line, email=email, display_name=name))
+        if problem is not None:
+            errors.append(ImportProblem(line=line, message=problem))
+    return ImportCheckOut(rows=rows, errors=errors)
+
+
+@router.post("/people/import-check", response_model=ImportCheckOut)
+def check_people_import(body: ImportCheck) -> ImportCheckOut:
+    """Check a people file before the page creates its people; writes nothing."""
+    return check_people_file(body.csv)
 
 
 def _bulk(

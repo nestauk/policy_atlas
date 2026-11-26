@@ -72,6 +72,7 @@ _OPS_ROUTES = {
     ("POST", "/api/v1/ops/people/cohort-remove"),
     ("GET", "/api/v1/ops/people"),
     ("POST", "/api/v1/ops/people"),
+    ("POST", "/api/v1/ops/people/import-check"),
     ("POST", "/api/v1/ops/people/enrol"),
     ("POST", "/api/v1/ops/people/de-enrol"),
     ("POST", "/api/v1/ops/people/deactivate"),
@@ -1282,4 +1283,81 @@ def test_adding_the_same_person_again_sends_no_second_invitation(ops: Harness) -
     again, _ = _post(ops, "/api/v1/ops/people", body)
     assert again.status_code == 201, again.text
     assert again.json()["invitation_sent"] is False
+
+
+# --- the people file check ---------------------------------------------------
+
+
+def _check_file(h: Harness, text: str) -> dict[str, Any]:
+    """POST one file to the check route and return its answer."""
+    response, _ = _post(h, "/api/v1/ops/people/import-check", {"csv": text})
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def test_import_check_answers_rows_for_a_good_file(ops: Harness) -> None:
+    """A byte-order mark, any column order and case, a quoted comma, Windows line ends."""
+    text = ('﻿Name,EMAIL\r\n"Doe, Jane",Jane@Example.org\r\n'
+            "Bob Smith,bob@example.org\r\n")
+    assert _check_file(ops, text) == {
+        "rows": [
+            {"line": 2, "email": "jane@example.org", "display_name": "Doe, Jane"},
+            {"line": 3, "email": "bob@example.org", "display_name": "Bob Smith"},
+        ],
+        "errors": [],
+    }
+
+
+_TOO_MANY = "email,name\n" + "".join(f"p{i}@example.org,P{i}\n" for i in range(501))
+
+
+@pytest.mark.parametrize(
+    ("text", "errors", "row_lines"),
+    [
+        ("email,name,role\na@example.org,A,x\n", [(None, "only the columns")], []),
+        ("email,name,email\na@example.org,A,b@example.org\n", [(None, "only the columns")], []),
+        ("email\na@example.org\n", [(None, "needs the columns email and name")], []),
+        ('email,name\na@example.org,A\nb@example.org,"Bad"x\n',
+         [(3, "do not follow the CSV rules")], []),
+        ('email,name\na@example.org,"two\nlines"\nc@example.org,C\n',
+         [(2, "a name cannot hold a line break")], [4]),
+        ("email,name\na@example.org,Caf�\n", [(None, "not saved as UTF-8")], []),
+        ("email,name\na@example.org,A\nA@Example.org,B\n",
+         [(3, "this email is already on line 2")], [2]),
+        (_TOO_MANY, [(None, "at most 500 people")], []),
+        ("email,name\n" + "a" * 200_000, [(None, "at most 200,000 characters")], []),
+        ("email,name\nnot-an-address,A\n", [(2, "this is not an email address")], []),
+        ("email,name\na@example.org,  \n", [(2, "the name is empty")], []),
+        ("email,name\na@example.org," + "n" * 201 + "\n", [(2, "longer than 200")], []),
+        ("email,name\na@example.org,A,extra\n", [(2, "this line has 3 values")], []),
+        ("email,name\n\na@example.org,A\n\n", [], [3]),
+    ],
+    ids=["other-column", "repeated-column", "missing-column", "bad-quoting", "line-break",
+         "not-utf8", "repeated-email", "too-many", "too-large", "bad-email", "empty-name",
+         "long-name", "value-count", "blank-line"],
+)
+def test_import_check_names_each_fault_with_its_line(
+    ops: Harness, text: str, errors: list[tuple[int | None, str]], row_lines: list[int]
+) -> None:
+    body = _check_file(ops, text)
+    assert [error["line"] for error in body["errors"]] == [line for line, _ in errors]
+    for error, (_, fragment) in zip(body["errors"], errors, strict=True):
+        assert fragment in error["message"]
+    assert [row["line"] for row in body["rows"]] == row_lines
+
+
+def test_import_check_writes_nothing(ops: Harness) -> None:
+    def counts() -> list[int]:
+        with ops.engine.connect() as conn:
+            return [
+                int(conn.execute(select(func.count()).select_from(table)).scalar_one())
+                for table in (app_user, ops_action, cohort_member)
+            ]
+
+    before = counts()
+    response, lines = _post(ops, "/api/v1/ops/people/import-check",
+                            {"csv": "email,name\nnew@example.org,New Person\n"})
+    assert response.status_code == 200 and response.json()["rows"]
+    assert counts() == before and lines == []
 

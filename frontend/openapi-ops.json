@@ -392,6 +392,96 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "ImportCheck": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/people/import-check``: the text of a people file.\n\nThe size rule (:data:`IMPORT_CHARACTERS_MAX`) answers as a file error; the\nfield bound here only stops a body far beyond it.",
+        "properties": {
+          "csv": {
+            "maxLength": 800000,
+            "title": "Csv",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csv"
+        ],
+        "title": "ImportCheck",
+        "type": "object"
+      },
+      "ImportCheckOut": {
+        "description": "Answer to the file check: the good lines and the faults, in file order.",
+        "properties": {
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ImportProblem"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ImportRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows",
+          "errors"
+        ],
+        "title": "ImportCheckOut",
+        "type": "object"
+      },
+      "ImportProblem": {
+        "description": "One fault in a people file.\n\nArgs:\n    line: The file line where the faulty record starts, or ``None`` for a\n        fault of the whole file.\n    message: A sentence for the operator.",
+        "properties": {
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ImportProblem",
+        "type": "object"
+      },
+      "ImportRow": {
+        "description": "One good line of a people file.\n\nArgs:\n    line: The file line where the record starts; the header is line 1.\n    email: The address, lower-cased.\n    display_name: The name.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line",
+          "email",
+          "display_name"
+        ],
+        "title": "ImportRow",
+        "type": "object"
+      },
       "LimitSourceOut": {
         "description": "Where one limit came from (contract B12).\n\nArgs:\n    kind: A fixed word the pages branch on; never an operator-typed name.\n    name: The cohort's or organisation's name for those two kinds, else ``None``.",
         "properties": {
@@ -565,7 +655,7 @@
       },
       "PersonCreate": {
         "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation. The person joins each cohort in ``cohort_ids``.",
+        "description": "Body of ``POST /api/v1/ops/people``: create a person in an organisation.\n\nThe organisation is required (contract B4): a browser-created account is\nnever unenrolled. The route calls the ensure-account command, so an\naddress that already has an unenrolled account is enrolled without a\nsecond invitation. The person joins each cohort in ``cohort_ids``. The\naddress and name follow :func:`validate_person_fields`.",
         "properties": {
           "cohort_ids": {
             "items": {
@@ -577,14 +667,10 @@
             "type": "array"
           },
           "display_name": {
-            "maxLength": 200,
-            "minLength": 1,
             "title": "Display Name",
             "type": "string"
           },
           "email": {
-            "maxLength": 320,
-            "minLength": 3,
             "title": "Email",
             "type": "string"
           },
@@ -1760,6 +1846,53 @@
           }
         ],
         "summary": "Enrol People",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/people/import-check": {
+      "post": {
+        "description": "Check a people file before the page creates its people; writes nothing.",
+        "operationId": "check_people_import_api_v1_ops_people_import_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportCheck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Check People Import",
         "tags": [
           "ops"
         ]

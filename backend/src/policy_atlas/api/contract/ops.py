@@ -20,7 +20,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .tenancy import OrganisationRef
 from .waitlist import WaitlistSignup
@@ -233,30 +233,111 @@ class CohortChoice(BaseModel):
         return cohort_ids
 
 
+def validate_person_fields(email: str, display_name: str) -> tuple[str, str]:
+    """Apply the Add person rules to one address and name.
+
+    Add person and the file check both use this, so a file line passes exactly
+    when the same person typed into Add person would. The address is
+    lower-cased and shape-checked as the waitlist form and the CLI do:
+    Cognito's lookup is an exact, case-sensitive match, so one spelling per
+    mailbox is what keeps a second identity from being minted.
+
+    Args:
+        email: The address as given.
+        display_name: The name as given.
+
+    Returns:
+        The lower-cased address and the name, both stripped.
+
+    Raises:
+        ValueError: With a sentence for the operator, when either fails.
+    """
+    email, display_name = email.strip(), display_name.strip()
+    try:
+        if len(email) > OPS_EMAIL_MAX:
+            raise ValueError
+        email = WaitlistSignup.validate_email(email)
+    except ValueError:
+        raise ValueError("this is not an email address.") from None
+    if not display_name:
+        raise ValueError("the name is empty.")
+    if len(display_name) > OPS_NAME_MAX:
+        raise ValueError(f"the name is longer than {OPS_NAME_MAX} characters.")
+    return email, display_name
+
+
 class PersonCreate(CohortChoice):
     """Body of ``POST /api/v1/ops/people``: create a person in an organisation.
 
     The organisation is required (contract B4): a browser-created account is
     never unenrolled. The route calls the ensure-account command, so an
     address that already has an unenrolled account is enrolled without a
-    second invitation. The person joins each cohort in ``cohort_ids``.
+    second invitation. The person joins each cohort in ``cohort_ids``. The
+    address and name follow :func:`validate_person_fields`.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    email: str = Field(min_length=3, max_length=OPS_EMAIL_MAX)
-    display_name: str = Field(min_length=1, max_length=OPS_NAME_MAX)
+    email: str
+    display_name: str
     org_id: uuid.UUID
 
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, value: str) -> str:
-        """Lower-case and shape-check the address, as the waitlist form and the CLI do.
+    @model_validator(mode="after")
+    def validate_person(self) -> PersonCreate:
+        """Apply the shared address and name rules."""
+        self.email, self.display_name = validate_person_fields(self.email, self.display_name)
+        return self
 
-        Cognito's lookup is an exact, case-sensitive match, so one spelling per
-        mailbox is what keeps a second identity from being minted.
-        """
-        return WaitlistSignup.validate_email(value)
+
+#: Bounds on a people file (CSV text) for the file check.
+IMPORT_PEOPLE_MAX = 500
+IMPORT_CHARACTERS_MAX = 200_000
+
+
+class ImportCheck(BaseModel):
+    """Body of ``POST /api/v1/ops/people/import-check``: the text of a people file.
+
+    The size rule (:data:`IMPORT_CHARACTERS_MAX`) answers as a file error; the
+    field bound here only stops a body far beyond it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    csv: str = Field(max_length=4 * IMPORT_CHARACTERS_MAX)
+
+
+class ImportRow(BaseModel):
+    """One good line of a people file.
+
+    Args:
+        line: The file line where the record starts; the header is line 1.
+        email: The address, lower-cased.
+        display_name: The name.
+    """
+
+    line: int
+    email: str
+    display_name: str
+
+
+class ImportProblem(BaseModel):
+    """One fault in a people file.
+
+    Args:
+        line: The file line where the faulty record starts, or ``None`` for a
+            fault of the whole file.
+        message: A sentence for the operator.
+    """
+
+    line: int | None = None
+    message: str
+
+
+class ImportCheckOut(BaseModel):
+    """Answer to the file check: the good lines and the faults, in file order."""
+
+    rows: list[ImportRow]
+    errors: list[ImportProblem]
 
 
 class PersonCreatedOut(BaseModel):

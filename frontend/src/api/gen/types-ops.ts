@@ -260,6 +260,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/people/import-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check People Import
+         * @description Check a people file before the page creates its people; writes nothing.
+         */
+        post: operations["check_people_import_api_v1_ops_people_import_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/people/quota": {
         parameters: {
             query?: never;
@@ -619,6 +639,59 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ImportCheck
+         * @description Body of ``POST /api/v1/ops/people/import-check``: the text of a people file.
+         *
+         *     The size rule (:data:`IMPORT_CHARACTERS_MAX`) answers as a file error; the
+         *     field bound here only stops a body far beyond it.
+         */
+        ImportCheck: {
+            /** Csv */
+            csv: string;
+        };
+        /**
+         * ImportCheckOut
+         * @description Answer to the file check: the good lines and the faults, in file order.
+         */
+        ImportCheckOut: {
+            /** Errors */
+            errors: components["schemas"]["ImportProblem"][];
+            /** Rows */
+            rows: components["schemas"]["ImportRow"][];
+        };
+        /**
+         * ImportProblem
+         * @description One fault in a people file.
+         *
+         *     Args:
+         *         line: The file line where the faulty record starts, or ``None`` for a
+         *             fault of the whole file.
+         *         message: A sentence for the operator.
+         */
+        ImportProblem: {
+            /** Line */
+            line?: number | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ImportRow
+         * @description One good line of a people file.
+         *
+         *     Args:
+         *         line: The file line where the record starts; the header is line 1.
+         *         email: The address, lower-cased.
+         *         display_name: The name.
+         */
+        ImportRow: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /** Line */
+            line: number;
+        };
+        /**
          * LimitSourceOut
          * @description Where one limit came from (contract B12).
          *
@@ -723,7 +796,8 @@ export interface components {
          *     The organisation is required (contract B4): a browser-created account is
          *     never unenrolled. The route calls the ensure-account command, so an
          *     address that already has an unenrolled account is enrolled without a
-         *     second invitation. The person joins each cohort in ``cohort_ids``.
+         *     second invitation. The person joins each cohort in ``cohort_ids``. The
+         *     address and name follow :func:`validate_person_fields`.
          */
         PersonCreate: {
             /** Cohort Ids */
@@ -1417,6 +1491,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_people_import_api_v1_ops_people_import_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCheck"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportCheckOut"];
                 };
             };
             /** @description Validation Error */
