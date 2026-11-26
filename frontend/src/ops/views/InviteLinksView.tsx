@@ -44,7 +44,7 @@ function localDay(date: Date): string {
 }
 
 /** The end of a local day with the operator's own zone, in RFC 3339: "2027-02-14T23:59:59+00:00". */
-export function endOfDay(day: string): string {
+function endOfDay(day: string): string {
   const offset = -new Date(`${day}T23:59:59`).getTimezoneOffset();
   const pad = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
   return `${day}T23:59:59${offset < 0 ? "-" : "+"}${pad(offset / 60)}:${pad(offset % 60)}`;
@@ -266,9 +266,9 @@ function LimitFields({
   );
 }
 
-function ErrorLine({ message }: { message: string | null }) {
+function ErrorLine({ message, className }: { message: string | null; className?: string }) {
   return message === null ? null : (
-    <p role="alert" className="text-body text-red">
+    <p role="alert" className={cn(className, "text-body text-red")}>
       {message}
     </p>
   );
@@ -509,11 +509,7 @@ function RevokeDialog({ link, onClose }: { link: InviteLink; onClose: () => void
         </>
       }
     >
-      {error !== null && (
-        <p role="alert" className="mt-3 text-body text-red">
-          {error}
-        </p>
-      )}
+      <ErrorLine message={error} className="mt-3" />
     </Dialog>
   );
 }

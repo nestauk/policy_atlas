@@ -2017,6 +2017,33 @@ def add_to_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMe
     return CohortMembership(cohort=target, user_id=user_id, added=True, changed=added is not None)
 
 
+def join_cohorts(
+    conn: Connection, *, actor: str, user_id: str, cohorts: Sequence[Cohort]
+) -> list[tuple[str, uuid.UUID]]:
+    """Add a person to each cohort, writing a ``cohort.add`` audit row only for a new membership.
+
+    Args:
+        conn: Open connection inside the caller's transaction.
+        actor: Who the audit rows name.
+        user_id: The person.
+        cohorts: The cohorts to join.
+
+    Returns:
+        The audit target and action id of each new membership, in order.
+
+    Raises:
+        NotFound: If no person has that id.
+    """
+    added: list[tuple[str, uuid.UUID]] = []
+    for target in cohorts:
+        if add_to_cohort(conn, target=target, user_id=user_id).changed:
+            audit_target = f"{user_id}/cohort/{target.cohort_id}"
+            added.append((audit_target, record_action(
+                conn, actor=actor, action="cohort.add", target=audit_target, outcome="ok"
+            )))
+    return added
+
+
 def remove_from_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMembership:
     """Remove one person from a cohort; removing a non-member changes nothing."""
     removed = conn.execute(
@@ -2085,30 +2112,31 @@ InviteRequestReason = Literal[
 ]
 
 
+def email_domain(email: str) -> str:
+    """Return an address's domain, lower-cased, or ``""`` when it has no ``@``."""
+    # Must match the sweep query's lower(split_part(email, '@', 2)).
+    return email.split("@")[1].lower() if "@" in email else ""
+
+
 def invite_request_reason(
     *,
-    invite_code: str | None,
     request_domain: str,
     link: InviteLink | None,
     uses: int,
     now: datetime,
-) -> InviteRequestReason | None:
+) -> InviteRequestReason:
     """Say why a waiting request's code has not made an account yet.
 
     Args:
-        invite_code: The code the request carries, if any.
         request_domain: The request's email domain, lower-cased.
-        link: The link with that code, or ``None`` when no link has it.
+        link: The link with the request's code, or ``None`` when no link has it.
         uses: How many requests the link has redeemed.
         now: The time to judge the link at.
 
     Returns:
-        ``None`` for a request with no code; ``unknown_code``; ``wrong_domain``;
-        the link's state when it is not active; else ``next_run`` (the sweep
-        redeems it at its next run).
+        ``unknown_code``; ``wrong_domain``; the link's state when it is not
+        active; else ``next_run`` (the sweep redeems it at its next run).
     """
-    if invite_code is None:
-        return None
     if link is None:
         return "unknown_code"
     if request_domain not in link.allowed_domains:
@@ -2127,12 +2155,22 @@ def invite_link_record(row: RowMapping) -> InviteLink:
     )
 
 
+def invite_link_uses_by_id(
+    conn: Connection, ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """Count the requests each link has redeemed; a link with no use is left out."""
+    if not ids:
+        return {}
+    return {link_id: int(count) for link_id, count in conn.execute(
+        select(waitlist_entry.c.invite_link_id, func.count())
+        .where(waitlist_entry.c.invite_link_id.in_(ids))
+        .group_by(waitlist_entry.c.invite_link_id)
+    )}
+
+
 def invite_link_uses(conn: Connection, invite_link_id: uuid.UUID) -> int:
     """Count the requests a link has redeemed."""
-    return int(conn.execute(
-        select(func.count()).select_from(waitlist_entry)
-        .where(waitlist_entry.c.invite_link_id == invite_link_id)
-    ).scalar_one())
+    return invite_link_uses_by_id(conn, [invite_link_id]).get(invite_link_id, 0)
 
 
 def _require_invite_limits(*, max_uses: int, expires_at: datetime, now: datetime) -> None:
@@ -2390,15 +2428,14 @@ def redeem_request(
     row = conn.execute(
         select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).with_for_update()
     ).mappings().one()
-    email = str(row["email"])
-    # The sweep query's reading of the domain: split_part(email, '@', 2), lower-cased.
-    domain = email.split("@")[1].lower() if "@" in email else ""
     if (
         row["invite_code"] != link.code
         or row["account_created_at"] is not None
         or row["rejected_at"] is not None
-        or domain not in link.allowed_domains
-        or invite_link_state(link, invite_link_uses(conn, link_id), now) != "active"
+        or invite_request_reason(
+            request_domain=email_domain(str(row["email"])), link=link,
+            uses=invite_link_uses(conn, link_id), now=now,
+        ) != "next_run"
     ):
         return None
     name = conn.execute(
@@ -2408,17 +2445,15 @@ def redeem_request(
         conn, cognito, pool_id=pool_id, entry_id=entry_id,
         org=Organisation(org_id=link.org_id, name=str(name)), now=now,
     )
-    user_id = approved.enrolment.user_id
-    for cohort_id, cohort_name in conn.execute(
-        select(cohort.c.cohort_id, cohort.c.name)
-        .join(invite_link_cohort, invite_link_cohort.c.cohort_id == cohort.c.cohort_id)
-        .where(invite_link_cohort.c.invite_link_id == link_id)
-        .order_by(cohort.c.name)
-    ):
-        target = Cohort(cohort_id=cohort_id, name=str(cohort_name))
-        if add_to_cohort(conn, target=target, user_id=user_id).changed:
-            record_action(conn, actor="sweep", action="cohort.add",
-                          target=f"{user_id}/cohort/{cohort_id}", outcome="ok")
+    join_cohorts(conn, actor="sweep", user_id=approved.enrolment.user_id, cohorts=[
+        Cohort(cohort_id=cohort_id, name=str(cohort_name))
+        for cohort_id, cohort_name in conn.execute(
+            select(cohort.c.cohort_id, cohort.c.name)
+            .join(invite_link_cohort, invite_link_cohort.c.cohort_id == cohort.c.cohort_id)
+            .where(invite_link_cohort.c.invite_link_id == link_id)
+            .order_by(cohort.c.name)
+        )
+    ])
     conn.execute(
         update(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
         .values(invite_link_id=link_id)

@@ -467,8 +467,8 @@ def create_person(
     )
 
 
-def _people_file_problem(values: list[str], header: list[str]) -> str | None:
-    """Name the first fault of one record of a people file, or ``None``."""
+def _people_file_line(values: list[str], header: list[str]) -> tuple[str, str] | str:
+    """Return one record of a people file as its cleaned (email, name), or its first fault."""
     if len(values) != len(header):
         return f"this line has {len(values)} values; it needs 2: email and name."
     fields = dict(zip(header, values, strict=True))
@@ -476,10 +476,9 @@ def _people_file_problem(values: list[str], header: list[str]) -> str | None:
         if "\n" in fields[column] or "\r" in fields[column]:
             return f"{article} {column} cannot hold a line break."
     try:
-        validate_person_fields(fields["email"], fields["name"])
+        return validate_person_fields(fields["email"], fields["name"])
     except ValueError as exc:
         return str(exc)
-    return None
 
 
 def check_people_file(text: str) -> ImportCheckOut:
@@ -526,10 +525,10 @@ def check_people_file(text: str) -> ImportCheckOut:
     errors: list[ImportProblem] = []
     first_line: dict[str, int] = {}
     for line, values in people:
-        problem = _people_file_problem(values, header)
-        if problem is None:
-            fields = dict(zip(header, values, strict=True))
-            email, name = validate_person_fields(fields["email"], fields["name"])
+        checked = _people_file_line(values, header)
+        problem = checked if isinstance(checked, str) else None
+        if not isinstance(checked, str):
+            email, name = checked
             if email in first_line:
                 problem = f"this email is already on line {first_line[email]}."
             else:
@@ -710,10 +709,11 @@ def _join_cohorts(
     Runs on the caller's transaction after the enrolment: a failure here rolls
     the enrolment back too.
     """
-    for target in cohorts:
-        if commands.add_to_cohort(conn, target=target, user_id=user_id).changed:
-            _audit(request, conn, actor=actor, action="cohort.add",
-                   target=f"{user_id}/cohort/{target.cohort_id}")
+    for target, action_id in commands.join_cohorts(
+        conn, actor=actor, user_id=user_id, cohorts=cohorts
+    ):
+        _queue_log(request, actor=actor, action="cohort.add", target=target, outcome="ok",
+                   action_id=action_id)
 
 
 @router.post("/people/cohort-add", response_model=BulkOut)
@@ -822,13 +822,9 @@ def _invite_reasons(
             invite_link.c.code.in_({row["invite_code"] for row in rows})
         )).mappings()
     }
-    uses = {link_id: int(count) for link_id, count in conn.execute(
-        select(waitlist_entry.c.invite_link_id, func.count())
-        .where(waitlist_entry.c.invite_link_id.in_([
-            link.invite_link_id for link in links.values()
-        ]))
-        .group_by(waitlist_entry.c.invite_link_id)
-    )} if links else {}
+    uses = commands.invite_link_uses_by_id(
+        conn, [link.invite_link_id for link in links.values()]
+    )
     now = _now()
     retrying = set(conn.execute(select(ops_action.c.target).where(
         ops_action.c.actor_user_id == "sweep", ops_action.c.action == "invite",
@@ -838,15 +834,10 @@ def _invite_reasons(
     reasons: dict[uuid.UUID, RequestInvite] = {}
     for row in rows:
         link = links.get(str(row["invite_code"]))
-        email = str(row["email"])
         reason = commands.invite_request_reason(
-            invite_code=row["invite_code"],
-            # The sweep's reading of the domain: split_part(email, '@', 2), lower-cased.
-            request_domain=email.split("@")[1].lower() if "@" in email else "",
+            request_domain=commands.email_domain(str(row["email"])),
             link=link, uses=uses.get(link.invite_link_id, 0) if link else 0, now=now,
         )
-        if reason is None:
-            continue
         reasons[row["entry_id"]] = RequestInvite(
             label=link.label if link else None,
             reason="retry_wait" if reason == "next_run" and str(row["entry_id"]) in retrying
@@ -941,11 +932,7 @@ def _invite_links(
         query = query.where(invite_link.c.invite_link_id == invite_link_id)
     rows = conn.execute(query).mappings().all()
     ids = [row["invite_link_id"] for row in rows]
-    uses = {link_id: int(count) for link_id, count in conn.execute(
-        select(waitlist_entry.c.invite_link_id, func.count())
-        .where(waitlist_entry.c.invite_link_id.in_(ids))
-        .group_by(waitlist_entry.c.invite_link_id)
-    )} if ids else {}
+    uses = commands.invite_link_uses_by_id(conn, ids)
     cohorts: dict[uuid.UUID, list[CohortRef]] = {}
     for link_id, cohort_id, name in conn.execute(
         select(invite_link_cohort.c.invite_link_id, cohort.c.cohort_id, cohort.c.name)

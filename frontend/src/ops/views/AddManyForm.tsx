@@ -9,7 +9,6 @@ import { LINK_CLASS } from "../../ui/brand/inlineActions";
 import {
   OpsApiError,
   unwrap,
-  useOpsAction,
   useOpsClient,
   useOrganisations,
   useRefreshOps,
@@ -84,9 +83,6 @@ export function AddManyForm() {
   const [runWith, setRunWith] = useState<{ orgId: string; cohortIds: string[] } | null>(null);
   const [outcomes, setOutcomes] = useState<Record<number, Outcome>>({});
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const checkFile = useOpsAction((api, csv: string) =>
-    unwrap(api.POST("/api/v1/ops/people/import-check", { body: { csv } })),
-  );
   const running = progress !== null;
 
   useEffect(() => {
@@ -101,7 +97,8 @@ export function AddManyForm() {
     setOutcomes({});
     setRunWith(null);
     try {
-      setCheck(await checkFile.mutateAsync(await chosen.text()));
+      const csv = await chosen.text();
+      setCheck(await unwrap(client.POST("/api/v1/ops/people/import-check", { body: { csv } })));
     } catch {
       setCheck("failed");
     }
@@ -138,6 +135,7 @@ export function AddManyForm() {
 
   const result = typeof check === "object" ? check : null;
   const rows = result?.rows ?? [];
+  const ready = result !== null && result.errors.length === 0 && rows.length > 0;
   const finished = !running && runWith !== null;
   const outcomeList = rows.flatMap((row) => (outcomes[row.line] === undefined ? [] : [{ row, outcome: outcomes[row.line] }]));
   const count = (kind: Outcome["kind"]) => outcomeList.filter((entry) => entry.outcome.kind === kind).length;
@@ -229,7 +227,7 @@ export function AddManyForm() {
           </ul>
         </div>
       )}
-      {result !== null && result.errors.length === 0 && rows.length > 0 && !finished && !running && (
+      {ready && !finished && !running && (
         <div className="flex flex-col gap-3">
           <p className="text-body font-semibold text-navy">
             {rows.length === 1 ? "1 person is" : `${formatCount(rows.length)} people are`} ready to add
@@ -290,10 +288,10 @@ export function AddManyForm() {
             <Button variant="ghost" disabled={running} onClick={() => navigate("/people")}>
               Cancel
             </Button>
-            <Button disabled={running || result === null || result.errors.length > 0 || rows.length === 0} onClick={create}>
-              {result === null || result.errors.length > 0 || rows.length === 0
-                ? "Create accounts and send invitations"
-                : `Create ${plural(rows.length, "account")} and send invitations`}
+            <Button disabled={running || !ready} onClick={create}>
+              {ready
+                ? `Create ${plural(rows.length, "account")} and send invitations`
+                : "Create accounts and send invitations"}
             </Button>
           </>
         )}

@@ -226,9 +226,12 @@ export function RequestsView() {
       return next;
     });
   const selectAll = () => setSelected(new Set(waiting.map((item) => item.entry_id)));
-  const openMany = () => {
+  const clearChoice = () => {
     setOrgId("");
     setCohortIds([]);
+  };
+  const openMany = () => {
+    clearChoice();
     setApprovingMany(ticked);
   };
 
@@ -377,8 +380,7 @@ export function RequestsView() {
                               size="sm"
                               onClick={() => {
                                 answered.current = false;
-                                setOrgId("");
-                                setCohortIds([]);
+                                clearChoice();
                                 setApproving(request);
                               }}
                             >
@@ -411,8 +413,7 @@ export function RequestsView() {
                 <Button
                   onClick={() => {
                     answered.current = false;
-                    setOrgId("");
-                    setCohortIds([]);
+                    clearChoice();
                     setApproving(viewing);
                     setViewing(null);
                   }}

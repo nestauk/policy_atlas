@@ -208,9 +208,7 @@ def _tick(
     for index, row in enumerate(candidates):
         entry_id = row["entry_id"]
         target = str(entry_id)
-        # The same reading as the SQL filter (split_part(email, '@', 2)): the
-        # part after the first @, lower-cased.
-        domain = str(row["email"]).split("@", 2)[1].lower() if "@" in str(row["email"]) else ""
+        domain = commands.email_domain(str(row["email"]))
 
         # Once the budget has been spent every later candidate could send an
         # invitation. The next tick can safely reconsider them after old audit
