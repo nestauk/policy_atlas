@@ -31,6 +31,7 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.lifecycle import both_generations, rename_task
+from policy_atlas.core import background
 from policy_atlas.core.schema import conversation, event_log, task
 from policy_atlas.runtime.title_prompt import TASK_TITLE_PROMPT_VERSION, clean_title
 
@@ -188,13 +189,4 @@ def name_chat_from_message(
 
 def in_background(work: Callable[[], object], *, name: str) -> threading.Thread:
     """Run ``work`` on a daemon thread; a failure is logged, never raised."""
-
-    def run() -> None:
-        try:
-            work()
-        except Exception:
-            log.exception("titles.background_failed", name=name)
-
-    thread = threading.Thread(target=run, name=name, daemon=True)
-    thread.start()
-    return thread
+    return background.in_background(work, name=name, event="titles.background_failed")

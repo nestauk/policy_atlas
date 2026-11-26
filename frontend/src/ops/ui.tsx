@@ -591,14 +591,27 @@ export function Dialog({
   );
 }
 
-/** An action that failed, as a dialog, so a long table cannot hide it. */
-export function FailedDialog({ message, onRetry, onClose }: { message: string; onRetry: () => void; onClose: () => void }) {
+/**
+ * An action that failed, as a dialog, so a long table cannot hide it. The
+ * description defaults to the bulk actions' sentence.
+ */
+export function FailedDialog({
+  message,
+  description = "Some or all of it did not go through. Try again, or close and check the list.",
+  onRetry,
+  onClose,
+}: {
+  message: string;
+  description?: string;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
   return (
     <Dialog
       open
       onOpenChange={(open) => !open && onClose()}
       title={message}
-      description="Some or all of it did not go through. Try again, or close and check the list."
+      description={description}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>

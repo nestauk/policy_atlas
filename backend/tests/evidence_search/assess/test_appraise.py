@@ -97,7 +97,9 @@ def test_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 56  # task 065 adds four ops and cohort tables
+    # Task 065 adds four ops and cohort tables; 56 -> 58: announcements add
+    # `announcement` and `announcement_recipient`.
+    assert len(metadata.tables) == 58
 
 
 # --- Rubric and labels (pure Python, no DB) ---

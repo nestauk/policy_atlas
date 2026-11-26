@@ -31,7 +31,7 @@ function Frame({ sections, account, children }: { sections?: ReactNode; account?
           <Chip className="border-orange/50 bg-orange/10 text-orange">OPS</Chip>
         </div>
         {sections !== undefined && (
-          <div className={cn("flex items-center gap-5 md:ml-auto max-md:order-last max-md:w-full", account !== undefined && "md:mr-5")}>
+          <div className={cn("flex flex-wrap items-center gap-x-5 gap-y-1 md:ml-auto max-md:order-last max-md:w-full", account !== undefined && "md:mr-5")}>
             {sections}
           </div>
         )}
@@ -152,6 +152,7 @@ function SignedInShell() {
       <NavItem to="/people">People</NavItem>
       <NavItem to="/organisations">Organisations</NavItem>
       <NavItem to="/cohorts">Cohorts</NavItem>
+      <NavItem to="/announcements">Announcements</NavItem>
       <NavItem to="/waitlist">
         Waitlist
         {waiting > 0 && (

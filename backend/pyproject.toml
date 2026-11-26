@@ -130,7 +130,8 @@ ops = [
     # boto3 itself moved to the main dependencies in task 053 (Bedrock); the
     # stubs stay here because they are type-check only. `bedrock-runtime` added
     # for the Cohere and Claude backends (task 053, approved dependency gate).
-    "boto3-stubs[cognito-idp,bedrock-runtime]>=1.44.6,<2",
+    # `sesv2` added for the announcement mailer.
+    "boto3-stubs[cognito-idp,bedrock-runtime,sesv2]>=1.44.6,<2",
 ]
 
 [tool.uv]

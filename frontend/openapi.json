@@ -14612,6 +14612,52 @@
         ]
       }
     },
+    "/api/v1/resubscribe": {
+      "post": {
+        "description": "Start product-update emails again for the person who holds this token.\n\nArgs:\n    conn: Open database connection.\n    token: The person's unsubscribe token from the email link.\n\nReturns:\n    An empty 204 answer.\n\nRaises:\n    HTTPException: 404 when the token is missing, badly formed or unknown.",
+        "operationId": "resubscribe_api_v1_resubscribe_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown, missing or badly formed token."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resubscribe",
+        "tags": [
+          "email_preferences"
+        ]
+      }
+    },
     "/api/v1/tasks": {
       "get": {
         "description": "List the tasks the caller may see, with derived latest-run state.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    status_filter: `active` (default), `archived` or `all`.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only, the\n        pre-033 behaviour. **The default is `all`**: a `mine` default\n        would hide the whole feature behind a switcher.\n    project_id: Narrow to one project's members. Server-side because\n        `ProjectDetailView` filtered the default 50-row global page\n        client-side and would silently under-report once the visible\n        estate spans an organisation.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 the value is\n        logged verbatim on the admin trace, so it is bounded and shaped at\n        the boundary rather than in the log.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of tasks.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
@@ -19189,6 +19235,52 @@
         "summary": "Get Toc Upload",
         "tags": [
           "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/unsubscribe": {
+      "post": {
+        "description": "Stop product-update emails for the person who holds this token.\n\nSafe to repeat: a second call keeps the first time. A deactivated\naccount's token still works, because the person's choice stands.\n\nArgs:\n    conn: Open database connection.\n    token: The person's unsubscribe token from the email link.\n\nReturns:\n    An empty 204 answer.\n\nRaises:\n    HTTPException: 404 when the token is missing, badly formed or unknown.",
+        "operationId": "unsubscribe_api_v1_unsubscribe_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown, missing or badly formed token."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "email_preferences"
         ]
       }
     },

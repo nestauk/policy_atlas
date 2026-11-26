@@ -23,7 +23,8 @@ import {
   checkInHeadline,
   triggerCopy,
 } from "./checkInPresentation";
-import { ChoiceRow, WordsInput } from "./PartCard";
+import { ChoiceRow } from "../../ui/brand/ChoiceRow";
+import { WordsInput } from "./PartCard";
 import { STEERING_MODE_LABEL, vocabLabel } from "./planVocabulary";
 import { LINK_CLASS } from "../../ui/brand/inlineActions";
 

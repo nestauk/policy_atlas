@@ -45,3 +45,18 @@ export async function pick(user: UserEvent, label: string, option: string) {
   await user.click(screen.getByRole("combobox", { name: label }));
   await user.click(await screen.findByRole("option", { name: option }));
 }
+
+/** The count line, "79 people get this email", as one piece of text. */
+export const countLine = (n: number) =>
+  screen.findByText((_, element) => element?.tagName === "P" && element.textContent === `${n} people get this email`);
+
+const ADD = "Add a cohort, an organisation or a person";
+
+/** Compose the design annex's example: Spring pilot, Nesta and Tomás Ferreira, a subject and a message. */
+export async function composeExample(user: UserEvent) {
+  await pick(user, ADD, "Cohort: Spring pilot");
+  await pick(user, ADD, "Organisation: Nesta");
+  await pick(user, ADD, "Person: Tomás Ferreira, tomas.ferreira@example.org");
+  await user.type(screen.getByRole("textbox", { name: "Subject" }), "What's new: theory of change maps");
+  await user.type(screen.getByRole("textbox", { name: "Message" }), "You can now build a theory of change.");
+}

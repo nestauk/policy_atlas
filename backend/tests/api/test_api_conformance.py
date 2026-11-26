@@ -41,8 +41,18 @@ def _migrated(engine: Engine) -> None:
 # Routes that intentionally sit outside the bearer-token boundary: process
 # liveness/readiness probes, checked before any agent or auth I/O.
 # `/api/v1/waitlist` is the splash-page Request-access intake — the first
-# intentional public write. Health probes sit outside `/api/v1`.
-_UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz", "/api/v1/waitlist"})
+# intentional public write. The unsubscribe and resubscribe links in an email
+# are keyed by the person's token, not by a sign-in. Health probes sit
+# outside `/api/v1`.
+_UNAUTHENTICATED_ALLOWLIST = frozenset(
+    {
+        "/healthz",
+        "/readyz",
+        "/api/v1/waitlist",
+        "/api/v1/unsubscribe",
+        "/api/v1/resubscribe",
+    }
+)
 
 # These GET routes are conditionally public: absent Authorization gets an
 # indistinguishable 404 unless the requested active task has is_public.

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import structlog
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.auth import get_current_user, get_optional_user
@@ -28,6 +28,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     OpenAIGroundingJudgeBackend,
     StubGroundingJudgeBackend,
 )
+from policy_atlas.ops.mail import Mailer, MailSettings
 from policy_atlas.runtime.agent import live_task_agent_and_backends
 from policy_atlas.runtime.agent_backend import (
     AgentBackend,
@@ -124,6 +125,73 @@ def get_identity(request: Request) -> Identity:
     """
     return cast(Identity, request.app.state.identity)
 
+
+def get_optional_mailer(request: Request) -> Mailer | None:
+    """Return the mailer the operations lifespan built, or ``None``.
+
+    Args:
+        request: Incoming request whose application may own a mailer.
+
+    Returns:
+        The mailer, or ``None`` when the sender settings are absent.
+    """
+    return cast("Mailer | None", getattr(request.app.state, "mailer", None))
+
+
+def get_mailer(request: Request) -> Mailer:
+    """Return the mailer the operations lifespan built.
+
+    Args:
+        request: Incoming request whose application may own a mailer.
+
+    Returns:
+        The mailer.
+
+    Raises:
+        HTTPException: 503 when the sender settings are absent, so no mailer exists.
+    """
+    mailer = get_optional_mailer(request)
+    if mailer is None:
+        raise HTTPException(503, "email sending is not configured")
+    return mailer
+
+
+def get_mail_settings(request: Request) -> MailSettings:
+    """Return the announcement email settings the operations lifespan built.
+
+    Args:
+        request: Incoming request whose application may own the settings.
+
+    Returns:
+        The sender, reply and public addresses.
+
+    Raises:
+        HTTPException: 503 when the sender settings are absent.
+    """
+    mail_settings = getattr(request.app.state, "mail_settings", None)
+    if mail_settings is None:
+        raise HTTPException(503, "email sending is not configured")
+    return cast(MailSettings, mail_settings)
+
+
+def get_announcement_image_store(request: Request) -> UploadStore:
+    """Where announcement pictures go: the store the operations lifespan built.
+
+    Tests override this.
+
+    Args:
+        request: Incoming request whose application may own the store.
+
+    Returns:
+        The store.
+
+    Raises:
+        HTTPException: 503 when neither a bucket nor local development applies.
+    """
+    store = getattr(request.app.state, "announcement_image_store", None)
+    if store is None:
+        raise HTTPException(503, "picture storage is not configured")
+    return cast(UploadStore, store)
 
 
 def get_engine(request: Request) -> Engine:

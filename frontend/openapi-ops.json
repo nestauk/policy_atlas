@@ -42,6 +42,685 @@
         "title": "ActionResult",
         "type": "object"
       },
+      "AnnouncementCounts": {
+        "description": "How many recipient rows are in each status.",
+        "properties": {
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "left_out": {
+            "default": 0,
+            "title": "Left Out",
+            "type": "integer"
+          },
+          "pending": {
+            "default": 0,
+            "title": "Pending",
+            "type": "integer"
+          },
+          "sending": {
+            "default": 0,
+            "title": "Sending",
+            "type": "integer"
+          },
+          "sent": {
+            "default": 0,
+            "title": "Sent",
+            "type": "integer"
+          }
+        },
+        "title": "AnnouncementCounts",
+        "type": "object"
+      },
+      "AnnouncementCreatedOut": {
+        "description": "Answer to a send: the new announcement's id.",
+        "properties": {
+          "announcement_id": {
+            "format": "uuid",
+            "title": "Announcement Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "announcement_id"
+        ],
+        "title": "AnnouncementCreatedOut",
+        "type": "object"
+      },
+      "AnnouncementDetailOut": {
+        "description": "Answer to ``GET /api/v1/ops/announcements/{announcement_id}``.\n\nArgs:\n    body: The message text.\n    button_label: The button's words, or ``None``.\n    button_url: The button's link, or ``None``.\n    image_url: The picture's address, or ``None``.\n    image_alt: The picture's description, or ``None``.\n    recipients: Each person's result, by name.\n    suppression_unreadable: True when the suppression list could not be\n        read, so no row carries an overlay.",
+        "properties": {
+          "announcement_id": {
+            "format": "uuid",
+            "title": "Announcement Id",
+            "type": "string"
+          },
+          "audience_summary": {
+            "title": "Audience Summary",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "button_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button Label"
+          },
+          "button_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button Url"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AnnouncementCounts"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "image_alt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Alt"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "kind": {
+            "enum": [
+              "product_update",
+              "service_notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/AnnouncementResultOut"
+            },
+            "title": "Recipients",
+            "type": "array"
+          },
+          "sent_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent By Name"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "suppression_unreadable": {
+            "title": "Suppression Unreadable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "announcement_id",
+          "subject",
+          "kind",
+          "audience_summary",
+          "sent_by_name",
+          "created_at",
+          "counts",
+          "body",
+          "button_label",
+          "button_url",
+          "image_url",
+          "image_alt",
+          "recipients",
+          "suppression_unreadable"
+        ],
+        "title": "AnnouncementDetailOut",
+        "type": "object"
+      },
+      "AnnouncementImageIn": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/announcement-images``: a PNG or JPEG, base64, at most 1 MB.",
+        "properties": {
+          "content_type": {
+            "enum": [
+              "image/png",
+              "image/jpeg"
+            ],
+            "title": "Content Type",
+            "type": "string"
+          },
+          "data_base64": {
+            "maxLength": 2000000,
+            "minLength": 1,
+            "title": "Data Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_type",
+          "data_base64"
+        ],
+        "title": "AnnouncementImageIn",
+        "type": "object"
+      },
+      "AnnouncementImageOut": {
+        "description": "The stored picture's public address, for ``image_url``.",
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "AnnouncementImageOut",
+        "type": "object"
+      },
+      "AnnouncementRecipientOut": {
+        "description": "One person on the preview.\n\nArgs:\n    user_id: The account.\n    name: The display name.\n    email: The address, or ``None`` when the account has none.\n    organisation: The organisation's name, or ``None``.\n    status: ``pending`` (gets the email) or ``left_out``.\n    reason: Why they are left out, or ``None``.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "organisation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "deactivated",
+                  "no_email",
+                  "suppressed_bounce",
+                  "suppressed_complaint",
+                  "not_signed_in",
+                  "unsubscribed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "left_out"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "organisation",
+          "status",
+          "reason"
+        ],
+        "title": "AnnouncementRecipientOut",
+        "type": "object"
+      },
+      "AnnouncementRecipientsIn": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/announcements/recipients``.",
+        "properties": {
+          "audience": {
+            "$ref": "#/components/schemas/AudienceIn"
+          },
+          "kind": {
+            "enum": [
+              "product_update",
+              "service_notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "audience"
+        ],
+        "title": "AnnouncementRecipientsIn",
+        "type": "object"
+      },
+      "AnnouncementRecipientsOut": {
+        "description": "The preview: counts, each person, and the list's fingerprint.\n\nAlso the ``details`` of the 409 ``recipients_changed`` answer to a send.\n\nArgs:\n    chosen: How many people the audience gives.\n    will_get: How many of them get the email.\n    left_out: How many are left out, by reason (only reasons that occur).\n    recipients: Each person once, sorted by ``user_id``.\n    fingerprint: A hash of the list; the send must carry it back.",
+        "properties": {
+          "chosen": {
+            "title": "Chosen",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "left_out": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "deactivated",
+                "no_email",
+                "suppressed_bounce",
+                "suppressed_complaint",
+                "not_signed_in",
+                "unsubscribed"
+              ]
+            },
+            "title": "Left Out",
+            "type": "object"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/AnnouncementRecipientOut"
+            },
+            "title": "Recipients",
+            "type": "array"
+          },
+          "will_get": {
+            "title": "Will Get",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chosen",
+          "will_get",
+          "left_out",
+          "recipients",
+          "fingerprint"
+        ],
+        "title": "AnnouncementRecipientsOut",
+        "type": "object"
+      },
+      "AnnouncementResultOut": {
+        "description": "One person's result on an announcement.\n\nArgs:\n    user_id: The account.\n    name: The display name now.\n    email: The address the email went to (as it was at the send).\n    organisation: The organisation's name now, or ``None``.\n    status: ``pending``, ``sending`` (the page says \"Not confirmed\" once\n        the send has stopped), ``sent``, ``failed`` or ``left_out``.\n    reason: The left-out reason, a short failure code, or ``None``.\n    overlay: For a ``sent`` row whose address joined the suppression list\n        after the send: ``bounced`` or ``marked_as_spam``. Not stored.",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "organisation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation"
+          },
+          "overlay": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bounced",
+                  "marked_as_spam"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overlay"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sending",
+              "sent",
+              "failed",
+              "left_out"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "organisation",
+          "status",
+          "reason",
+          "overlay"
+        ],
+        "title": "AnnouncementResultOut",
+        "type": "object"
+      },
+      "AnnouncementSendIn": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/announcements``.\n\nArgs:\n    fingerprint: The ``fingerprint`` of the preview the operator confirmed.",
+        "properties": {
+          "audience": {
+            "$ref": "#/components/schemas/AudienceIn"
+          },
+          "body": {
+            "maxLength": 10000,
+            "title": "Body",
+            "type": "string"
+          },
+          "button_label": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button Label"
+          },
+          "button_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button Url"
+          },
+          "fingerprint": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "image_alt": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Alt"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "kind": {
+            "enum": [
+              "product_update",
+              "service_notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 150,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "body",
+          "kind",
+          "audience",
+          "fingerprint"
+        ],
+        "title": "AnnouncementSendIn",
+        "type": "object"
+      },
+      "AnnouncementSummaryOut": {
+        "description": "One announcement on the list.\n\nArgs:\n    announcement_id: The announcement.\n    subject: Its subject line.\n    kind: Product update or service notice.\n    audience_summary: The audience in words (\"Everyone\", or the names).\n    sent_by_name: The operator's display name, or ``None`` if unknown.\n    created_at: When it was sent.\n    counts: Recipient rows by status.",
+        "properties": {
+          "announcement_id": {
+            "format": "uuid",
+            "title": "Announcement Id",
+            "type": "string"
+          },
+          "audience_summary": {
+            "title": "Audience Summary",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/AnnouncementCounts"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "product_update",
+              "service_notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "sent_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent By Name"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "announcement_id",
+          "subject",
+          "kind",
+          "audience_summary",
+          "sent_by_name",
+          "created_at",
+          "counts"
+        ],
+        "title": "AnnouncementSummaryOut",
+        "type": "object"
+      },
+      "AnnouncementTestIn": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/announcements/test``.",
+        "properties": {
+          "body": {
+            "maxLength": 10000,
+            "title": "Body",
+            "type": "string"
+          },
+          "button_label": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button Label"
+          },
+          "button_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Button Url"
+          },
+          "image_alt": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Alt"
+          },
+          "image_url": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Url"
+          },
+          "kind": {
+            "enum": [
+              "product_update",
+              "service_notice"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 150,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "body",
+          "kind"
+        ],
+        "title": "AnnouncementTestIn",
+        "type": "object"
+      },
+      "AnnouncementsOut": {
+        "description": "Answer to ``GET /api/v1/ops/announcements``: newest first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnnouncementSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AnnouncementsOut",
+        "type": "object"
+      },
       "ApproveRequest": {
         "additionalProperties": false,
         "description": "Body of ``POST /api/v1/ops/requests/{entry_id}/approve``.",
@@ -56,6 +735,45 @@
           "org_id"
         ],
         "title": "ApproveRequest",
+        "type": "object"
+      },
+      "AudienceIn": {
+        "additionalProperties": false,
+        "description": "Who an announcement goes to: everyone, or any mix of cohorts, organisations and people.\n\nWith ``everyone`` true the three lists must be empty; with it false at least\none id is needed.",
+        "properties": {
+          "cohort_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Cohort Ids",
+            "type": "array"
+          },
+          "everyone": {
+            "default": false,
+            "title": "Everyone",
+            "type": "boolean"
+          },
+          "org_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Org Ids",
+            "type": "array"
+          },
+          "user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "title": "AudienceIn",
         "type": "object"
       },
       "BulkCohort": {
@@ -997,6 +1715,308 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/ops/announcement-images": {
+      "post": {
+        "description": "Store a PNG or JPEG of at most 1 MB under a random name; return its public address.",
+        "operationId": "add_image_api_v1_ops_announcement_images_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementImageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementImageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Image",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/announcements": {
+      "get": {
+        "description": "Every announcement, newest first, with its recipient counts by status.",
+        "operationId": "list_announcements_api_v1_ops_announcements_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Announcements",
+        "tags": [
+          "ops"
+        ]
+      },
+      "post": {
+        "description": "Record the announcement and its recipients; the sender starts after the commit.",
+        "operationId": "send_announcement_api_v1_ops_announcements_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementSendIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Announcement",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/announcements/recipients": {
+      "post": {
+        "description": "Who the announcement would go to, and who is left out and why. Writes nothing.",
+        "operationId": "preview_recipients_api_v1_ops_announcements_recipients_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementRecipientsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementRecipientsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preview Recipients",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/announcements/test": {
+      "post": {
+        "description": "Send one test email to the operator's own address, subject prefixed ``[Test] ``.",
+        "operationId": "send_test_api_v1_ops_announcements_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnouncementTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Send Test",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/announcements/{announcement_id}": {
+      "get": {
+        "description": "One announcement and each person's result.\n\nA ``sent`` row whose address joined the suppression list after the send\nshows ``bounced`` or ``marked_as_spam`` as its overlay; nothing is stored.\nWithout a mailer, or when the list cannot be read, no row has an overlay\nand ``suppression_unreadable`` is true.",
+        "operationId": "get_announcement_api_v1_ops_announcements__announcement_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Announcement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Announcement",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/announcements/{announcement_id}/retry": {
+      "post": {
+        "description": "Put the failed rows back to pending and start the sender after the commit.",
+        "operationId": "retry_announcement_api_v1_ops_announcements__announcement_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Announcement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retry Announcement",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/ops/cohorts": {
       "get": {
         "description": "List cohorts by name with how many people each holds.",

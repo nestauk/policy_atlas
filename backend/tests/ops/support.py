@@ -24,11 +24,18 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import boto3
 from botocore.stub import ANY, Stubber
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
+from sqlalchemy import insert
+from sqlalchemy.engine import Connection
+
+from policy_atlas.core.schema import app_user, cohort, cohort_member, organisation
+from policy_atlas.ops.announcements import Audience
 
 #: A pool id shaped like a real one. Never reached — the Stubber answers first.
 POOL_ID = "eu-west-2_TESTPOOL1"
@@ -263,3 +270,113 @@ def expect_lock_out(stubber: Stubber, *, sub: str) -> None:
     """Queue the disable then the global sign-out of ``user deactivate``, in that order."""
     for operation in ("admin_disable_user", "admin_user_global_sign_out"):
         stubber.add_response(operation, {}, {"UserPoolId": POOL_ID, "Username": sub})
+
+
+def add_person(
+    conn: Connection,
+    *,
+    name: str = "Example Person",
+    email: str | None = "",
+    org_id: uuid.UUID | None = None,
+    signed_in: bool = True,
+    unsubscribed: bool = False,
+    deactivated: bool = False,
+) -> str:
+    """Insert one account and return its subject.
+
+    Args:
+        conn: Open database connection.
+        name: The display name.
+        email: The address; the default ``""`` mints a unique ``example.org``
+            address, ``None`` leaves the account without one.
+        org_id: The person's organisation, if any.
+        signed_in: Whether the person has signed in at least once.
+        unsubscribed: Whether the person stopped product updates.
+        deactivated: Whether the account is deactivated.
+    """
+    user_id = fresh_sub("person")
+    at = datetime.now(UTC)
+    conn.execute(
+        insert(app_user).values(
+            user_id=user_id,
+            org_id=org_id,
+            display_name=name,
+            email=f"{user_id}@example.org" if email == "" else email,
+            created_at=at,
+            first_signed_in_at=at if signed_in else None,
+            updates_unsubscribed_at=at if unsubscribed else None,
+            deactivated_at=at if deactivated else None,
+        )
+    )
+    return user_id
+
+
+@dataclass(frozen=True)
+class AnnouncementExample:
+    """The design annex's example audience, as stored rows.
+
+    Cohort "Spring pilot" (18 people) and organisation "Nesta" (64 people), one
+    person in both, plus Tomás Ferreira in neither: 82 chosen. Two of them
+    unsubscribed from product updates and one is deactivated; all have signed in.
+    Names carry a unique suffix because both names are unique in the database.
+
+    Attributes:
+        cohort_id: The cohort.
+        cohort_name: Its stored name.
+        org_id: The organisation.
+        org_name: Its stored name.
+        tomas: Tomás Ferreira's subject.
+        in_both: The subject of the person in the cohort and the organisation.
+        unsubscribed: The two people who stopped product updates.
+        deactivated: The deactivated person.
+        people: All 82 subjects.
+    """
+
+    cohort_id: uuid.UUID
+    cohort_name: str
+    org_id: uuid.UUID
+    org_name: str
+    tomas: str
+    in_both: str
+    unsubscribed: tuple[str, str]
+    deactivated: str
+    people: tuple[str, ...]
+
+    @property
+    def audience(self) -> Audience:
+        """The operator's choice: the cohort, the organisation and Tomás."""
+        return Audience(
+            cohort_ids=(self.cohort_id,), org_ids=(self.org_id,), user_ids=(self.tomas,)
+        )
+
+
+def announcement_example(conn: Connection) -> AnnouncementExample:
+    """Insert the design annex's example audience and return its ids."""
+    at = datetime.now(UTC)
+    suffix = uuid.uuid4().hex[:8]
+    org_id, cohort_id = uuid.uuid4(), uuid.uuid4()
+    org_name, cohort_name = f"Nesta {suffix}", f"Spring pilot {suffix}"
+    conn.execute(insert(organisation).values(org_id=org_id, name=org_name, created_at=at))
+    conn.execute(insert(cohort).values(cohort_id=cohort_id, name=cohort_name, created_at=at))
+    staff = [
+        add_person(conn, name=f"Nesta person {n}", org_id=org_id, unsubscribed=n in (1, 2),
+                   deactivated=n == 3)
+        for n in range(64)
+    ]
+    pilot = [add_person(conn, name=f"Pilot person {n}") for n in range(17)] + [staff[0]]
+    conn.execute(
+        insert(cohort_member),
+        [{"cohort_id": cohort_id, "user_id": user_id, "added_at": at} for user_id in pilot],
+    )
+    tomas = add_person(conn, name="Tomás Ferreira")
+    return AnnouncementExample(
+        cohort_id=cohort_id,
+        cohort_name=cohort_name,
+        org_id=org_id,
+        org_name=org_name,
+        tomas=tomas,
+        in_both=staff[0],
+        unsubscribed=(staff[1], staff[2]),
+        deactivated=staff[3],
+        people=tuple(staff + pilot[:-1] + [tomas]),
+    )

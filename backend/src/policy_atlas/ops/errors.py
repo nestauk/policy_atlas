@@ -59,3 +59,19 @@ class NotFound(OpsError):
     The ops routes answer it with 404; every other refusal is a 409. A typed
     class, so the routes never classify by message text.
     """
+
+
+class InvalidMessage(OpsError):
+    """Refusal raised when an announcement's fields break a rule.
+
+    The ops routes answer it with 422 (a field rule), not the 409 of other
+    refusals. A typed class, so the routes never classify by message text.
+
+    Attributes:
+        field: The request field that broke the rule, so a page can show the
+            message under that field.
+    """
+
+    def __init__(self, message: str, *, field: str) -> None:
+        super().__init__(message)
+        self.field = field

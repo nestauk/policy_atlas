@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable
@@ -31,6 +32,8 @@ from policy_atlas.api.deps import Identity
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.core.uploads import DIR_ENV, LocalUploadStore, S3UploadStore, UploadStore
+from policy_atlas.ops.mail import MailSettings
 from policy_atlas.theory_of_change.edits import EditRefused
 
 log = structlog.get_logger()
@@ -78,6 +81,9 @@ _CONFLICT_CODES = {
     # Ops-host command refusals.
     "ops_refused",
     "enrolled_elsewhere",
+    # The list of people an announcement goes to changed after the preview;
+    # the details carry the new list.
+    "recipients_changed",
 }
 
 _CAPACITY_CODES = {"chat_capacity", "resend_cooldown"}
@@ -93,6 +99,8 @@ _UNPROCESSABLE_CODES = {
     "upload_type",
     "upload_size",
     "upload_not_theory",
+    # An announcement field broke a rule; the details name the field.
+    "invalid_message",
 }
 
 
@@ -102,14 +110,16 @@ class ApiConflict(Exception):
     Args:
         code: One of the contract-defined 409 codes.
         message: Human-readable explanation for the caller.
+        details: Optional structured detail sent in the envelope's ``details``.
     """
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, details: Any | None = None) -> None:
         """Validate and retain the public conflict information.
 
         Args:
             code: Contract-defined conflict code.
             message: Human-readable response text.
+            details: Optional structured detail for the caller.
 
         Raises:
             ValueError: If the code is not a declared 409 contract code.
@@ -119,6 +129,7 @@ class ApiConflict(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.details = details
 
 
 class ApiUnprocessable(Exception):
@@ -127,14 +138,16 @@ class ApiUnprocessable(Exception):
     Args:
         code: One of the contract-defined 422 codes.
         message: Human-readable explanation for the caller.
+        details: Optional structured detail sent in the envelope's ``details``.
     """
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, details: Any | None = None) -> None:
         if code not in _UNPROCESSABLE_CODES:
             raise ValueError(f"unsupported API unprocessable code: {code}")
         super().__init__(message)
         self.code = code
         self.message = message
+        self.details = details
 
 
 class ApiNotFound(Exception):
@@ -302,8 +315,12 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
 
     if app_settings.service_role == "ops":
         from policy_atlas.api.routers.ops import router as ops_router
+        from policy_atlas.api.routers.ops_announcements import (
+            router as ops_announcements_router,
+        )
 
         app.include_router(ops_router)
+        app.include_router(ops_announcements_router)
         _mount_ops_ui(app, app_settings.ops_ui_dir)
         return app
 
@@ -313,6 +330,9 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     from policy_atlas.api.routers.conversations import router as conversations_router
     from policy_atlas.api.routers.conversations import (
         task_router as task_conversations_router,
+    )
+    from policy_atlas.api.routers.email_preferences import (
+        router as email_preferences_router,
     )
     from policy_atlas.api.routers.longlist import router as longlist_router
     from policy_atlas.api.routers.me import router as me_router
@@ -343,6 +363,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         longlist_router,
         toc_router,
         waitlist_router,
+        email_preferences_router,
         *routers,
     ):
         app.include_router(router)
@@ -508,6 +529,26 @@ def _ops_lifespan(
         app.state.authenticator = JwtAuthenticator(settings, http_client)
         identity = identity_from_issuer(settings.oidc_issuer)
         app.state.identity = identity
+        app.state.mail_settings = mail_settings = mail_settings_from(settings)
+        app.state.mailer = None
+        # Announcement pictures: the bucket when one is set, a local folder in
+        # local development (no Cognito client), else none (the route answers 503).
+        image_store: UploadStore | None = None
+        if settings.announcement_image_bucket:
+            image_store = S3UploadStore(settings.announcement_image_bucket)
+        elif identity.cognito is None:
+            image_store = LocalUploadStore(Path(os.environ.get(DIR_ENV, ".uploads")))
+        app.state.announcement_image_store = image_store
+        if mail_settings is not None:
+            from policy_atlas.ops.announcements import resume_all
+            from policy_atlas.ops.mail import SesMailer, ses_client
+
+            # Credentials come from the task role; the region is the pool's (or
+            # the default when there is none).
+            mailer = SesMailer(ses_client(identity.region), mail_settings)
+            app.state.mailer = mailer
+            # Finish any send a stop cut short.
+            resume_all(engine, mailer, mail_settings)
         if settings.ops_ui_dir is None or not settings.ops_ui_dir.is_dir():
             log.info("ops.ui_absent", ops_ui_dir=str(settings.ops_ui_dir))
         task: asyncio.Task[None] | None = None
@@ -525,6 +566,27 @@ def _ops_lifespan(
             engine.dispose()
 
     return lifespan
+
+
+def mail_settings_from(settings: Settings) -> MailSettings | None:
+    """Build the announcement email settings when all four are configured.
+
+    Args:
+        settings: The application settings.
+
+    Returns:
+        The sender, the reply address and the two public addresses, or ``None``
+        when any is missing (then the operations service sends no email).
+    """
+    from_address = settings.announcement_from_address
+    reply_to = settings.announcement_reply_to
+    site_url = settings.public_site_url
+    api_url = settings.public_api_url
+    if from_address is None or reply_to is None or site_url is None or api_url is None:
+        return None
+    return MailSettings(
+        from_address=from_address, reply_to=reply_to, site_url=site_url, api_url=api_url
+    )
 
 
 def identity_from_issuer(issuer: str) -> Identity:
@@ -618,11 +680,11 @@ def _install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ApiConflict)
     async def api_conflict_handler(_: Request, exc: ApiConflict) -> JSONResponse:
-        return _error_response(409, exc.code, exc.message)
+        return _error_response(409, exc.code, exc.message, exc.details)
 
     @app.exception_handler(ApiUnprocessable)
     async def api_unprocessable_handler(_: Request, exc: ApiUnprocessable) -> JSONResponse:
-        return _error_response(422, exc.code, exc.message)
+        return _error_response(422, exc.code, exc.message, exc.details)
 
     @app.exception_handler(ApiNotFound)
     async def api_not_found_handler(_: Request, exc: ApiNotFound) -> JSONResponse:
@@ -673,6 +735,9 @@ def _install_exception_handlers(app: FastAPI) -> None:
             return _error_response(403, "forbidden", detail or "action is not permitted")
         if exc.status_code == 422:
             return _error_response(422, "validation_error", detail or "request validation failed")
+        if exc.status_code == 502:
+            # A service this one calls (the email service) refused or failed.
+            return _error_response(502, "upstream_failed", detail or "an outside service failed")
         if exc.status_code == 503:
             return _error_response(503, "unavailable", detail or "service unavailable")
         return _error_response(exc.status_code, "internal", "internal server error")

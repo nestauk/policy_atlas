@@ -55,8 +55,10 @@ class UploadRefused(ValueError):
 class UploadStore(Protocol):
     """Where upload bytes live."""
 
-    def put(self, key: str, data: bytes, content_type: str) -> None:
-        """Store ``data`` under ``key``."""
+    def put(
+        self, key: str, data: bytes, content_type: str, *, cache_control: str | None = None
+    ) -> None:
+        """Store ``data`` under ``key``; ``cache_control`` is how long readers may cache it."""
         ...
 
     def get(self, key: str) -> bytes:
@@ -80,7 +82,9 @@ class LocalUploadStore:
             raise ValueError(f"key outside the store: {key!r}")
         return path
 
-    def put(self, key: str, data: bytes, content_type: str) -> None:
+    def put(
+        self, key: str, data: bytes, content_type: str, *, cache_control: str | None = None
+    ) -> None:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
@@ -101,13 +105,17 @@ class S3UploadStore:
         self.bucket = bucket
         self.client = client if client is not None else boto3.client("s3")
 
-    def put(self, key: str, data: bytes, content_type: str) -> None:
+    def put(
+        self, key: str, data: bytes, content_type: str, *, cache_control: str | None = None
+    ) -> None:
+        extra = {} if cache_control is None else {"CacheControl": cache_control}
         self.client.put_object(
             Bucket=self.bucket,
             Key=key,
             Body=data,
             ContentType=content_type,
             ServerSideEncryption="AES256",
+            **extra,
         )
 
     def get(self, key: str) -> bytes:

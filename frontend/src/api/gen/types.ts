@@ -355,6 +355,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/resubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resubscribe
+         * @description Start product-update emails again for the person who holds this token.
+         *
+         *     Args:
+         *         conn: Open database connection.
+         *         token: The person's unsubscribe token from the email link.
+         *
+         *     Returns:
+         *         An empty 204 answer.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the token is missing, badly formed or unknown.
+         */
+        post: operations["resubscribe_api_v1_resubscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -1805,6 +1835,39 @@ export interface paths {
         get: operations["get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unsubscribe
+         * @description Stop product-update emails for the person who holds this token.
+         *
+         *     Safe to repeat: a second call keeps the first time. A deactivated
+         *     account's token still works, because the person's choice stands.
+         *
+         *     Args:
+         *         conn: Open database connection.
+         *         token: The person's unsubscribe token from the email link.
+         *
+         *     Returns:
+         *         An empty 204 answer.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the token is missing, badly formed or unknown.
+         */
+        post: operations["unsubscribe_api_v1_unsubscribe_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9013,6 +9076,42 @@ export interface operations {
             };
         };
     };
+    resubscribe_api_v1_resubscribe_post: {
+        parameters: {
+            query?: {
+                token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown, missing or badly formed token. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_api_v1_tasks_get: {
         parameters: {
             query?: {
@@ -11283,6 +11382,42 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_api_v1_unsubscribe_post: {
+        parameters: {
+            query?: {
+                token?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown, missing or badly formed token. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

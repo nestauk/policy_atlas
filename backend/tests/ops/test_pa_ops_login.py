@@ -111,11 +111,30 @@ def _assert_refused(statement: str, pa_ops_engine: Engine) -> None:
         "VALUES ('probe.test', gen_random_uuid(), now())",
         "INSERT INTO waitlist_entry (entry_id, email, name, role_or_reason, created_at) "
         "VALUES (gen_random_uuid(), 'probe@example.test', 'Probe', 'probe', now())",
+        # Only the person sets or clears the product-update opt-out.
+        "UPDATE app_user SET updates_unsubscribed_at = now()",
+        "UPDATE app_user SET unsubscribe_token = gen_random_uuid()",
     ],
 )
 def test_pa_ops_refuses_ungranted_statements(pa_ops_engine: Engine, statement: str) -> None:
     """The ops login cannot read or write outside its precise grant list."""
     _assert_refused(statement, pa_ops_engine)
+
+
+def test_pa_ops_can_lock_a_person_row_and_read_the_opt_out(
+    pa_ops_engine: Engine, seeded_user: str
+) -> None:
+    """The announcement sender locks the person's row and reads the opt-out and token."""
+    with pa_ops_engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "SELECT updates_unsubscribed_at, unsubscribe_token FROM app_user "
+                "WHERE user_id = :user_id FOR UPDATE"
+            ),
+            {"user_id": seeded_user},
+        ).one()
+    assert row.updates_unsubscribed_at is None
+    assert row.unsubscribe_token is not None
 
 
 def test_pa_ops_cannot_grant_admin_or_ops(pa_ops_engine: Engine, seeded_user: str) -> None:
@@ -365,6 +384,8 @@ _EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
     "project_membership": {"SELECT", "DELETE"},
     "cohort": {"SELECT", "INSERT", "DELETE"},
     "cohort_member": {"SELECT", "INSERT", "DELETE"},
+    "announcement": {"SELECT", "INSERT"},
+    "announcement_recipient": {"SELECT", "INSERT"},
 }
 _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
     "app_user": {
@@ -379,6 +400,7 @@ _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
         "name", "description", "starts_on", "ends_on", "links", "task_quota_per_year",
         "runs_per_user",
     },
+    "announcement_recipient": {"email", "status", "reason", "updated_at"},
 }
 
 

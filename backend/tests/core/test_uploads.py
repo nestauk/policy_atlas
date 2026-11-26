@@ -74,6 +74,30 @@ def test_the_s3_store_puts_encrypted_and_gets() -> None:
         stub.assert_no_pending_responses()
 
 
+def test_the_s3_store_sets_the_cache_time_when_asked() -> None:
+    client = boto3.client(
+        "s3", region_name="eu-west-2", aws_access_key_id="x", aws_secret_access_key="x"
+    )
+    with Stubber(client) as stub:
+        stub.add_response(
+            "put_object",
+            {},
+            {
+                "Bucket": "pictures",
+                "Key": "email-images/a.png",
+                "Body": PNG,
+                "ContentType": "image/png",
+                "ServerSideEncryption": "AES256",
+                "CacheControl": "public, max-age=31536000, immutable",
+            },
+        )
+        S3UploadStore("pictures", client=client).put(
+            "email-images/a.png", PNG, "image/png",
+            cache_control="public, max-age=31536000, immutable",
+        )
+        stub.assert_no_pending_responses()
+
+
 def test_the_store_is_s3_only_when_a_bucket_is_named(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

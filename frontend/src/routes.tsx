@@ -17,6 +17,7 @@ import { TasksListView } from "./views/TasksListView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { PrivacyView } from "./views/legal/PrivacyView";
 import { TermsView } from "./views/legal/TermsView";
+import { UnsubscribeView } from "./views/unsubscribe/UnsubscribeView";
 import { PublicTaskShell } from "./views/PublicTaskShell";
 import { SplashView } from "./views/splash/SplashView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
@@ -62,6 +63,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/", element: <SplashView /> },
   { path: "/privacy", element: <PrivacyView /> },
   { path: "/terms", element: <TermsView /> },
+  { path: "/unsubscribe", element: <UnsubscribeView /> },
   {
     path: "/tasks/:taskId",
     element: <PublicTaskShell />,
@@ -82,8 +84,11 @@ export const publicRouter = createBrowserRouter([
   { path: "*", element: <StashAndSplashRedirect /> },
 ]);
 
-/** Authenticated app routes behind RequireAuth + AppShell. */
+/** Authenticated app routes behind RequireAuth + AppShell. The unsubscribe
+ *  page sits outside both: an email link opens it, it carries its own
+ *  wordmark and it works the same signed in or out. */
 export const authenticatedRouter = createBrowserRouter([
+  { path: "/unsubscribe", element: <UnsubscribeView /> },
   {
     element: <RequireAuth />,
     children: [

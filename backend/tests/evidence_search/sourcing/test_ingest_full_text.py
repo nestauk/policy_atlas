@@ -1253,7 +1253,9 @@ def test_migration_roundtrip_and_checks(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 56  # task 065 adds four ops and cohort tables
+    # Task 065 adds four ops and cohort tables; 56 -> 58: announcements add
+    # `announcement` and `announcement_recipient`.
+    assert len(metadata.tables) == 58
     task_id, _ = seed_task_and_run(conn)
     snap_id, tss_id = seed_source(conn, task_id)
 
