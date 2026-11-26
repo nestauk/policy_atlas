@@ -116,6 +116,24 @@ describe("an announcement's result", () => {
     expect(opsMock.writes.at(-1)?.path).toMatch(/\/retry$/);
   });
 
+  it("offers to send to the people a stopped send left waiting, and they turn to sent", async () => {
+    const user = userEvent.setup();
+    const stored = opsMock.announcements[0];
+    const stoppedAt = new Set(stored.recipients.filter((person) => person.status === "sent").slice(0, 2).map((person) => person.user_id));
+    stored.recipients = stored.recipients.map((person) =>
+      stoppedAt.has(person.user_id) ? { ...person, status: "pending" as const } : person,
+    );
+    renderOps(`/announcements/${stored.announcement_id}`);
+    const summary = await screen.findByRole("region", { name: "Result" });
+    expect(summary).toHaveTextContent(/75 sent.*2 failed.*3 left out.*2 waiting/);
+    expect(summary).toHaveTextContent("The send stopped before it reached everyone.");
+    expect(within(summary).queryByRole("button", { name: /failed again/ })).toBeNull();
+    await user.click(within(summary).getByRole("button", { name: "Send to the 2 still waiting" }));
+    await waitFor(() => expect(summary).toHaveTextContent(/^79 sent3 left out/));
+    expect(within(summary).queryByRole("button", { name: /still waiting/ })).toBeNull();
+    expect(opsMock.writes.filter((write) => write.path.endsWith("/retry"))).toHaveLength(1);
+  });
+
   it("lists the people who need attention first, by name inside each group", async () => {
     const answer = detail(
       [

@@ -375,9 +375,9 @@ function announcementRoute(method: string, path: string, body: Record<string, un
     if (stored === undefined) return apiError(404, "not_found", "resource not found");
     if (method === "GET" && one[2] === undefined) return json(withCounts(stored));
     if (method === "POST" && one[2] !== undefined) {
-      // The retry sends the failed rows again; here they go through at once.
+      // The retry sends the failed rows again and the rows still waiting; here they go through at once.
       stored.recipients = stored.recipients.map((person) =>
-        person.status === "failed" ? { ...person, status: "sent" as const, reason: null } : person,
+        person.status === "failed" || person.status === "pending" ? { ...person, status: "sent" as const, reason: null } : person,
       );
       return new Response(null, { status: 202 });
     }

@@ -69,6 +69,8 @@ export function AnnouncementView() {
   const { counts } = data;
   const waiting = counts.pending + (isLive ? counts.sending : 0);
   const notConfirmed = isLive ? 0 : counts.sending;
+  // A send the server stopped in the middle leaves rows waiting; the retry route continues it.
+  const stuck = !isLive && counts.pending > 0;
   const myName = people.data?.find((person) => person.user_id === auth.user?.sub)?.display_name;
   const sentBy = data.sent_by_name === null ? null : data.sent_by_name === myName ? "Sent by you" : `Sent by ${data.sent_by_name}`;
   // The counts are the server's; the page does not count people itself.
@@ -111,18 +113,21 @@ export function AnnouncementView() {
           </p>
           {data.suppression_unreadable && <p className="mt-1 text-body text-grey">We could not check for bounces just now.</p>}
         </div>
-        {counts.failed > 0 && waiting === 0 && (
-          <Button
-            variant="outline"
-            disabled={retry.isPending}
-            onClick={() => retry.mutate(data.announcement_id, { onSuccess: () => setRetriedAt(Date.now()) })}
-          >
-            {`Try the ${formatCount(counts.failed)} failed again`}
-          </Button>
+        {(stuck || (counts.failed > 0 && waiting === 0)) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {stuck && <p className="text-body text-grey">The send stopped before it reached everyone.</p>}
+            <Button
+              variant="outline"
+              disabled={retry.isPending}
+              onClick={() => retry.mutate(data.announcement_id, { onSuccess: () => setRetriedAt(Date.now()) })}
+            >
+              {stuck ? `Send to the ${formatCount(counts.pending)} still waiting` : `Try the ${formatCount(counts.failed)} failed again`}
+            </Button>
+          </div>
         )}
         {retry.isError && (
           <p role="alert" className="w-full text-body text-red">
-            The failed emails were not sent again. Try again.
+            {stuck ? "The emails were not sent. Try again." : "The failed emails were not sent again. Try again."}
           </p>
         )}
       </section>
