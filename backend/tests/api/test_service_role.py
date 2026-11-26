@@ -91,6 +91,7 @@ def test_api_mode_excludes_ops_routes_and_static_bundle(tmp_path: Path) -> None:
 
     assert not any(path.startswith("/api/v1/ops") for path in paths)
     assert "/api/v1/me" in paths
+    assert {"/api/v1/unsubscribe", "/api/v1/resubscribe"} <= paths
     with TestClient(app, raise_server_exceptions=False) as client:
         assert client.get("/people").json()["error"]["code"] == "not_found"
         assert client.get("/assets/x.js").status_code == 404
@@ -117,6 +118,8 @@ def test_ops_mode_has_only_ops_and_health_api_routes(tmp_path: Path) -> None:
         "/api/v1/ops/announcements/{announcement_id}/retry",
     } <= paths
     assert "/api/v1/me" not in paths
+    assert "/api/v1/unsubscribe" not in paths
+    assert "/api/v1/resubscribe" not in paths
     assert not any(path.startswith("/api/v1/tasks") for path in paths)
     assert not any(path.startswith("/api/v1/projects") for path in paths)
     assert not any(path.startswith("/api/v1/runs") for path in paths)

@@ -195,6 +195,12 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     # runtime/agent.py's main() only covers the local CLI path. Must
     # run before anything below can log.
     configure_logging()
+    # uvicorn's access line prints the query string; the unsubscribe token
+    # rides in it. Installed on both hosts: the ops host 404s these paths but
+    # would still log the line.
+    from policy_atlas.api.routers.email_preferences import install_access_log_filter
+
+    install_access_log_filter()
     app_settings = settings if settings is not None else load_settings()
     lifespan = (
         _ops_lifespan(app_settings)
@@ -325,6 +331,9 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     from policy_atlas.api.routers.conversations import (
         task_router as task_conversations_router,
     )
+    from policy_atlas.api.routers.email_preferences import (
+        router as email_preferences_router,
+    )
     from policy_atlas.api.routers.longlist import router as longlist_router
     from policy_atlas.api.routers.me import router as me_router
     from policy_atlas.api.routers.projects import router as projects_router
@@ -354,6 +363,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         longlist_router,
         toc_router,
         waitlist_router,
+        email_preferences_router,
         *routers,
     ):
         app.include_router(router)
